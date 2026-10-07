@@ -2,6 +2,16 @@
 export interface ConnectionOwner {
   /** @internal */
   _trackConnection(signal: Signal<any>, listener: (...args: any[]) => void): void
+  /** @internal 连接断开（包括 once 触发后）时调用，owner 不再需要记住它。 */
+  _untrackConnection(signal: Signal<any>, listener: (...args: any[]) => void): void
+}
+
+interface Listener<A extends unknown[]> {
+  fn: (...args: A) => void
+  once: boolean
+  owner: ConnectionOwner | undefined
+  /** 断开后为 false：emit 遍历快照时跳过它，即使它是在本次 emit 中途被断开的。 */
+  active: boolean
 }
 
 /** `await signal` 得到的值：无参数时是 undefined，一个参数时是该参数，多个参数时是参数数组。 */
@@ -23,7 +33,7 @@ export type SignalResult<A extends unknown[]> = A extends [] ? undefined : A ext
  * 节点被释放时，它声明的信号会断开所有监听；它作为 owner 连接到别处的监听也会被断开。
  */
 export class Signal<A extends unknown[] = []> implements PromiseLike<SignalResult<A>> {
-  #listeners: { fn: (...args: A) => void; once: boolean }[] = []
+  #listeners: Listener<A>[] = []
 
   /** 当前连接数。 */
   get connectionCount(): number {
@@ -44,7 +54,8 @@ export class Signal<A extends unknown[] = []> implements PromiseLike<SignalResul
   }
 
   disconnect(listener: (...args: A) => void): void {
-    this.#listeners = this.#listeners.filter((l) => l.fn !== listener)
+    const entry = this.#listeners.find((l) => l.fn === listener)
+    if (entry) this.#remove(entry)
   }
 
   isConnected(listener: (...args: A) => void): boolean {
@@ -53,16 +64,26 @@ export class Signal<A extends unknown[] = []> implements PromiseLike<SignalResul
 
   /** 断开所有监听。 */
   disconnectAll(): void {
-    this.#listeners = []
+    for (const l of [...this.#listeners]) this.#remove(l)
   }
 
-  /** 依次调用监听函数。emit 过程中新增或断开的连接不影响本次调用。 */
+  /**
+   * 依次调用监听函数。emit 过程中新增的连接本次不会被调用；
+   * 在本次 emit 中被断开的连接（包括 once 连接、以及 owner 被销毁的连接）也不会再被调用。
+   */
   emit(...args: A): void {
-    const snapshot = this.#listeners
-    this.#listeners = snapshot.filter((l) => !l.once)
-    for (const l of snapshot) {
-      if (l.once || this.#listeners.includes(l)) l.fn(...args)
+    for (const l of [...this.#listeners]) {
+      if (!l.active) continue
+      if (l.once) this.#remove(l) // 先移除：回调里再次 emit 也不会重复触发
+      l.fn(...args)
     }
+  }
+
+  #remove(entry: Listener<A>): void {
+    if (!entry.active) return
+    entry.active = false
+    this.#listeners = this.#listeners.filter((l) => l !== entry)
+    entry.owner?._untrackConnection(this, entry.fn as (...args: any[]) => void)
   }
 
   /**
@@ -90,7 +111,7 @@ export class Signal<A extends unknown[] = []> implements PromiseLike<SignalResul
 
   #add(fn: (...args: A) => void, once: boolean, owner?: ConnectionOwner): () => void {
     if (!this.isConnected(fn)) {
-      this.#listeners.push({ fn, once })
+      this.#listeners.push({ fn, once, owner, active: true })
       owner?._trackConnection(this, fn as (...args: any[]) => void)
     }
     return () => this.disconnect(fn)

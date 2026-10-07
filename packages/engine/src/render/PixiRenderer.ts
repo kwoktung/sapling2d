@@ -56,7 +56,7 @@ export class PixiRenderer implements Renderer {
   #textResolution = 1
   readonly #views = new Map<Node2D, View>()
   /** 贴图句柄 → Pixi 贴图，记下创建时用的资源：资源被卸载或替换后重建。 */
-  readonly #textures = new WeakMap<Texture, { resource: unknown; texture: PixiTexture }>()
+  readonly #textures = new Map<Texture, { resource: unknown; texture: PixiTexture }>()
 
   /**
    * @internal 测试用：不初始化 WebGL，只做场景树到显示对象的同步（`sync()`），不能调用 `render()`。
@@ -109,6 +109,7 @@ export class PixiRenderer implements Renderer {
 
   /** 只同步，不绘制。测试用。 */
   sync(tree: SceneTree): void {
+    this.#releaseUnloadedTextures()
     this.#syncViewport(tree.viewport)
     const seen = new Set<Node2D>()
     this.#syncChildren(tree._topLevel(), this.#stage, seen)
@@ -135,6 +136,8 @@ export class PixiRenderer implements Renderer {
 
   destroy(): void {
     for (const [node, view] of this.#views) this.#destroyView(node, view)
+    for (const cached of this.#textures.values()) cached.texture.destroy(true)
+    this.#textures.clear()
     this.#renderer?.destroy()
   }
 
@@ -228,6 +231,23 @@ export class PixiRenderer implements Renderer {
       view.textResolution = this.#textResolution
     }
     text.anchor.set(ANCHOR[node.align], ANCHOR[node.verticalAlign])
+  }
+
+  /**
+   * 资源被卸载（切换场景时）或替换后，立即销毁对应的 Pixi 贴图、释放显存——不等有精灵再次用到它。
+   * 先于节点同步执行：此时引用它的精灵都已随旧场景销毁。
+   */
+  #releaseUnloadedTextures(): void {
+    for (const [texture, cached] of this.#textures) {
+      if (cached.resource === texture._resource) continue
+      cached.texture.destroy(true)
+      this.#textures.delete(texture)
+    }
+  }
+
+  /** @internal 测试用：当前缓存的 Pixi 贴图数量。 */
+  get _textureCount(): number {
+    return this.#textures.size
   }
 
   #pixiTexture(texture: Texture): PixiTexture {

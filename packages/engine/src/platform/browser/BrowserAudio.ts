@@ -22,12 +22,17 @@ export class BrowserAudioBackend implements AudioBackend {
     this.#master.connect(this.#ctx.destination)
     this.#unlocked = this.#ctx.state === 'running'
     if (!this.#unlocked) {
+      // 每次手势都尝试 resume；确认进入 running 之后才移除监听。resume 被拒绝或没有生效时，下一次手势会重试
       const unlock = () => {
-        void this.#ctx.resume().then(() => {
-          this.#unlocked = true
-          if (!this.#suspended) for (const el of this.#music) void el.play().catch(() => {})
-        })
-        for (const type of UNLOCK_EVENTS) window.removeEventListener(type, unlock, true)
+        this.#ctx.resume().then(
+          () => {
+            if (this.#ctx.state !== 'running' || this.#unlocked) return
+            this.#unlocked = true
+            for (const type of UNLOCK_EVENTS) window.removeEventListener(type, unlock, true)
+            if (!this.#suspended) for (const el of this.#music) void el.play().catch(() => {})
+          },
+          () => {},
+        )
       }
       for (const type of UNLOCK_EVENTS) window.addEventListener(type, unlock, true)
     }

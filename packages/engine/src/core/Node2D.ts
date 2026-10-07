@@ -160,7 +160,7 @@ export class Node2D extends Node {
     return this.globalTransform.origin
   }
 
-  /** 全局坐标 → 局部坐标。 */
+  /** 全局坐标 → 局部坐标。缩放为 0（变换不可逆）时返回 Vector2.ZERO；需要区分时用 `globalTransform.inverse()`。 */
   toLocal(globalPoint: Vector2): Vector2 {
     return this.globalTransform.inverse()?.apply(globalPoint) ?? Vector2.ZERO
   }

@@ -62,7 +62,10 @@ export abstract class PhysicsBody2D extends CollisionObject2D {
     try {
       const parent = this.#parent2D()
       if (parent) {
-        this.position = parent.toLocal(globalPosition)
+        // 父节点缩放为 0 时无法换算到局部坐标：这一步不写回，避免刚体被拉到父节点原点
+        const inverse = parent.globalTransform.inverse()
+        if (!inverse) return
+        this.position = inverse.apply(globalPosition)
         this.rotation = globalRotation - parent.globalRotation
       } else {
         this.position = globalPosition

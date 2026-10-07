@@ -1,6 +1,6 @@
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
-import { join, resolve } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import type { Plugin } from 'vite'
 
 export interface SaplingWechatOptions {
@@ -186,9 +186,12 @@ export function startLogServer(options: LogServerOptions = {}): Server {
             const { label, dataUrl } = entry.data as { label: string; dataUrl: string }
             const dir = options.file ? resolve(options.file, '..') : resolve('logs')
             mkdirSync(dir, { recursive: true })
-            const file = join(dir, `${label}-${entry.t}.png`)
+            // 请求来自局域网，不可信：label 只保留字母数字和 - _，时间戳只取数字，最终路径必须在日志目录内
+            const safeLabel = String(label).replace(/[^\w-]/g, '_').slice(0, 64) || 'snapshot'
+            const file = join(dir, `${safeLabel}-${Number(entry.t) || Date.now()}.png`)
+            if (!file.startsWith(dir + sep)) throw new Error('invalid snapshot path')
             writeFileSync(file, Buffer.from(dataUrl.replace(/^data:image\/\w+;base64,/, ''), 'base64'))
-            entry.data = { label, file }
+            entry.data = { label: safeLabel, file }
           }
           if (options.file) appendFileSync(options.file, JSON.stringify(entry) + '\n')
           onLog(entry)

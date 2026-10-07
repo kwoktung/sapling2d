@@ -4,12 +4,12 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done（2026-10-07）
 
-- [ ] BrowserPlatform 提供 canvas、`now()`、rAF 和图片加载
-- [ ] 渲染同步：节点首次进入有渲染器的树时，才懒创建 Pixi 对象；带脏标记的 transform、visible 和 zIndex 每帧同步过去；节点移除时销毁对应的 Pixi 对象
-- [ ] 用户 API 不暴露 Pixi 对象，只提供 `unsafePixi` 作为逃生口
-- [ ] `Sprite2D` 支持 texture、`centered`（默认 true）和 `offset`
-- [ ] 在 `static assets` 里声明的资源（`tex(...)`）会在进入场景前加载完成，`ready()` 里可以直接用
-- [ ] 无头模式下 `Sprite2D` 不创建渲染对象，但 `dump` 里能看到它
-- [ ] 有一个用 Vite 开发服务器运行的示例：一个旋转的精灵
+- [x] BrowserPlatform 提供 canvas、`now()`、rAF 和图片加载
+- [x] 渲染同步：节点首次进入有渲染器的树时，才懒创建 Pixi 对象；带脏标记的 transform、visible 和 zIndex 每帧同步过去；节点移除时销毁对应的 Pixi 对象
+- [x] 用户 API 不暴露 Pixi 对象，只提供 `unsafePixi` 作为逃生口
+- [x] `Sprite2D` 支持 texture、`centered`（默认 true）和 `offset`
+- [x] 在 `static assets` 里声明的资源（`tex(...)`）会在进入场景前加载完成，`ready()` 里可以直接用
+- [x] 无头模式下 `Sprite2D` 不创建渲染对象，但 `dump` 里能看到它
+- [x] 有一个用 Vite 开发服务器运行的示例：一个旋转的精灵

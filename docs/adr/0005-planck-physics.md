@@ -29,3 +29,9 @@
 - Rapier 和 box2d3-wasm 保留为以后的选项：如果需要跨平台确定性（lockstep、回放）或者大规模刚体场景，只替换 `physics/` 模块即可。
 - 确定性只保证同一个 JS 引擎内一致，不保证跨平台。这已经满足 Headless 测试的需求。
 - Character controller 以后需要基于 kinematic 刚体加 rayCast 自行实现。
+
+## Update (2026-10-07, ticket 09)
+
+- 碰撞层：32 位可用（planck 用 `(a & b) !== 0` 判断，第 32 层的符号位不影响）。
+- 碰撞层规则改为 Godot 语义（任一方 mask 包含对方 layer 即碰撞），通过覆写每个 fixture 的 `shouldCollide` 实现；Box2D 原生的 category/mask 不再使用。
+- Area2D 用 kinematic 刚体 + sensor fixture 实现，因此检测不到静态刚体和其他 Area2D（Box2D 只为至少含一个 dynamic 的刚体对生成接触）。

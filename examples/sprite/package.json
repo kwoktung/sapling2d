@@ -1,0 +1,19 @@
+{
+  "name": "example-sprite",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "echo 'no tests'",
+    "build:wechat": "vite build -c vite.wechat.config.ts",
+    "dev:wechat": "vite build -c vite.wechat.config.ts --watch"
+  },
+  "dependencies": {
+    "sapling2d": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "8.3.3"
+  }
+}

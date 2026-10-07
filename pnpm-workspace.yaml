@@ -1,0 +1,5 @@
+# spikes/ 是一次性代码，不属于工作区
+packages:
+  - packages/*
+  - examples/*
+  - templates/*

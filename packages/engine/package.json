@@ -1,0 +1,38 @@
+{
+  "name": "sapling2d",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/platform/browser/index.ts",
+    "./testing": "./src/testing/index.ts",
+    "./vite": "./src/vite/index.ts",
+    "./wechat": "./src/platform/wechat/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.browser.json && tsc -p tsconfig.wechat.json && tsc -p tsconfig.vite.json && tsc -p tsconfig.test.json && tsc -p tsconfig.docs.json",
+    "bench:physics": "SAPLING_BENCH=1 vitest run",
+    "bench:physics:jitless": "SAPLING_BENCH=1 SAPLING_JITLESS=1 vitest run",
+    "docs": "node scripts/build-llms.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "7.0.2",
+    "vite": "8.3.3",
+    "vitest": "5.0.3"
+  },
+  "dependencies": {
+    "pixi.js": "8.22.0",
+    "planck": "1.5.0"
+  },
+  "peerDependencies": {
+    "vite": ">=7"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  }
+}

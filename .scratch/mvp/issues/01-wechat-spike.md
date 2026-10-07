@@ -4,13 +4,15 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-human（需要微信开发者工具、AppID（测试号也可以）和真机；代码可以由 agent 写，运行和观察必须由人来做）
+**Status:** done（2026-10-07）。结论和报告见 `spikes/wechat/REPORT.md`。
 
-- [ ] 用单个 CommonJS 的 `game.js` 在开发者工具里启动，初始化 Pixi v8（WebGL1，引入 `unsafe-eval`，设置 `skipExtensionImports`）
-- [ ] 画出一张包内图片做成的精灵，显式构造 ImageSource
-- [ ] 画出一段 canvas Text，记录 `measureText` 是否返回 `actualBoundingBox*`；如果不返回，验证 polyfill 方案
-- [ ] 用 `wx.createWebAudioContext` 播放一个 mp3 音效，并验证音频需要在首次触摸时解锁
-- [ ] `wx.onTouchStart` 能收到坐标，并能换算成画布坐标
-- [ ] planck 刚体下落并堆叠，显示在画面上
-- [ ] 在 iOS 和 Android 真机上各跑一次；在 iOS 上对比普通模式和 `iOSHighPerformance` 的帧率
-- [ ] 写一份 spike 报告，列出必需的 polyfill 和 shim、发现的问题和对应的解决方式（比如 `WebGLRenderingContext` 的 instanceof 问题、`performance` 的单位），作为 17、18 的输入
+原状态：ready-for-human（需要微信开发者工具、AppID（测试号也可以）和真机；代码可以由 agent 写，运行和观察必须由人来做）
+
+- [x] 用单个 CommonJS 的 `game.js` 在开发者工具里启动，初始化 Pixi v8（WebGL1，引入 `unsafe-eval`，设置 `skipExtensionImports`）
+- [x] 画出一张包内图片做成的精灵，显式构造 ImageSource
+- [x] 画出一段 canvas Text，记录 `measureText` 是否返回 `actualBoundingBox*`；如果不返回，验证 polyfill 方案
+- [x] 用 `wx.createWebAudioContext` 播放一个 mp3 音效，并验证音频需要在首次触摸时解锁
+- [x] `wx.onTouchStart` 能收到坐标，并能换算成画布坐标
+- [x] planck 刚体下落并堆叠，显示在画面上
+- [x] 在 iOS 和 Android 真机上各跑一次；在 iOS 上对比普通模式和 `iOSHighPerformance` 的帧率（高性能模式是否带来 JIT 尚无定论，移到 22）
+- [x] 写一份 spike 报告，列出必需的 polyfill 和 shim、发现的问题和对应的解决方式（比如 `WebGLRenderingContext` 的 instanceof 问题、`performance` 的单位），作为 17、18 的输入

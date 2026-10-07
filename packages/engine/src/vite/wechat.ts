@@ -80,8 +80,7 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
           sourcemap: release ? false : 'inline',
           // 入口是一个虚拟模块：先导入运行环境补丁，再导入游戏入口（见 resolveId / load）
           lib: { entry: VIRTUAL_ENTRY, formats: ['cjs'], fileName: () => 'game.js' },
-          // keepNames：压缩后节点的默认名字和 dump() 里的类名仍然可读（真机调试时曾经显示成 cP、_P）
-          rolldownOptions: { output: { banner: bootBanner(logUrl), inlineDynamicImports: true, keepNames: true } },
+          rolldownOptions: { output: { banner: bootBanner(logUrl), inlineDynamicImports: true } },
         },
       }
     },

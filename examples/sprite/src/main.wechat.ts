@@ -14,7 +14,7 @@ void startGame(gameOptions).then((game) => {
   let n = 0
   const watch = scene.add(new Timer({ name: 'DebugWatch', waitTime: 1, autostart: true }))
   watch.timeout.connect(() => {
-    const spinner = scene.children.find((c) => c.constructor.name === 'Spinner') as { speed?: number } | undefined
+    const spinner = scene.children.find((c) => c.name === 'Spinner') as { speed?: number } | undefined
     const spawned = scene.children.filter((c) => c.name.startsWith('Spawned')).length
     const row = scene.children.find((c) => c.name === 'Row')
     const balls = row?.children.map((c) => (c as unknown as { position: { toString(): string } }).position.toString()).join(' ')

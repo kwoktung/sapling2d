@@ -83,7 +83,7 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.browser.json && tsc -p tsconfig.wechat.json && tsc -p tsconfig.vite.json && tsc -p tsconfig.test.json && tsc -p tsconfig.docs.json",
     "bench:physics": "SAPLING_BENCH=1 vitest run",
     "bench:physics:jitless": "SAPLING_BENCH=1 SAPLING_JITLESS=1 vitest run",
-    "docs": "node scripts/build-llms.ts",
+    "llms": "node scripts/build-llms.ts",
     "build": "tsdown",
     "prepublishOnly": "pnpm build && pnpm test"
   },

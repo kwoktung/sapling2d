@@ -1,7 +1,7 @@
 // 生成 llms.txt：把 docs/llms.template.md 里的 <!-- example:名字 --> 和 <!-- example:名字#test -->
 // 替换成 docs/examples/名字.test.ts 中对应 #region 的代码。示例本身是测试，所以文档里的代码一定能跑。
 //
-// 运行：pnpm docs（node 直接执行本文件）。test/llms.test.ts 会检查 llms.txt 是否与示例同步。
+// 运行：pnpm llms（node 直接执行本文件）。test/llms.test.ts 会检查 llms.txt 是否与示例同步。
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'

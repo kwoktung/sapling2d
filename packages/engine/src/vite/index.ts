@@ -60,11 +60,6 @@ export function sapling(options: SaplingPluginOptions = {}): Plugin {
     name: 'sapling2d',
     enforce: 'pre',
 
-    // 压缩时保留类名和函数名：节点的默认名字、dump() 里的类名都来自 constructor.name
-    config() {
-      return { build: { rolldownOptions: { output: { keepNames: true } } } }
-    },
-
     configResolved(config) {
       assetsRoot = resolve(config.root, options.assetsDir ?? join('public', 'assets'))
     },

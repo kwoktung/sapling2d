@@ -78,9 +78,17 @@ export class BrowserPlatform implements Platform {
     const onMove = pointer('pointermove')
     const onUp = pointer('pointerup')
     const onCancel = pointer('pointercancel')
+    // 记住按住的键：窗口失焦（alt-tab、点到别的窗口）时 keyup 会发到别处，这里补发，避免按键“卡住”
+    const held = new Set<string>()
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return
+      if (e.type === 'keydown') held.add(e.code)
+      else held.delete(e.code)
       callback({ type: e.type === 'keydown' ? 'keydown' : 'keyup', code: e.code })
+    }
+    const onBlur = () => {
+      for (const code of held) callback({ type: 'keyup', code })
+      held.clear()
     }
     const noMenu = (e: Event) => e.preventDefault()
 
@@ -90,6 +98,7 @@ export class BrowserPlatform implements Platform {
     window.addEventListener('pointercancel', onCancel)
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', onKey)
+    window.addEventListener('blur', onBlur)
     canvas.addEventListener('contextmenu', noMenu)
     return () => {
       canvas.removeEventListener('pointerdown', onDown)
@@ -98,6 +107,7 @@ export class BrowserPlatform implements Platform {
       window.removeEventListener('pointercancel', onCancel)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKey)
+      window.removeEventListener('blur', onBlur)
       canvas.removeEventListener('contextmenu', noMenu)
     }
   }

@@ -223,7 +223,9 @@ export class Input {
     for (let i = order.length - 1; i >= 0; i--) {
       const n = order[i]!
       if (!n.inputPickable || n.isQueuedForDeletion || !n.isVisibleInTree || !n.canProcess()) continue
-      if (n.hitTest(n.toLocal(position))) return n
+      // 缩放为 0 时变换不可逆：节点在屏幕上没有面积，不可能被点中（toLocal 会退化成原点，导致全屏误判）
+      const inverse = n.globalTransform.inverse()
+      if (inverse && n.hitTest(inverse.apply(position))) return n
     }
     return null
   }

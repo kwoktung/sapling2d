@@ -213,8 +213,8 @@ export class Node implements ConnectionOwner {
     for (const child of this.#children) child.#markFreed()
     this.#freed = true
     this.#queuedForDeletion = false
-    // 断开自己作为监听方的连接
-    for (const { signal, listener } of this.#connections) signal.disconnect(listener)
+    // 断开自己作为监听方的连接（disconnect 会回调 _untrackConnection，所以先取快照）
+    for (const { signal, listener } of [...this.#connections]) signal.disconnect(listener)
     this.#connections = []
     // 断开自己声明的信号上的所有监听
     for (const value of Object.values(this)) if (value instanceof Signal) value.disconnectAll()
@@ -254,6 +254,17 @@ export class Node implements ConnectionOwner {
   _trackConnection(signal: Signal<any>, listener: (...args: any[]) => void): void {
     this.#assertNotFreed('connect a signal to')
     this.#connections.push({ signal, listener })
+  }
+
+  /** @internal 连接已断开（或 once 已触发）：不再记住它，避免常驻节点的连接列表无限增长。 */
+  _untrackConnection(signal: Signal<any>, listener: (...args: any[]) => void): void {
+    const i = this.#connections.findIndex((c) => c.signal === signal && c.listener === listener)
+    if (i !== -1) this.#connections.splice(i, 1)
+  }
+
+  /** @internal 测试用：以本节点为 owner 的连接数。 */
+  get _connectionCount(): number {
+    return this.#connections.length
   }
 
   #assertNotFreed(action: string): void {

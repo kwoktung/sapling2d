@@ -168,6 +168,7 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 - **Vector2 不可变**：`node.position.x += 1` 是错的（编译不过）；写 `node.x += 1` 或 `node.position = node.position.add(v(1, 0))`。
 - **`queueFree` 在帧末执行**：调用后本帧内节点仍在树里；用 `isQueuedForDeletion` 防止重复处理（比如两个水果互相收到 `bodyEntered`）。
 - **物理回调里的增删**：接触信号在物理步之后派发，回调里 `queueFree` / `add` 都安全；新刚体在下一个物理步才创建，之前设置的速度和冲量会排队。
+- **改碰撞形状会重新触发接触信号**：移动、改变、禁用或增删一个刚体的 `CollisionShape2D` 时，引擎会重建它的形状，正在接触它的对象会先收到一次 `bodyExited`、再收到一次 `bodyEntered`。需要稳定的进出判断时，尽量在节点创建时定好形状，不要在接触中修改。
 - **刚体的位置由物理决定**：给 `RigidBody2D` 的 `position` 赋值等于瞬移并清零速度；`scale` 不影响碰撞形状。
 - **不支持路径查找**：没有 `getNode('A/B')`；用字段（`this.player = this.add(...)`）、`getNodesInGroup` 或 `autoload`。
 - **`this.tree` 只在树里可用**：不要在构造函数里用；放到 `ready()`。

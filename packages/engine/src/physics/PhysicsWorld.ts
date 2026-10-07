@@ -150,10 +150,26 @@ export class PhysicsWorld {
     if (e) e.propsDirty = true
   }
 
-  /** @internal 用户直接设置了节点的位置或角度。 */
+  /**
+   * @internal 用户直接设置了节点的位置或角度。立即瞬移（清零速度），这样紧接着设置的速度或冲量不会被清掉。
+   * 游戏代码运行时世界不会锁定（physicsProcess 在 step 之前、接触信号在 step 之后），万一锁定则推迟到下一步。
+   */
   _teleport(node: CollisionObjectNode): void {
     const e = this.#entries.get(node)
-    if (e && e.body) e.teleport = true
+    if (!e || !e.body || node._isArea) return
+    if (this.#world.isLocked()) e.teleport = true
+    else this.#applyTeleport(e.body, node)
+  }
+
+  #applyTeleport(body: Body, node: CollisionObjectNode): void {
+    body.setTransform(this.#toMeters(node.globalPosition), node.globalRotation)
+    if (node._bodyType === 'dynamic') {
+      body.setLinearVelocity({ x: 0, y: 0 })
+      body.setAngularVelocity(0)
+    }
+    body.setAwake(true)
+    // Box2D 不会因为 setTransform 唤醒接触中的刚体（比如静态地面被移开时，上面休眠的球会悬空）
+    for (let c = body.getContactList(); c; c = c.next ?? null) c.other?.setAwake(true)
   }
 
   /** @internal 当前与 node 接触 / 重叠的对象（按开始接触的顺序），不含区域。 */
@@ -268,14 +284,7 @@ export class PhysicsWorld {
       e.teleport = false
     } else if (e.teleport) {
       e.teleport = false
-      body.setTransform(this.#toMeters(node.globalPosition), node.globalRotation)
-      if (node._bodyType === 'dynamic') {
-        body.setLinearVelocity({ x: 0, y: 0 })
-        body.setAngularVelocity(0)
-      }
-      body.setAwake(true)
-      // Box2D 不会因为 setTransform 唤醒接触中的刚体（比如静态地面被移开时，上面休眠的球会悬空）
-      for (let c = body.getContactList(); c; c = c.next ?? null) c.other?.setAwake(true)
+      this.#applyTeleport(body, node)
     }
     // 形状和质量都就绪后再交给节点：此时应用排队的冲量才会用到正确的质量
     if (created) node._attached(new BodyHandle(body, this.pixelsPerMeter))

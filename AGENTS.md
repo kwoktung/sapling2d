@@ -1,6 +1,6 @@
 ## Development
 
-- **Start with `packages/engine/llms.txt`**: the engine API, runnable examples and pitfalls in one file (generated from `docs/llms.template.md` + `docs/examples/*.test.ts` by `pnpm --filter sapling2d docs`; a test fails if it is stale). New games start from `templates/game` (its `AGENTS.md` is the per-game guide).
+- **Start with `packages/engine/llms.txt`**: the engine API, runnable examples and pitfalls in one file (generated from `docs/llms.template.md` + `docs/examples/*.test.ts` by `pnpm --filter sapling2d llms`; a test fails if it is stale). New games start from `templates/game` (its `AGENTS.md` is the per-game guide).
 
 - `pnpm install`, then `pnpm check` runs typecheck and tests for every workspace package.
 - Engine source lives in `packages/engine` (published as `sapling2d`, with `sapling2d/testing` for headless tests).

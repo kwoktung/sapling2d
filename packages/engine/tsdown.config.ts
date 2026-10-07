@@ -23,8 +23,6 @@ export default defineConfig({
   clean: true,
   // 运行时依赖和 Node 内置模块不打进包里
   external: [/^pixi\.js/, 'planck', 'vite', /^node:/],
-  // 不开 keepNames：dist 不压缩，类名本来就保留；游戏的发布构建由 sapling() / saplingWechat() 开启 keepNames。
-  // 在这里开启还会让每个 .d.ts 都 import 运行时的 __name，用户的 tsc 会报 TS7016
   hooks: {
     // 打包类型声明时会丢掉 /// <reference path="./wx.d.ts" />：把 wx.d.ts 复制过去，并给用到它的声明文件补上引用
     'build:done': () => {

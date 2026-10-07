@@ -2,7 +2,7 @@
 
 > Code-first、对 agent 友好的 2D 游戏引擎：PixiJS v8 渲染 + planck.js（Box2D）物理，API 采用 Godot 风格（节点树、生命周期、信号）。平时在浏览器里开发，同一份代码构建成微信小游戏。场景树可以在 Node 里无头运行、按帧确定性推进，适合写测试和让 agent 观察游戏状态。
 
-本文件由 `scripts/build-llms.ts` 生成，示例代码来自 `docs/examples/*.test.ts`（都是能跑的测试）。修改请改模板和示例，然后运行 `pnpm docs`。
+本文件由 `scripts/build-llms.ts` 生成，示例代码来自 `docs/examples/*.test.ts`（都是能跑的测试）。修改请改模板和示例，然后运行 `pnpm llms`。
 
 ## 入口
 
@@ -495,6 +495,7 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 - **改碰撞形状会重新触发接触信号**：移动、改变、禁用或增删一个刚体的 `CollisionShape2D` 时，引擎会重建它的形状，正在接触它的对象会先收到一次 `bodyExited`、再收到一次 `bodyEntered`。需要稳定的进出判断时，尽量在节点创建时定好形状，不要在接触中修改。
 - **刚体的位置由物理决定**：给 `RigidBody2D` 的 `position` 赋值等于瞬移并清零速度；`scale` 不影响碰撞形状。
 - **不支持路径查找**：没有 `getNode('A/B')`；用字段（`this.player = this.add(...)`）、`getNodesInGroup` 或 `autoload`。
+- **发布构建会压缩类名**：节点不传 `name` 时默认用类名，但真机发布包里类名会被压缩（变成 `cP` 之类）。逻辑里不要依赖默认名字或 `constructor.name`：要按名字找就显式传 `name`，判断类型用 `instanceof`。
 - **`this.tree` 只在树里可用**：不要在构造函数里用；放到 `ready()`。
 - **`await signal` 会错过同步紧接着的 emit**：先注册再触发时用 `signal.wait()`。
 - **随机数**：用 `this.tree.rng`（带 seed，测试可复现），不要用 `Math.random`。

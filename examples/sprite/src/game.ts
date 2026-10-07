@@ -85,7 +85,7 @@ export class Main extends Scene {
     this.add(new Label({ name: 'Title', text: 'sapling2d 示例', fontSize: 56, fontWeight: 'bold', align: 'center', position: v(375, safe.top + 60) }))
     this.add(new Label({ name: 'Hint', text: '点大球反转 · 拖动下面的球\n点空白处生成小球 · 空格反转', fontSize: 28, color: 0xaee6ff, align: 'center', lineHeight: 40, position: v(375, safe.top + 140) }))
     this.add(new Counter({ text: '0 秒', fontSize: 72, color: 0xffd166, stroke: { color: 0x000000, width: 6 }, align: 'center', verticalAlign: 'center', position: v(375, 380) }))
-    this.add(new Spinner({ texture: Main.assets.fruit, position: v(375, 667), scale: v(1.5, 1.5) }))
+    this.add(new Spinner({ name: 'Spinner', texture: Main.assets.fruit, position: v(375, 667), scale: v(1.5, 1.5) }))
     const row = this.add(new Node2D({ name: 'Row', position: v(375, 1100) }))
     for (let i = -2; i <= 2; i++) {
       row.add(new Draggable({ texture: Main.assets.fruit, position: v(i * 110, 0), zIndex: -Math.abs(i) }))

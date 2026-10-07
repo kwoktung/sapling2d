@@ -1,5 +1,6 @@
 import { snapshot, startGame } from 'sapling2d/wechat'
 import { gameOptions } from './game'
+import { GameOverScene } from './GameOverScene'
 
 declare const GameGlobal: Record<string, unknown>
 
@@ -12,7 +13,7 @@ void startGame(gameOptions).then((game) => {
   tree.focusChanged.connect((focused) => console.log(`[merge] focus ${focused}`))
   tree.sceneChanged.connect((scene) => {
     console.log(`[merge] scene ${scene.constructor.name}`)
-    if (scene.constructor.name === 'GameOverScene') tree.createTimer(0.5).timeout.connect(() => snapshot('gameover'))
+    if (scene instanceof GameOverScene) tree.createTimer(0.5).timeout.connect(() => snapshot('gameover'))
   })
 
   // Autoload 之外的调试节点挂在根上：用一个跨场景的计时器

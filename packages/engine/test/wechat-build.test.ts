@@ -70,12 +70,6 @@ describe('saplingWechat', () => {
     expect(JSON.parse(read('project.config.json')).setting.urlCheck).toBe(false)
   })
 
-  it('发布构建（压缩）保留类名：节点名和 dump 里的类名不会变成 cP、_P', async () => {
-    const run = fixture('class GameOverScene { name = this.constructor.name }\nconsole.log(new GameOverScene().name)')
-    await run({ release: true })
-    expect(read('game.js')).toMatch(/\bvar GameOverScene\b|[`"']GameOverScene[`"']/)
-  })
-
   it('产物里出现 eval / new Function / 动态 import 时构建失败', async () => {
     const run = fixture("const f = new Function('return 1'); console.log(f(), eval('2'))")
     await expect(run()).rejects.toThrow(/eval\(.*new Function\(|new Function\(|eval\(/)

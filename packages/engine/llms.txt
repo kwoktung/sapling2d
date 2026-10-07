@@ -1,0 +1,507 @@
+# sapling2d
+
+> Code-first、对 agent 友好的 2D 游戏引擎：PixiJS v8 渲染 + planck.js（Box2D）物理，API 采用 Godot 风格（节点树、生命周期、信号）。平时在浏览器里开发，同一份代码构建成微信小游戏。场景树可以在 Node 里无头运行、按帧确定性推进，适合写测试和让 agent 观察游戏状态。
+
+本文件由 `scripts/build-llms.ts` 生成，示例代码来自 `docs/examples/*.test.ts`（都是能跑的测试）。修改请改模板和示例，然后运行 `pnpm docs`。
+
+## 入口
+
+| 导入 | 用途 |
+|---|---|
+| `sapling2d` | 节点、数学、资源、物理、音频、存储……（不含渲染和平台代码，可以在 Node 里运行） |
+| `sapling2d/browser` | `startGame(options)`：在浏览器里启动 |
+| `sapling2d/wechat` | `startGame(options)`：在微信小游戏里启动；另有 `loadFont`、`snapshot` |
+| `sapling2d/testing` | `createTestGame(options)`：无头运行，测试用 |
+| `sapling2d/vite` | `sapling()` 资源路径检查；`saplingWechat()` 构建小游戏；`startLogServer()` 接收真机日志 |
+
+启动参数（三个入口通用）：`main`（入口场景类）、`autoloads`、`actions`、`design`（默认 750×1334、`expand`）、`physics`、`seed`、`storagePrefix`、`pauseOnBackground`；浏览器和小游戏另有 `background`。
+
+## 核心概念
+
+- **节点树**：游戏对象都继承节点类（`Node`、`Node2D`、`Sprite2D`、`RigidBody2D`……），用 `this.add(child)` 组成树；`add` 返回带类型的子节点。节点之间用类型化字段、Groups 和 Autoload 互相引用，**不支持按路径查找**。
+- **生命周期**：`enterTree()`（父先于子）→ `ready()`（子先于父，一生一次）→ 每帧 `process(dt)` / 固定 60Hz 的 `physicsProcess(dt)` → `exitTree()`（子先于父）。覆写时不需要调用 `super`。
+- **场景**：`Scene` 是树的根，同一时间一个。`static assets` 声明的资源在 `ready()` 之前加载完成；场景参数通过构造函数声明，用 `this.tree.changeScene(Cls, params)` 切换。
+- **场景树**：`this.tree` 提供 `input`、`audio`、`storage`、`physics`、`viewport`、`rng`、`paused`、`createTween()`、`createTimer()`、`getNodesInGroup()`、`autoload()`、`changeScene()`、`dump()`；时间：`time`（游戏时间，秒，按物理步累计，暂停时不走）、`physicsFrames`、`processFrames`。节点不在树里时访问 `this.tree` 会抛错（构造函数里不要用）。
+- **构造参数**：每个节点的构造函数接受一个选项对象，键就是它可写的属性：通用的 `name`、`groups`、`processMode`；`Node2D` 的 `position`、`rotation`、`scale`、`visible`、`zIndex`、`inputPickable`、`hitArea`；再加各节点自己的属性（如 `Label` 的 `text`（默认 `''`）、`fontSize`，`RigidBody2D` 的 `mass`、`bounce`）。
+- **单位与坐标**：像素、y 轴向下、弧度（另有 `rotationDegrees`）、重力 px/s²。游戏坐标是设计分辨率（默认 750×1334）；`expand` 模式下屏幕多出来的部分向两侧对称扩展，贴边的 UI 用 `this.tree.viewport.visibleRect` / `safeRect`。
+- **每帧顺序**：处理输入队列（指针信号在这里触发）→ 若干次物理步（每步：所有节点的 `physicsProcess`，再推进物理世界、写回刚体位置、派发接触信号）→ `process` → Tween / Timer → `callDeferred` → `queueFree`。每帧最多补 2 个物理步。
+
+## 示例
+
+### 快速开始
+
+```ts
+import { Node2D, Scene, v } from 'sapling2d'
+
+/** 节点：继承引擎的节点类，覆写生命周期方法 */
+class Mover extends Node2D {
+  speed = 120 // 像素/秒
+
+  override process(dt: number) {
+    this.x += this.speed * dt // Vector2 不可变：用 x / y 快捷属性或重新赋值 position
+  }
+}
+
+/** 场景：场景树的根。在 ready() 里用 this.add() 搭建子节点，add 返回带类型的节点 */
+export class Main extends Scene {
+  mover!: Mover
+
+  override ready() {
+    this.mover = this.add(new Mover({ name: 'Mover', position: v(100, 200) }))
+  }
+}
+
+// 浏览器：import { startGame } from 'sapling2d/browser'; await startGame({ main: Main })
+// 小游戏：import { startGame } from 'sapling2d/wechat'; startGame({ main: Main })
+```
+
+测试（无头、确定性）：
+
+```ts
+const g = await createTestGame({ main: Main, seed: 1 })
+g.step(60) // 推进 60 帧 = 1 秒，结果是确定的
+expect(g.scene.mover.x).toBeCloseTo(220)
+console.log(g.dump())
+// Main (Main) position=(0, 0)
+//   Mover (Mover) position=(220, 200)
+```
+
+### 贴图与文字
+
+```ts
+import { Label, Scene, Sprite2D, tex, v } from 'sapling2d'
+
+export class Hud extends Scene {
+  // 进入场景前加载完成；路径相对于 public/assets/（sapling2d/vite 插件会检查文件是否存在）
+  static override assets = { coin: tex('coin.png') }
+  score = 0
+  scoreLabel!: Label
+
+  override ready() {
+    this.add(new Sprite2D({ texture: Hud.assets.coin, position: v(60, 60) })) // 默认以贴图中心为 position
+    this.scoreLabel = this.add(
+      new Label({ text: '0', fontSize: 48, color: 0xffffff, stroke: { color: 0x000000, width: 6 }, align: 'left', verticalAlign: 'center', position: v(110, 60) }),
+    )
+  }
+
+  addScore(n: number) {
+    this.score += n
+    this.scoreLabel.text = String(this.score) // 下一帧画面更新
+  }
+}
+```
+
+### 信号
+
+```ts
+import { Node, Node2D, Scene, Signal } from 'sapling2d'
+
+class Enemy extends Node2D {
+  readonly died = new Signal<[points: number]>() // 强类型信号：声明成只读字段
+  hp = 3
+
+  hit() {
+    if (--this.hp > 0) return
+    this.died.emit(10)
+    this.queueFree() // 帧末销毁；销毁时它声明的信号自动断开
+  }
+}
+
+class ScoreKeeper extends Node {
+  total = 0
+}
+
+export class Battle extends Scene {
+  enemy!: Enemy
+  keeper!: ScoreKeeper
+
+  override ready() {
+    this.keeper = this.add(new ScoreKeeper())
+    this.enemy = this.add(new Enemy())
+    // 第二个参数是 owner：owner 被销毁时连接自动断开。监听函数用箭头函数，不会丢 this
+    this.enemy.died.connect((points) => (this.keeper.total += points), this)
+  }
+}
+```
+
+```ts
+// 等下一次触发：await enemy.died（游戏里 emit 发生在之后的帧）；需要先注册再同步触发时用 wait()
+const s = new Signal<[n: number]>()
+const next = s.wait()
+s.emit(7)
+expect(await next).toBe(7)
+```
+
+### Groups 与 Autoload
+
+```ts
+import { Node, Node2D, Scene, v } from 'sapling2d'
+
+class Coin extends Node2D {
+  value = 1
+}
+
+/** 全局单例：跨场景保留，用类型取出 */
+class GameState extends Node {
+  coins = 0
+}
+
+// 声明合并：注册之后组名有补全、写错是类型错误，getNodesInGroup 返回 Coin[]
+declare module 'sapling2d' {
+  interface GroupRegistry {
+    coins: Coin
+  }
+}
+
+export class Level extends Scene {
+  override ready() {
+    for (let i = 0; i < 3; i++) this.add(new Coin({ position: v(100 * i, 0), groups: ['coins'] }))
+  }
+
+  collectAll() {
+    const state = this.tree.autoload(GameState)
+    for (const coin of this.tree.getNodesInGroup('coins')) {
+      state.coins += coin.value
+      coin.queueFree()
+    }
+  }
+}
+
+// 启动参数里注册：startGame({ main: Level, autoloads: [GameState] })
+```
+
+### 输入
+
+```ts
+import { key, Node2D, pointerPress, rect, Scene, v } from 'sapling2d'
+
+declare module 'sapling2d' {
+  interface ActionRegistry {
+    jump: true
+  }
+}
+
+/** 可点击的按钮：inputPickable + hitArea（Sprite2D 不设 hitArea 时用贴图范围） */
+class Button extends Node2D {
+  presses = 0
+
+  override ready() {
+    this.inputPickable = true
+    this.hitArea = rect(-100, -40, 200, 80) // 局部坐标
+    this.clicked.connect(() => this.presses++, this) // 按下和抬起都在区域内
+  }
+}
+
+export class Controls extends Scene {
+  jumps = 0
+  button!: Button
+
+  override ready() {
+    this.button = this.add(new Button({ position: v(375, 1200) }))
+  }
+
+  override process() {
+    // 被按钮处理掉的点击不会触发 pointerPress() 绑定
+    if (this.tree.input.isActionJustPressed('jump')) this.jumps++
+  }
+}
+
+// 启动参数：startGame({ main: Controls, actions: { jump: [pointerPress(), key('Space')] } })
+```
+
+```ts
+const g = await createTestGame({ main: Controls, actions: { jump: [pointerPress(), key('Space')] } })
+g.tap(375, 1200) // 设计坐标；推进 2 帧（按下、抬起）
+g.tap(100, 300) // 空白处：触发 jump
+g.pressKey('Space')
+expect(g.scene.button.presses).toBe(1)
+expect(g.scene.jumps).toBe(2)
+```
+
+### 物理与碰撞（合成玩法）
+
+```ts
+import { circle, CollisionShape2D, rectangle, RigidBody2D, Scene, StaticBody2D, v, type Vector2 } from 'sapling2d'
+
+class Ball extends RigidBody2D {
+  constructor(
+    readonly level: number,
+    position: Vector2,
+  ) {
+    super({ position, bounce: 0.2 }) // 单位：像素、px/s；重力默认 (0, 980)
+    this.add(new CollisionShape2D({ shape: circle(20 + level * 10) }))
+  }
+
+  override ready() {
+    // 接触信号在物理步结束后触发：回调里可以安全地 queueFree / add
+    this.bodyEntered.connect((other) => {
+      if (!(other instanceof Ball) || other.level !== this.level) return
+      if (this.isQueuedForDeletion || other.isQueuedForDeletion) return // 两边都会收到信号：只处理一次
+      this.queueFree()
+      other.queueFree()
+      this.parent!.add(new Ball(this.level + 1, this.position.lerp(other.position, 0.5)))
+    }, this)
+  }
+}
+
+export class Box extends Scene {
+  override ready() {
+    const floor = this.add(new StaticBody2D({ position: v(375, 1250) }))
+    floor.add(new CollisionShape2D({ shape: rectangle(750, 100) })) // 上表面 y = 1200
+    this.add(new Ball(0, v(375, 1100)))
+    this.add(new Ball(0, v(380, 900)))
+  }
+}
+```
+
+```ts
+// 给 position 赋值等于瞬移（速度清零）；施加冲量：ball.applyCentralImpulse(v(200, 0))
+balls[0]!.position = v(100, 500)
+g.step()
+expect(balls[0]!.x).toBeCloseTo(100)
+```
+
+### 检测区域
+
+```ts
+import { Area2D, circle, CollisionShape2D, rectangle, RigidBody2D, Scene, v } from 'sapling2d'
+
+export class Goal extends Scene {
+  scored = 0
+
+  override ready() {
+    // 区域：只检测 RigidBody2D 进出，不挡住它们
+    const zone = this.add(new Area2D({ position: v(375, 800) }))
+    zone.add(new CollisionShape2D({ shape: rectangle(300, 40) }))
+    zone.bodyEntered.connect(() => this.scored++, this)
+
+    const ball = this.add(new RigidBody2D({ position: v(375, 500) }))
+    ball.add(new CollisionShape2D({ shape: circle(20) }))
+  }
+}
+```
+
+### 计时器与补间
+
+```ts
+import { Ease, Label, Scene, Timer, v } from 'sapling2d'
+
+export class Countdown extends Scene {
+  left = 3
+  label!: Label
+
+  override ready() {
+    this.label = this.add(new Label({ text: '3', fontSize: 120, align: 'center', verticalAlign: 'center', position: v(375, 667) }))
+    const timer = this.add(new Timer({ waitTime: 1, autostart: true })) // 循环触发，不漂移
+    timer.timeout.connect(() => this.tick(timer), this)
+  }
+
+  tick(timer: Timer) {
+    this.left--
+    this.label.text = this.left > 0 ? String(this.left) : 'GO!'
+    // 补间：绑定到节点，节点销毁时自动停止；同一个 to() 里的多个属性同时进行
+    this.label.scale = v(1.6, 1.6)
+    this.label.createTween().to(this.label, { scale: v(1, 1) }, 0.3, Ease.BackOut)
+    if (this.left === 0) timer.stop()
+  }
+}
+// 一次性等待不需要节点：await this.tree.createTimer(0.5).timeout
+```
+
+### 场景切换与存档
+
+```ts
+import { Label, Scene, v } from 'sapling2d'
+
+declare module 'sapling2d' {
+  interface StorageRegistry {
+    best: number
+  }
+}
+
+export class Play extends Scene {
+  score = 0
+
+  finish() {
+    const best = Math.max(this.score, this.tree.storage.get('best', 0)) // 同步读写，JSON，自动加前缀
+    this.tree.storage.set('best', best)
+    // 参数类型由 Result 的构造函数决定；资源加载完后在微任务里替换场景，不打断当前帧
+    void this.tree.changeScene(Result, { score: this.score, best })
+  }
+}
+
+export class Result extends Scene {
+  constructor(readonly params: { score: number; best: number }) {
+    super()
+  }
+
+  override ready() {
+    this.add(new Label({ text: `得分 ${this.params.score} · 最高 ${this.params.best}`, align: 'center', position: v(375, 600) }))
+  }
+}
+```
+
+```ts
+const g = await createTestGame({ main: Play, storage: { best: 30 } }) // 预置存档
+;(g.scene as Play).score = 42
+;(g.scene as Play).finish()
+await new Promise((r) => setTimeout(r, 0)) // 等场景替换完成（或 await changeScene 的返回值）
+expect(g.tree.currentScene).toBeInstanceOf(Result)
+expect(g.tree.storage.get('best', 0)).toBe(42)
+```
+
+### 音频
+
+```ts
+import { AudioStreamPlayer, music, Scene, sfx } from 'sapling2d'
+
+export class Stage extends Scene {
+  // 音效预解码（可叠加），音乐流式播放；格式统一用 mp3
+  static override assets = { pop: sfx('pop.mp3'), bgm: music('bgm.mp3') }
+
+  override ready() {
+    this.add(new AudioStreamPlayer({ stream: Stage.assets.bgm, loop: true, volume: 0.5, autoplay: true }))
+  }
+
+  pop() {
+    this.tree.audio.play(Stage.assets.pop) // 一次性音效
+  }
+
+  toggleMusic() {
+    const audio = this.tree.audio
+    audio.setBusMute('Music', !audio.isBusMuted('Music')) // 总线：Master / Music / SFX
+  }
+}
+// 浏览器在第一次触摸 / 点击 / 按键时自动解锁声音；切到后台自动挂起
+```
+
+```ts
+const g = await createTestGame({ main: Stage })
+g.scene.pop()
+g.scene.toggleMusic()
+// 无头模式不发声，只记录：g.audio.log / g.audio.playing；g.audio.finishAll() 模拟播放结束
+expect(g.audio.log.map((s) => `${s.kind}:${s.path}:${s.volume}`)).toEqual(['music:bgm.mp3:0', 'sfx:pop.mp3:1'])
+```
+
+### 暂停
+
+```ts
+import { Node2D, Scene } from 'sapling2d'
+
+class Spinner extends Node2D {
+  override process(dt: number) {
+    this.rotation += dt
+  }
+}
+
+export class World extends Scene {
+  spinner!: Spinner
+  menuSpinner!: Spinner
+
+  override ready() {
+    this.spinner = this.add(new Spinner()) // 默认 inherit → pausable
+    this.menuSpinner = this.add(new Spinner({ processMode: 'always' })) // 暂停菜单：暂停时照常运行
+  }
+
+  togglePause() {
+    this.tree.paused = !this.tree.paused // 暂停 pausable 节点、它们的 Tween / Timer、指针事件和物理
+  }
+}
+// 切到后台：tree.focusChanged(false)，默认挂起整个主循环
+```
+
+## 补间的控制
+
+- `createTween()` 返回的 Tween 可以 `kill()`（立即停止，不触发 `finished`），`isRunning` 表示是否还在播放；链式方法有 `to`、`parallel`、`wait(秒)`、`call(fn)`。
+- 两个 Tween 同时改同一个属性时都会运行，每帧后创建的那个最后写入（覆盖前一个）。反复触发的动效（比如每次连击都弹一下）应先停掉上一个：
+
+```ts
+#pop: Tween | null = null
+pop() {
+  this.#pop?.kill()
+  this.scale = v(1.6, 1.6)
+  this.#pop = this.createTween().to(this, { scale: v(1, 1) }, 0.25, Ease.BackOut)
+}
+```
+
+## 节点清单
+
+| 节点 | 用途 | 关键成员 |
+|---|---|---|
+| `Node` | 基类 | `add` `remove` `queueFree` `callDeferred` `addToGroup` `createTween` `processMode` `tree` |
+| `Node2D` | 带变换 | `position` `x` `y` `rotation` `scale` `visible` `zIndex` `globalPosition` `toLocal` `toGlobal`；`inputPickable` `hitArea` + 信号 `pointerDown` `pointerMove` `pointerUp` `clicked` |
+| `Scene` | 场景根 | `static assets` |
+| `Sprite2D` | 贴图 | `texture` `centered`（默认 true）`offset` `flipH` `flipV` |
+| `Label` | 文字 | `text` `fontSize` `color` `fontWeight` `align` `verticalAlign` `stroke` `wrapWidth` `lineHeight` |
+| `RigidBody2D` | 动态刚体 | `mass` `friction` `bounce` `gravityScale` `linearVelocity` `angularVelocity` `lockRotation` `ccd` `applyCentralImpulse` `applyForce` `sleeping`；信号 `bodyEntered` `bodyExited` |
+| `StaticBody2D` | 静态刚体（地面、墙） | `friction` `bounce` |
+| `Area2D` | 检测区域 | 信号 `bodyEntered` `bodyExited`；`getOverlappingBodies()` |
+| `CollisionShape2D` | 碰撞形状（必须是刚体 / 区域的直接子节点） | `shape`：`circle(r)` `rectangle(w, h)` `polygon(points)`；`disabled` |
+| `Timer` | 计时器 | `waitTime` `oneShot` `autostart` `start()` `stop()` `timeLeft`；信号 `timeout` |
+| `AudioStreamPlayer` | 播放声音 | `stream` `volume` `loop` `bus` `autoplay` `play()` `stop()`；信号 `finished` |
+
+碰撞层：`collisionLayer` / `collisionMask`（32 层，`setCollisionLayerValue(n, bool)`），规则同 Godot：任一方的 mask 包含对方的 layer 就碰撞。
+
+## 测试：`createTestGame`
+
+```ts
+const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, autoloads?, actions?, design? })
+```
+
+| 成员 | 说明 |
+|---|---|
+| `g.scene` / `g.tree` / `g.game` | 当前场景、场景树、游戏对象 |
+| `g.step(n)` / `g.stepSeconds(s)` | 推进 n 帧（每帧 1/60 秒，恰好一个物理步）；结果确定 |
+| `g.dump()` / `g.dump({ json: true })` | 场景树文本：每行 `名字 (类名) 属性=值`，缩进表示层级，取默认值的属性省略（见下表） |
+| `g.tap(x, y)` / `g.drag(from, to, { frames })` / `g.pressKey(code)` | 模拟输入（设计坐标），走和真实平台相同的路径；`tap` 推进 2 帧 |
+| `g.pointerDown/Move/Up(x, y, id?)` / `g.keyDown/keyUp(code)` | 只注入事件，下一次 step 处理 |
+| `g.setScreen(info)` / `g.setFocus(bool)` | 模拟换屏幕、切后台 |
+| `g.audio.log` / `g.audio.playing` / `g.audio.finishAll()` | 播放记录（无头不发声） |
+| `g.platform.storage` | 内存存储；`createTestGame({ storage: { best: 10 } })` 预置存档 |
+
+`dump` 中各节点显示的属性（只在不等于默认值时出现）。值的格式：向量 `position=(220, 200)`、布尔 `visible=false`、数字 `zIndex=3`、含空格的字符串加引号 `text="连击 ×2"`、数组 `groups=[coins]`。
+
+| 节点 | 属性 |
+|---|---|
+| 所有节点 | `groups`、`processMode` |
+| `Node2D` 及子类 | `position`（总是显示）、`rotationDegrees`、`scale`、`visible`、`zIndex` |
+| `Sprite2D` | `texture`（路径）、`centered`、`offset`、`flipH`、`flipV` |
+| `Label` | `text`（总是显示，含空格时加引号）、`fontSize`、`align` |
+| `RigidBody2D` | `mass`、`friction`、`bounce`、`linearVelocity`（运动时）、`sleeping`、`collisionLayer`、`collisionMask` |
+| `StaticBody2D` / `Area2D` | `friction`、`bounce`（静态刚体）、`collisionLayer`、`collisionMask` |
+| `CollisionShape2D` | `shape`（如 `circle(30)`）、`disabled` |
+| `Timer` | `waitTime`、`oneShot`、`timeLeft`、`stopped` |
+| `AudioStreamPlayer` | `stream`、`playing`、`loop`、`volume` |
+
+游戏自己的节点可以覆写 `protected dumpProps()`，加入关键状态（如 `level`），方便测试和 agent 观察：`return { ...super.dumpProps(), level: this.level }`。
+
+无头模式不渲染：贴图宽高为 0（需要点击区域时显式设置 `hitArea`）。`changeScene` 在微任务里完成：`await` 它的返回值，或 `await new Promise(r => setTimeout(r, 0))`。
+
+## 微信小游戏
+
+- 构建：`saplingWechat({ entry: 'src/main.wechat.ts' })`，`vite build -c vite.wechat.config.ts [--watch]`，用微信开发者工具打开 `dist-wechat/`。环境变量：`WX_APPID`、`SAPLING_RELEASE=1`（真机预览必须，压缩、无 sourcemap）、`SAPLING_LOG_URL=http://<局域网 IP>:7777/log`（把 console、错误和 `snapshot()` 截图发到 `startLogServer()`）。
+- 资源放在 `public/assets/`，构建时拷贝进小游戏包；`tex('a.png')` 在两个平台上路径相同。
+- 只用 WebGL1；iOS 小游戏可能没有 JIT：同时活跃的刚体控制在 60–80 个以内。模拟器和真机差异很大，以真机为准。
+- 小游戏没有键盘；触摸是多点的。`loadFont(path)` 加载包内字体（只在小游戏里）。
+
+## 常见陷阱
+
+- **测试通过不等于类型检查通过**：Vitest 不做类型检查。改完代码运行 `pnpm check`（= `tsc` + `vitest run`），两者都通过才算完成。
+- **严格的数组索引**：tsconfig 开启了 `noUncheckedIndexedAccess`，`arr[i]` 的类型是 `T | undefined`。确定存在时写 `arr[i]!`（示例里的 `balls[0]!` 就是这个原因），不确定时先判断。
+
+- **Vector2 不可变**：`node.position.x += 1` 是错的（编译不过）；写 `node.x += 1` 或 `node.position = node.position.add(v(1, 0))`。
+- **`queueFree` 在帧末执行**：调用后本帧内节点仍在树里；用 `isQueuedForDeletion` 防止重复处理（比如两个水果互相收到 `bodyEntered`）。
+- **物理回调里的增删**：接触信号在物理步之后派发，回调里 `queueFree` / `add` 都安全；新刚体在下一个物理步才创建，之前设置的速度和冲量会排队。
+- **刚体的位置由物理决定**：给 `RigidBody2D` 的 `position` 赋值等于瞬移并清零速度；`scale` 不影响碰撞形状。
+- **不支持路径查找**：没有 `getNode('A/B')`；用字段（`this.player = this.add(...)`）、`getNodesInGroup` 或 `autoload`。
+- **`this.tree` 只在树里可用**：不要在构造函数里用；放到 `ready()`。
+- **`await signal` 会错过同步紧接着的 emit**：先注册再触发时用 `signal.wait()`。
+- **随机数**：用 `this.tree.rng`（带 seed，测试可复现），不要用 `Math.random`。
+- **声明合并**：给组名、动作名、存档 key 加类型：`declare module 'sapling2d' { interface GroupRegistry { … } interface ActionRegistry { … } interface StorageRegistry { … } }`。
+- **Tween 在类方法里**：`this.createTween().to(this, {...})` 按 `Node2D` 的属性做类型检查；补间子类特有的属性写 `to(this as MyNode, …)`。
+- **音量是 0–1**（不是 dB）；`tree.paused` 不暂停声音。
+
+## 更多
+
+- 术语表：仓库根目录 `CONTEXT.md`；架构决策：`docs/adr/`；微信环境实测：`spikes/wechat/REPORT.md`。
+- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。

@@ -1,0 +1,10 @@
+{
+  // 文档示例（docs/examples）单独成一个程序：示例里的声明合并（GroupRegistry 等）不与引擎测试冲突
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["docs/examples", "src"],
+  "exclude": ["src/platform/browser", "src/platform/wechat", "src/vite"]
+}

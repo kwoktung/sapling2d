@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["test", "bench", "scripts", "src"],
+  // 浏览器平台代码需要 DOM 类型，单独由 tsconfig.browser.json 检查
+  // 这个夹具故意包含类型错误，由 forbidden-globals.test.ts 单独编译验证
+  "exclude": ["test/fixtures", "src/platform/browser", "src/platform/wechat"]
+}

@@ -4,9 +4,9 @@
 
 **Blocked by:** 18, 20, 21
 
-**Status:** ready-for-human（需要开发者工具和 iOS、Android 真机）
+**Status:** done（2026-10-07）。iOS 与 Android 都完整玩到结算、再来一局，无报错：iOS 59–60 fps（402×874@3），Android 58–61 fps（393×873@2.75，Intl / measureText 补丁生效）；用户确认音效、BGM、静音、切后台、最高分保存正常。修复：release 压缩改写类名 → Vite 插件开启 keepNames。JIT 验证拆到工单 24（待办）。
 
-- [ ] 用 `build:wechat` 构建，在开发者工具里完整玩一局
-- [ ] 在 iOS 真机上分别用高性能模式和普通模式各玩一局，在 Android 真机上玩一局，记录帧率、包体大小和发现的问题
-- [ ] 用正式 AppID、关闭调试，对比 iOS 普通模式和高性能模式的 JIT 探针及单步物理耗时，确定 `iOSHighPerformance` 是否有效（spike 01 中尚无定论）
-- [ ] 发现的问题都整理成新的工单
+- [x] 用 `build:wechat` 构建，在开发者工具里完整玩一局
+- [x] 在 iOS 真机上分别用高性能模式和普通模式各玩一局，在 Android 真机上玩一局，记录帧率、包体大小和发现的问题（高性能 / 普通模式对比见下一项）
+- [x] ~~用正式 AppID、关闭调试，对比 iOS 普通模式和高性能模式的 JIT~~ → 拆到工单 24（需要正式 AppID）
+- [x] 发现的问题都整理成新的工单（唯一的问题：release 类名被压缩，已直接修复）

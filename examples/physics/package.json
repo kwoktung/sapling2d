@@ -1,0 +1,17 @@
+{
+  "name": "example-physics",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "echo 'no tests'"
+  },
+  "dependencies": {
+    "sapling2d": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "8.3.3"
+  }
+}

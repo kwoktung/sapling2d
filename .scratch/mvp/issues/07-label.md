@@ -4,9 +4,9 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** done（2026-10-07）
 
-- [ ] `Label` 支持 text、字号、颜色、对齐方式和描边，底层用 Pixi 的 canvas Text
-- [ ] 改了 text 之后，下一帧画面就会更新
-- [ ] 无头模式下不渲染，但 `dump` 里能看到 text
-- [ ] 浏览器示例里有一个每秒自增的计数 Label
+- [x] `Label` 支持 text、字号、颜色、对齐方式和描边，底层用 Pixi 的 canvas Text
+- [x] 改了 text 之后，下一帧画面就会更新
+- [x] 无头模式下不渲染，但 `dump` 里能看到 text
+- [x] 浏览器示例里有一个每秒自增的计数 Label

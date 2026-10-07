@@ -1,0 +1,9 @@
+{
+  // Vite 插件运行在 Node 里（构建时），可以用 node: 模块
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["src/vite"]
+}

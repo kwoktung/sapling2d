@@ -1,0 +1,9 @@
+{
+  // 微信小游戏平台代码：没有 DOM，使用 src/platform/wechat/wx.d.ts 里的 wx 类型
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src/platform/wechat", "src/env.d.ts"]
+}

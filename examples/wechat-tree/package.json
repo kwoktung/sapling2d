@@ -1,0 +1,19 @@
+{
+  "name": "example-wechat-tree",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:wechat": "vite build -c vite.wechat.config.ts",
+    "dev:wechat": "vite build -c vite.wechat.config.ts --watch",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "echo 'no tests'",
+    "log-server": "node log-server.ts"
+  },
+  "dependencies": {
+    "sapling2d": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "vite": "8.3.3"
+  }
+}

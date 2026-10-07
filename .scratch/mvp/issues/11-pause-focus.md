@@ -4,10 +4,10 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** done（2026-10-07）。“通知音频系统挂起”由工单 12 订阅 `tree.focusChanged` 实现。
 
-- [ ] 支持 `tree.paused` 和 `processMode`（`inherit`、`pausable`、`always`），语义和 Godot 一致
-- [ ] 暂停时 pausable 节点的 `process` 和 `physicsProcess`、物理世界、Timer 和 Tween 都停止
-- [ ] 平台的前后台事件统一触发 `tree.focusChanged`；浏览器上来自 `visibilitychange`
-- [ ] 默认行为：切后台时暂停主循环（并通知音频系统挂起）；回到前台时重置时间累加器
-- [ ] 无头模式下可以模拟前后台切换，有测试覆盖
+- [x] 支持 `tree.paused` 和 `processMode`（`inherit`、`pausable`、`always`），语义和 Godot 一致
+- [x] 暂停时 pausable 节点的 `process` 和 `physicsProcess`、物理世界、Timer 和 Tween 都停止
+- [x] 平台的前后台事件统一触发 `tree.focusChanged`；浏览器上来自 `visibilitychange`
+- [x] 默认行为：切后台时暂停主循环（并通知音频系统挂起）；回到前台时重置时间累加器
+- [x] 无头模式下可以模拟前后台切换，有测试覆盖

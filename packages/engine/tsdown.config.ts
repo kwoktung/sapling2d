@@ -22,7 +22,7 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   // 运行时依赖和 Node 内置模块不打进包里
-  external: [/^pixi\.js/, 'planck', 'vite', /^node:/],
+  deps: { neverBundle: [/^pixi\.js/, 'planck', 'vite', /^node:/] },
   hooks: {
     // 打包类型声明时会丢掉 /// <reference path="./wx.d.ts" />：把 wx.d.ts 复制过去，并给用到它的声明文件补上引用
     'build:done': () => {

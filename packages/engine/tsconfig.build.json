@@ -1,0 +1,15 @@
+{
+  // 仅用于发布构建（tsdown 生成类型声明）：覆盖全部入口，包括浏览器、小游戏和 Vite 插件
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"],
+  // env.d.ts 只为没有 DOM 的核心程序声明 console；这里有 DOM，会重复声明
+  "exclude": ["src/env.d.ts"]
+}

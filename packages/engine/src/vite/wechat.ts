@@ -31,6 +31,9 @@ export interface SaplingWechatOptions {
   logUrl?: string | null
 }
 
+const VIRTUAL_ENTRY = '__sapling2d_wechat_entry__.js'
+const RESOLVED_VIRTUAL_ENTRY = '\0' + VIRTUAL_ENTRY
+
 const NO_EVAL_CALL = '(function () { throw new Error("[sapling2d] new Function is not allowed in WeChat Mini Games") })('
 
 /** 小游戏不允许的写法：执行时会直接报错。 */
@@ -75,11 +78,27 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
           target: 'es2017',
           minify: release,
           sourcemap: release ? false : 'inline',
-          lib: { entry: resolve(root, options.entry), formats: ['cjs'], fileName: () => 'game.js' },
+          // 入口是一个虚拟模块：先导入运行环境补丁，再导入游戏入口（见 resolveId / load）
+          lib: { entry: VIRTUAL_ENTRY, formats: ['cjs'], fileName: () => 'game.js' },
           // keepNames：压缩后节点的默认名字和 dump() 里的类名仍然可读（真机调试时曾经显示成 cP、_P）
           rolldownOptions: { output: { banner: bootBanner(logUrl), inlineDynamicImports: true, keepNames: true } },
         },
       }
+    },
+
+    /**
+     * 虚拟入口：`import 'sapling2d/wechat-polyfills'` 一定排在游戏入口之前。
+     * 同一个 bundle 里模块按导入顺序执行，所以补丁（Intl、navigator、canvas 等）总是先于任何 pixi.js 模块运行——
+     * 不依赖 sapling2d 自身的构建产物里 chunk 的顺序（外部的 pixi.js import 会被提升到补丁代码前面）。
+     */
+    resolveId(id) {
+      // 库模式会把入口当作相对 root 的路径解析：按文件名匹配
+      return id === VIRTUAL_ENTRY || id.endsWith('/' + VIRTUAL_ENTRY) ? RESOLVED_VIRTUAL_ENTRY : null
+    },
+
+    load(id) {
+      if (id !== RESOLVED_VIRTUAL_ENTRY) return null
+      return `import 'sapling2d/wechat-polyfills'\nimport ${JSON.stringify(resolve(root, options.entry))}\n`
     },
 
     /**

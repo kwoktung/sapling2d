@@ -4,6 +4,7 @@
 
 - `pnpm install`, then `pnpm check` runs typecheck and tests for every workspace package.
 - Engine source lives in `packages/engine` (published as `sapling2d`, with `sapling2d/testing` for headless tests).
+- Publishing: `pnpm --filter sapling2d build` (tsdown → `dist/`); `publishConfig.exports` swaps the in-repo `src/*.ts` exports for `dist/` at publish time, so check a release with `pnpm pack` installed into a project outside the repo.
 - `spikes/` holds throwaway experiments and is not part of the workspace.
 - Examples live in `examples/*` (`pnpm --filter example-sprite dev`). Game assets go in `public/assets/`; the `sapling2d/vite` plugin fails the build if a `tex()` / `sfx()` / `music()` path doesn't exist.
 

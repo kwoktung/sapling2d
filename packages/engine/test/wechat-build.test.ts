@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { saplingWechat } from 'sapling2d/vite'
 import { _createClock } from '../src/platform/wechat/clock'
 
+const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src')
+
 describe('saplingWechat', () => {
   let dir = ''
   afterEach(() => dir && rmSync(dir, { recursive: true, force: true }))
@@ -22,7 +24,12 @@ describe('saplingWechat', () => {
         root: dir,
         logLevel: 'silent',
         // 临时目录不在工作区里：把 sapling2d 指向源码
-        resolve: { alias: { sapling2d: join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'index.ts') } },
+        resolve: {
+          alias: [
+            { find: /^sapling2d$/, replacement: join(SRC, 'index.ts') },
+            { find: /^sapling2d\/wechat-polyfills$/, replacement: join(SRC, 'platform', 'wechat', 'polyfills.ts') },
+          ],
+        },
         plugins: [saplingWechat({ entry: 'src/main.ts', appid: 'wx-test', orientation: 'landscape', release: opts.release ?? false, logUrl: opts.logUrl ?? null })],
       })
   }
@@ -43,6 +50,15 @@ describe('saplingWechat', () => {
     expect(project.compileType).toBe('game')
     expect(project.setting.urlCheck).toBe(true)
     expect(existsSync(join(dir, 'dist-wechat', 'assets', 'fruit.png'))).toBe(true)
+  })
+
+  it('运行环境补丁在游戏入口之前执行（虚拟入口：先 wechat-polyfills，再游戏代码）', async () => {
+    const run = fixture("console.log('GAME_ENTRY_MARKER')")
+    await run()
+    const js = read('game.js')
+    const polyfill = js.indexOf('wx.createCanvas()')
+    expect(polyfill).toBeGreaterThan(-1)
+    expect(polyfill).toBeLessThan(js.indexOf('GAME_ENTRY_MARKER'))
   })
 
   it('发布构建：压缩、不带 sourcemap；配置日志服务时关闭域名校验并把地址写进启动代码', async () => {

@@ -1,31 +1,95 @@
 {
   "name": "sapling2d",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Code-first, agent-friendly 2D game engine: PixiJS rendering, planck.js physics, Godot-style node tree. Runs in the browser and as a WeChat Mini Game, with deterministic headless testing.",
+  "keywords": [
+    "game-engine",
+    "2d",
+    "pixi",
+    "pixijs",
+    "planck",
+    "box2d",
+    "physics",
+    "godot",
+    "wechat",
+    "wechat-minigame",
+    "minigame",
+    "headless",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "kwoktung",
+  "homepage": "https://github.com/kwoktung/sapling2d#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kwoktung/sapling2d.git",
+    "directory": "packages/engine"
+  },
+  "bugs": {
+    "url": "https://github.com/kwoktung/sapling2d/issues"
+  },
   "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "files": [
+    "dist",
+    "llms.txt",
+    "README.md",
+    "LICENSE"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./browser": "./src/platform/browser/index.ts",
     "./testing": "./src/testing/index.ts",
     "./vite": "./src/vite/index.ts",
-    "./wechat": "./src/platform/wechat/index.ts"
+    "./wechat": "./src/platform/wechat/index.ts",
+    "./wechat-polyfills": "./src/platform/wechat/polyfills.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./browser": {
+        "types": "./dist/browser.d.ts",
+        "import": "./dist/browser.js"
+      },
+      "./wechat": {
+        "types": "./dist/wechat.d.ts",
+        "import": "./dist/wechat.js"
+      },
+      "./wechat-polyfills": {
+        "types": "./dist/wechat-polyfills.d.ts",
+        "import": "./dist/wechat-polyfills.js"
+      },
+      "./testing": {
+        "types": "./dist/testing.d.ts",
+        "import": "./dist/testing.js"
+      },
+      "./vite": {
+        "types": "./dist/vite.d.ts",
+        "import": "./dist/vite.js"
+      },
+      "./llms.txt": "./llms.txt",
+      "./package.json": "./package.json"
+    }
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.browser.json && tsc -p tsconfig.wechat.json && tsc -p tsconfig.vite.json && tsc -p tsconfig.test.json && tsc -p tsconfig.docs.json",
     "bench:physics": "SAPLING_BENCH=1 vitest run",
     "bench:physics:jitless": "SAPLING_BENCH=1 SAPLING_JITLESS=1 vitest run",
-    "docs": "node scripts/build-llms.ts"
-  },
-  "devDependencies": {
-    "@types/node": "^26.6.4",
-    "typescript": "7.0.2",
-    "vite": "8.3.3",
-    "vitest": "5.0.3"
+    "docs": "node scripts/build-llms.ts",
+    "build": "tsdown",
+    "prepublishOnly": "pnpm build && pnpm test"
   },
   "dependencies": {
-    "pixi.js": "8.22.0",
-    "planck": "1.5.0"
+    "pixi.js": "~8.22.0",
+    "planck": "^1.5.0"
   },
   "peerDependencies": {
     "vite": ">=8"
@@ -34,5 +98,12 @@
     "vite": {
       "optional": true
     }
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsdown": "0.23.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.3",
+    "vitest": "5.0.3"
   }
 }

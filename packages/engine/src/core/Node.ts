@@ -45,6 +45,10 @@ export class Node implements ConnectionOwner {
   #name: string
   #parent: Node | null = null
   #children: Node[] = []
+  /** 子节点名字 → 子节点：兄弟重名检查是 O(1)（同一父节点下有几百颗同名子弹时，线性扫描会让 add 变成平方级）。 */
+  #childByName = new Map<string, Node>()
+  /** 名字主干 → 下一个尝试的数字后缀，避免每次都从 2 开始数。 */
+  #nextSuffix = new Map<string, number>()
   #tree: SceneTree | null = null
   #isReady = false
   #queuedForDeletion = false
@@ -75,7 +79,14 @@ export class Node implements ConnectionOwner {
   }
 
   set name(value: string) {
-    this.#name = this.#parent ? this.#parent.#uniqueChildName(value, this) : value
+    const parent = this.#parent
+    if (!parent) {
+      this.#name = value
+      return
+    }
+    parent.#unindexChild(this)
+    this.#name = parent.#uniqueChildName(value, this)
+    parent.#childByName.set(this.#name, this)
   }
 
   get parent(): Node | null {
@@ -121,6 +132,7 @@ export class Node implements ConnectionOwner {
       if (n === child) throw new Error(`Cannot add "${child.#name}" to "${this.#name}": a node cannot be its own ancestor.`)
     }
     child.#name = this.#uniqueChildName(child.#name, child)
+    this.#childByName.set(child.#name, child)
     child.#parent = this
     this.#children.push(child)
     if (this.#tree) {
@@ -139,14 +151,29 @@ export class Node implements ConnectionOwner {
     if (index === -1) throw new Error(`"${child.#name}" is not a child of "${this.#name}".`)
     if (child.#tree) child.#propagateExitTree()
     this.#children.splice(index, 1)
+    this.#unindexChild(child)
     child.#parent = null
   }
 
+  /**
+   * 兄弟节点里不重复的名字：`base` 没被占用就用它，否则加数字后缀（Fruit、Fruit2、Fruit3……）。
+   * 后缀只增不减：Fruit2 被销毁后，下一个同名节点是 Fruit4 而不是 Fruit2。
+   */
   #uniqueChildName(base: string, self: Node): string {
-    const taken = (name: string) => this.#children.some((c) => c !== self && c.#name === name)
+    const taken = (name: string) => {
+      const owner = this.#childByName.get(name)
+      return owner !== undefined && owner !== self
+    }
     if (!taken(base)) return base
     const stem = base.replace(/\d+$/, '')
-    for (let i = 2; ; i++) if (!taken(`${stem}${i}`)) return `${stem}${i}`
+    let i = this.#nextSuffix.get(stem) ?? 2
+    while (taken(`${stem}${i}`)) i++
+    this.#nextSuffix.set(stem, i + 1)
+    return `${stem}${i}`
+  }
+
+  #unindexChild(child: Node): void {
+    if (this.#childByName.get(child.#name) === child) this.#childByName.delete(child.#name)
   }
 
   // ---------------------------------------------------------------- 暂停

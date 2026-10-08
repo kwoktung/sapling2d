@@ -117,6 +117,33 @@ describe('lifecycle', () => {
   })
 })
 
+describe('physicsProcess 节点计数', () => {
+  it('只统计覆写了 physicsProcess 的节点；进出树时增减，物理步只在有这类节点时遍历', async () => {
+    let calls = 0
+    class Mover extends Node {
+      override physicsProcess() {
+        calls++
+      }
+    }
+    const g = await createTestGame({ main: Scene })
+    g.scene.add(new Node())
+    expect(g.tree._physicsProcessNodes).toBe(0)
+    const holder = g.scene.add(new Node())
+    holder.add(new Mover())
+    holder.add(new Mover())
+    expect(g.tree._physicsProcessNodes).toBe(2)
+    g.step(3)
+    expect(calls).toBe(6)
+    g.scene.remove(holder)
+    expect(g.tree._physicsProcessNodes).toBe(0)
+    g.scene.add(holder) // 重新进入树
+    expect(g.tree._physicsProcessNodes).toBe(2)
+    holder.queueFree()
+    g.step()
+    expect(g.tree._physicsProcessNodes).toBe(0)
+  })
+})
+
 describe('main loop', () => {
   class Counter extends Node {
     processCalls: number[] = []

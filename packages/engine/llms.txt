@@ -578,6 +578,31 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 - 只用 WebGL1；iOS 小游戏可能没有 JIT：同时活跃的刚体控制在 60–80 个以内。模拟器和真机差异很大，以真机为准。
 - 小游戏没有键盘；触摸是多点的。`loadFont(path)` 加载包内字体（只在小游戏里）。
 
+## 性能（微信小游戏 iOS）
+
+iOS 小游戏基本没有 JIT，而且**分配内存（对象、数组、闭包、迭代器）特别贵**；读写普通字段、getter、`Map.get` 并不慢。弹幕、粒子这类每帧处理几百个对象的代码按下面写（实测数据见 `spikes/bullets/REPORT.md`）：
+
+- **碰撞判定先把位置读进局部变量或数组**，内层循环只做算术，不要反复读 `node.x` / `node.position`：
+
+```ts
+const ex = this.ex, ey = this.ey // 预先分配的 Float64Array
+for (let j = 0; j < enemies.length; j++) { ex[j] = enemies[j]!.x; ey[j] = enemies[j]!.y }
+for (let i = 0; i < bullets.length; i++) {
+  const b = bullets[i]!
+  const bx = b.x, by = b.y // 每颗子弹只读一次
+  for (let j = 0; j < enemies.length; j++) {
+    const dx = bx - ex[j]!, dy = by - ey[j]!
+    if (dx * dx + dy * dy <= r2) { /* 命中 */ break }
+  }
+}
+```
+
+- 数量再大（几百 × 几百）时按网格分桶，只和同一格及相邻格比较。
+- **移动用 `node.x += …` / `node.y += …`**：不分配对象。`node.position = node.position.add(…)` 每次分配两个 Vector2。
+- 热循环里用下标循环，少用 `for…of`、`map` / `filter`、箭头函数和展开运算符（都会分配）。
+- 子弹等大量对象不要用 `RigidBody2D` / `Area2D`：iOS 上同时活跃的刚体建议在 60–80 个以内。
+- 每帧都要跑的类不要用 `#private`（见下面的常见陷阱）。
+
 ## 常见陷阱
 
 - **测试通过不等于类型检查通过**：Vitest 不做类型检查。改完代码运行 `pnpm check`（= `tsc` + `vitest run`），两者都通过才算完成。

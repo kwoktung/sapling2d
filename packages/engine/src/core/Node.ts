@@ -328,6 +328,7 @@ export class Node implements ConnectionOwner {
 
   private _propagateEnterTree(tree: SceneTree): void {
     this._tree = tree
+    if (this.physicsProcess !== Node.prototype.physicsProcess) tree._physicsProcessNodes++
     this._onEnterTree()
     this.enterTree()
     for (const child of [...this._children]) {
@@ -350,13 +351,16 @@ export class Node implements ConnectionOwner {
     for (const child of [...this._children]) child._propagateExitTree()
     this.exitTree()
     this._onExitTree()
+    if (this._tree && this.physicsProcess !== Node.prototype.physicsProcess) this._tree._physicsProcessNodes--
     this._tree = null
   }
 
   /** @internal 先序遍历（父先于子）。 */
   _collect(out: Node[]): void {
     out.push(this)
-    for (const child of this._children) child._collect(out)
+    // 下标循环：每帧对每个节点都会调用，for…of 每次会分配一个迭代器
+    const children = this._children
+    for (let i = 0; i < children.length; i++) children[i]!._collect(out)
   }
 
   // ---------------------------------------------------------------- 调试

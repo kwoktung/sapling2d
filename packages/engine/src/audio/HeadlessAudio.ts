@@ -15,11 +15,11 @@ export interface PlayedSound {
 export class HeadlessAudioBackend implements AudioBackend {
   /** 按播放顺序记录的所有声音。 */
   readonly log: PlayedSound[] = []
-  #suspended = false
-  #endCallbacks = new Map<PlayedSound, () => void>()
+  private _suspended = false
+  private _endCallbacks = new Map<PlayedSound, () => void>()
 
   get suspended(): boolean {
-    return this.#suspended
+    return this._suspended
   }
 
   /** 正在播放的声音。 */
@@ -32,19 +32,19 @@ export class HeadlessAudioBackend implements AudioBackend {
   }
 
   playSound(buffer: unknown, options: { volume: number; loop: boolean }): SoundHandle {
-    return this.#play('sfx', (buffer as { path: string }).path, options)
+    return this._play('sfx', (buffer as { path: string }).path, options)
   }
 
   playMusic(path: string, options: { volume: number; loop: boolean }): SoundHandle {
-    return this.#play('music', path, options)
+    return this._play('music', path, options)
   }
 
   suspend(): void {
-    this.#suspended = true
+    this._suspended = true
   }
 
   resume(): void {
-    this.#suspended = false
+    this._suspended = false
   }
 
   /** 模拟非循环声音自然播放结束（触发 finished）。 */
@@ -52,17 +52,17 @@ export class HeadlessAudioBackend implements AudioBackend {
     for (const s of this.playing) {
       if (s.loop) continue
       s.ended = true
-      this.#endCallbacks.get(s)?.()
+      this._endCallbacks.get(s)?.()
     }
   }
 
-  #play(kind: 'sfx' | 'music', path: string, options: { volume: number; loop: boolean }): SoundHandle {
+  private _play(kind: 'sfx' | 'music', path: string, options: { volume: number; loop: boolean }): SoundHandle {
     const entry: PlayedSound = { kind, path, volume: options.volume, loop: options.loop, ended: false }
     this.log.push(entry)
     return {
       setVolume: (v) => (entry.volume = v),
       stop: () => (entry.ended = true),
-      onEnded: (cb) => this.#endCallbacks.set(entry, cb),
+      onEnded: (cb) => this._endCallbacks.set(entry, cb),
     }
   }
 }

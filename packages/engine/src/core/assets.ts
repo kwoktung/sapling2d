@@ -21,13 +21,13 @@ import type { Platform } from '../platform/Platform'
  */
 export class Texture {
   readonly kind = 'texture'
-  #width = 0
-  #height = 0
-  #loaded = false
-  #resource: unknown = null
+  private _width = 0
+  private _height = 0
+  private _loaded = false
+  private _ownResource: unknown = null
   /** @internal 子区域所在的整张图；整张图自己为 null。 */
   readonly _base: Texture | null
-  readonly #frame: (() => TextureFrame) | null
+  private readonly _frameOf: (() => TextureFrame) | null
 
   /** @internal 请使用 tex(path)、sheet() 或 atlas()。 */
   constructor(path: string)
@@ -39,46 +39,46 @@ export class Texture {
     frame?: () => TextureFrame,
   ) {
     this._base = base ?? null
-    this.#frame = frame ?? null
+    this._frameOf = frame ?? null
   }
 
   /** 宽度（像素）：整张图的原始宽度，或子区域裁剪前的宽度；未加载或无头模式下整张图为 0。 */
   get width(): number {
-    return this.#frame ? this.#frame().width : this.#width
+    return this._frameOf ? this._frameOf().width : this._width
   }
 
   get height(): number {
-    return this.#frame ? this.#frame().height : this.#height
+    return this._frameOf ? this._frameOf().height : this._height
   }
 
   get isLoaded(): boolean {
-    return this._base ? this._base.isLoaded : this.#loaded
+    return this._base ? this._base.isLoaded : this._loaded
   }
 
   /** @internal 平台加载出的原始图片对象（浏览器是 HTMLImageElement，小游戏是 wx Image）；子区域返回整张图的。 */
   get _resource(): unknown {
-    return this._base ? this._base._resource : this.#resource
+    return this._base ? this._base._resource : this._ownResource
   }
 
   /** @internal 子区域在整张图里的位置；整张图为 null。 */
   get _frame(): TextureFrame | null {
-    return this.#frame ? this.#frame() : null
+    return this._frameOf ? this._frameOf() : null
   }
 
   /** @internal */
   _setLoaded(resource: unknown, width: number, height: number): void {
     if (this._base) return this._base._setLoaded(resource, width, height)
-    this.#resource = resource
-    this.#width = width
-    this.#height = height
-    this.#loaded = true
+    this._ownResource = resource
+    this._width = width
+    this._height = height
+    this._loaded = true
   }
 
   /** @internal 释放图片；再次用到时需要重新加载。 */
   _unload(): void {
     if (this._base) return this._base._unload()
-    this.#resource = null
-    this.#loaded = false
+    this._ownResource = null
+    this._loaded = false
   }
 }
 
@@ -116,7 +116,7 @@ export function tex(path: string): Texture {
  */
 export class SpriteSheet {
   readonly kind = 'spritesheet'
-  readonly #frames: Texture[]
+  private readonly _frames: Texture[]
 
   /** @internal 请使用 sheet()。 */
   constructor(
@@ -128,7 +128,7 @@ export class SpriteSheet {
     if (!Number.isInteger(columns) || !Number.isInteger(rows) || columns < 1 || rows < 1) {
       throw new Error(`sheet('${texture.path}'): columns and rows must be positive integers (got ${columns}×${rows}).`)
     }
-    this.#frames = Array.from({ length: columns * rows }, (_, i) => {
+    this._frames = Array.from({ length: columns * rows }, (_, i) => {
       const col = i % columns
       const row = Math.floor(i / columns)
       return new Texture(`${texture.path}#${i}`, texture, () => {
@@ -141,7 +141,7 @@ export class SpriteSheet {
 
   /** 帧数（列数 × 行数）。 */
   get count(): number {
-    return this.#frames.length
+    return this._frames.length
   }
 
   get isLoaded(): boolean {
@@ -150,7 +150,7 @@ export class SpriteSheet {
 
   /** 第 `index` 帧（从 0 开始）。 */
   frame(index: number): Texture {
-    const t = this.#frames[index]
+    const t = this._frames[index]
     if (!t) throw new Error(`sheet('${this.texture.path}'): frame ${index} is out of range (0–${this.count - 1}).`)
     return t
   }
@@ -198,7 +198,7 @@ export interface AtlasData {
  */
 export class Atlas {
   readonly kind = 'atlas'
-  readonly #frames = new Map<string, Texture>()
+  private readonly _frames = new Map<string, Texture>()
 
   /** @internal 请使用 atlas()。 */
   constructor(
@@ -217,13 +217,13 @@ export class Atlas {
         height: src ? (f.sourceSize?.h ?? h) : h,
         trim: src ? new Vector2(src.x, src.y) : null,
       }
-      this.#frames.set(name, new Texture(`${texture.path}#${name}`, texture, () => frame))
+      this._frames.set(name, new Texture(`${texture.path}#${name}`, texture, () => frame))
     }
   }
 
   /** 所有帧的名字（按 JSON 中的顺序）。 */
   get names(): string[] {
-    return [...this.#frames.keys()]
+    return [...this._frames.keys()]
   }
 
   get isLoaded(): boolean {
@@ -231,15 +231,15 @@ export class Atlas {
   }
 
   has(name: string): boolean {
-    return this.#frames.has(name)
+    return this._frames.has(name)
   }
 
   /** 按名字取一帧。名字不存在时报错，并列出最相近的名字。 */
   get(name: string): Texture {
-    const t = this.#frames.get(name)
+    const t = this._frames.get(name)
     if (t) return t
     const similar = this.names.filter((n) => n.includes(name) || name.includes(n)).slice(0, 5)
-    throw new Error(`atlas('${this.texture.path}'): no frame named "${name}".` + (similar.length ? ` Similar: ${similar.join(', ')}.` : ` Frames: ${this.names.slice(0, 10).join(', ')}${this.#frames.size > 10 ? ', …' : ''}.`))
+    throw new Error(`atlas('${this.texture.path}'): no frame named "${name}".` + (similar.length ? ` Similar: ${similar.join(', ')}.` : ` Frames: ${this.names.slice(0, 10).join(', ')}${this._frames.size > 10 ? ', …' : ''}.`))
   }
 
   /**
@@ -249,7 +249,7 @@ export class Atlas {
   frames(prefix: string): Texture[] {
     const names = this.names.filter((n) => n.startsWith(prefix)).sort(naturalCompare)
     if (!names.length) throw new Error(`atlas('${this.texture.path}'): no frames start with "${prefix}".`)
-    return names.map((n) => this.#frames.get(n)!)
+    return names.map((n) => this._frames.get(n)!)
   }
 
   /** @internal */

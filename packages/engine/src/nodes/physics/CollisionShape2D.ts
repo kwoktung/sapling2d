@@ -18,31 +18,31 @@ export interface CollisionShape2DOptions extends Node2DOptions {
  * ```
  */
 export class CollisionShape2D extends Node2D {
-  #shape: Shape2D | null
-  #disabled: boolean
+  private _shape: Shape2D | null
+  private _disabled: boolean
 
   constructor(options: CollisionShape2DOptions = {}) {
     super(options)
-    this.#shape = options.shape ?? null
-    this.#disabled = options.disabled ?? false
+    this._shape = options.shape ?? null
+    this._disabled = options.disabled ?? false
   }
 
   get shape(): Shape2D | null {
-    return this.#shape
+    return this._shape
   }
 
   set shape(value: Shape2D | null) {
-    this.#shape = value
-    this.#notifyBody()
+    this._shape = value
+    this._notifyBody()
   }
 
   get disabled(): boolean {
-    return this.#disabled
+    return this._disabled
   }
 
   set disabled(value: boolean) {
-    this.#disabled = value
-    this.#notifyBody()
+    this._disabled = value
+    this._notifyBody()
   }
 
   /** @internal */
@@ -50,27 +50,27 @@ export class CollisionShape2D extends Node2D {
     if (!(this.parent instanceof CollisionObject2D)) {
       console.warn(`CollisionShape2D "${this.name}" only works as a direct child of a CollisionObject2D (RigidBody2D, StaticBody2D, Area2D); its parent is ${this.parent?.constructor.name ?? 'none'}.`)
     }
-    this.#notifyBody()
+    this._notifyBody()
   }
 
   /** @internal */
   override _onExitTree(): void {
-    this.#notifyBody()
+    this._notifyBody()
   }
 
   override _transformChanged(): void {
-    this.#notifyBody()
+    this._notifyBody()
   }
 
-  #notifyBody(): void {
+  private _notifyBody(): void {
     if (this.parent instanceof CollisionObject2D) this.parent._shapesChanged()
   }
 
   protected override dumpProps(): Record<string, unknown> {
     return {
       ...super.dumpProps(),
-      shape: this.#shape ? this.#shape.toString() : null,
-      disabled: this.#disabled || undefined,
+      shape: this._shape ? this._shape.toString() : null,
+      disabled: this._disabled || undefined,
     }
   }
 }

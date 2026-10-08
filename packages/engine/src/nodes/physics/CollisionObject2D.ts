@@ -22,55 +22,55 @@ export interface CollisionObject2DOptions extends Node2DOptions {
 export abstract class CollisionObject2D extends Node2D implements CollisionObjectNode {
   abstract readonly _bodyType: BodyType
   abstract readonly _isArea: boolean
-  #collisionLayer: number
-  #collisionMask: number
-  #bodyEntered: Signal<[body: PhysicsBody2D]> | null = null
-  #bodyExited: Signal<[body: PhysicsBody2D]> | null = null
+  private _collisionLayer: number
+  private _collisionMask: number
+  private _bodyEntered: Signal<[body: PhysicsBody2D]> | null = null
+  private _bodyExited: Signal<[body: PhysicsBody2D]> | null = null
   /** @internal */
   protected _handle: BodyHandle | null = null
 
   constructor(options: CollisionObject2DOptions = {}) {
     super(options)
-    this.#collisionLayer = (options.collisionLayer ?? 1) >>> 0
-    this.#collisionMask = (options.collisionMask ?? 1) >>> 0
+    this._collisionLayer = (options.collisionLayer ?? 1) >>> 0
+    this._collisionMask = (options.collisionMask ?? 1) >>> 0
   }
 
   // ---------------------------------------------------------------- 碰撞层
 
   get collisionLayer(): number {
-    return this.#collisionLayer
+    return this._collisionLayer
   }
 
   set collisionLayer(value: number) {
-    this.#collisionLayer = value >>> 0
+    this._collisionLayer = value >>> 0
     this._propsChanged()
   }
 
   get collisionMask(): number {
-    return this.#collisionMask
+    return this._collisionMask
   }
 
   set collisionMask(value: number) {
-    this.#collisionMask = value >>> 0
+    this._collisionMask = value >>> 0
     this._propsChanged()
   }
 
   /** 第 `layer` 层（1–32）是否在 collisionLayer 中。 */
   getCollisionLayerValue(layer: number): boolean {
-    return (this.#collisionLayer & bit(layer)) !== 0
+    return (this._collisionLayer & bit(layer)) !== 0
   }
 
   setCollisionLayerValue(layer: number, value: boolean): void {
-    this.collisionLayer = value ? this.#collisionLayer | bit(layer) : this.#collisionLayer & ~bit(layer)
+    this.collisionLayer = value ? this._collisionLayer | bit(layer) : this._collisionLayer & ~bit(layer)
   }
 
   /** 第 `layer` 层（1–32）是否在 collisionMask 中。 */
   getCollisionMaskValue(layer: number): boolean {
-    return (this.#collisionMask & bit(layer)) !== 0
+    return (this._collisionMask & bit(layer)) !== 0
   }
 
   setCollisionMaskValue(layer: number, value: boolean): void {
-    this.collisionMask = value ? this.#collisionMask | bit(layer) : this.#collisionMask & ~bit(layer)
+    this.collisionMask = value ? this._collisionMask | bit(layer) : this._collisionMask & ~bit(layer)
   }
 
   // ---------------------------------------------------------------- 信号
@@ -80,12 +80,12 @@ export abstract class CollisionObject2D extends Node2D implements CollisionObjec
    * 参数可能是刚被销毁的节点（检查 `isFreed`）。
    */
   get bodyEntered(): Signal<[body: PhysicsBody2D]> {
-    return (this.#bodyEntered ??= new Signal())
+    return (this._bodyEntered ??= new Signal())
   }
 
   /** 一个刚体结束接触（Area2D：离开区域）。对方被销毁或移出树时也会触发。 */
   get bodyExited(): Signal<[body: PhysicsBody2D]> {
-    return (this.#bodyExited ??= new Signal())
+    return (this._bodyExited ??= new Signal())
   }
 
   // ---------------------------------------------------------------- 生命周期（内部）
@@ -103,8 +103,8 @@ export abstract class CollisionObject2D extends Node2D implements CollisionObjec
   /** @internal */
   override _onFreed(): void {
     super._onFreed()
-    this.#bodyEntered?.disconnectAll()
-    this.#bodyExited?.disconnectAll()
+    this._bodyEntered?.disconnectAll()
+    this._bodyExited?.disconnectAll()
   }
 
   // ---------------------------------------------------------------- CollisionObjectNode（内部）
@@ -150,12 +150,12 @@ export abstract class CollisionObject2D extends Node2D implements CollisionObjec
 
   /** @internal 由物理世界在物理步结束后调用。 */
   _emitBodyEntered(body: PhysicsBody2D): void {
-    this.#bodyEntered?.emit(body)
+    this._bodyEntered?.emit(body)
   }
 
   /** @internal */
   _emitBodyExited(body: PhysicsBody2D): void {
-    this.#bodyExited?.emit(body)
+    this._bodyExited?.emit(body)
   }
 
   /** @internal */
@@ -171,8 +171,8 @@ export abstract class CollisionObject2D extends Node2D implements CollisionObjec
   protected override dumpProps(): Record<string, unknown> {
     return {
       ...super.dumpProps(),
-      collisionLayer: this.#collisionLayer !== 1 ? this.#collisionLayer : undefined,
-      collisionMask: this.#collisionMask !== 1 ? this.#collisionMask : undefined,
+      collisionLayer: this._collisionLayer !== 1 ? this._collisionLayer : undefined,
+      collisionMask: this._collisionMask !== 1 ? this._collisionMask : undefined,
     }
   }
 }

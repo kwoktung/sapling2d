@@ -38,114 +38,114 @@ export interface RigidBody2DOptions extends PhysicsBody2DOptions {
  */
 export class RigidBody2D extends PhysicsBody2D {
   readonly _bodyType = 'dynamic' as const
-  #mass: number
-  #gravityScale: number
-  #linearDamp: number
-  #angularDamp: number
-  #lockRotation: boolean
-  #canSleep: boolean
-  #ccd: boolean
-  #pendingLinearVelocity: Vector2 | null
-  #pendingAngularVelocity: number | null
-  #pending: ((h: BodyHandle) => void)[] = []
+  private _mass: number
+  private _gravityScale: number
+  private _linearDamp: number
+  private _angularDamp: number
+  private _lockRotation: boolean
+  private _canSleep: boolean
+  private _ccd: boolean
+  private _pendingLinearVelocity: Vector2 | null
+  private _pendingAngularVelocity: number | null
+  private _pending: ((h: BodyHandle) => void)[] = []
 
   constructor(options: RigidBody2DOptions = {}) {
     super(options)
-    this.#mass = options.mass ?? 1
-    this.#gravityScale = options.gravityScale ?? 1
-    this.#linearDamp = options.linearDamp ?? 0
-    this.#angularDamp = options.angularDamp ?? 0
-    this.#lockRotation = options.lockRotation ?? false
-    this.#canSleep = options.canSleep ?? true
-    this.#ccd = options.ccd ?? false
-    this.#pendingLinearVelocity = options.linearVelocity ?? null
-    this.#pendingAngularVelocity = options.angularVelocity ?? null
+    this._mass = options.mass ?? 1
+    this._gravityScale = options.gravityScale ?? 1
+    this._linearDamp = options.linearDamp ?? 0
+    this._angularDamp = options.angularDamp ?? 0
+    this._lockRotation = options.lockRotation ?? false
+    this._canSleep = options.canSleep ?? true
+    this._ccd = options.ccd ?? false
+    this._pendingLinearVelocity = options.linearVelocity ?? null
+    this._pendingAngularVelocity = options.angularVelocity ?? null
   }
 
   // ---------------------------------------------------------------- 属性
 
   get mass(): number {
-    return this.#mass
+    return this._mass
   }
 
   set mass(value: number) {
     if (!(value > 0)) throw new Error(`RigidBody2D mass must be > 0, got ${value}`)
-    this.#mass = value
+    this._mass = value
     this._propsChanged()
   }
 
   get gravityScale(): number {
-    return this.#gravityScale
+    return this._gravityScale
   }
 
   set gravityScale(value: number) {
-    this.#gravityScale = value
+    this._gravityScale = value
     this._propsChanged()
   }
 
   get linearDamp(): number {
-    return this.#linearDamp
+    return this._linearDamp
   }
 
   set linearDamp(value: number) {
-    this.#linearDamp = value
+    this._linearDamp = value
     this._propsChanged()
   }
 
   get angularDamp(): number {
-    return this.#angularDamp
+    return this._angularDamp
   }
 
   set angularDamp(value: number) {
-    this.#angularDamp = value
+    this._angularDamp = value
     this._propsChanged()
   }
 
   get lockRotation(): boolean {
-    return this.#lockRotation
+    return this._lockRotation
   }
 
   set lockRotation(value: boolean) {
-    this.#lockRotation = value
+    this._lockRotation = value
     this._propsChanged()
   }
 
   get canSleep(): boolean {
-    return this.#canSleep
+    return this._canSleep
   }
 
   set canSleep(value: boolean) {
-    this.#canSleep = value
+    this._canSleep = value
     this._propsChanged()
   }
 
   get ccd(): boolean {
-    return this.#ccd
+    return this._ccd
   }
 
   set ccd(value: boolean) {
-    this.#ccd = value
+    this._ccd = value
     this._propsChanged()
   }
 
   /** 线速度（px/s）。 */
   get linearVelocity(): Vector2 {
-    return this._handle?.linearVelocity ?? this.#pendingLinearVelocity ?? Vector2.ZERO
+    return this._handle?.linearVelocity ?? this._pendingLinearVelocity ?? Vector2.ZERO
   }
 
   set linearVelocity(value: Vector2) {
     if (this._handle) this._handle.linearVelocity = value
-    else this.#pendingLinearVelocity = value
+    else this._pendingLinearVelocity = value
   }
 
   /** 角速度（弧度/秒）。 */
   get angularVelocity(): number {
-    return this._handle?.angularVelocity ?? this.#pendingAngularVelocity ?? 0
+    return this._handle?.angularVelocity ?? this._pendingAngularVelocity ?? 0
   }
 
   set angularVelocity(value: number) {
     if (this._handle) this._handle.angularVelocity = value
-    else this.#pendingAngularVelocity = value
+    else this._pendingAngularVelocity = value
   }
 
   /** 是否处于休眠。设为 false 可以唤醒。 */
@@ -154,44 +154,44 @@ export class RigidBody2D extends PhysicsBody2D {
   }
 
   set sleeping(value: boolean) {
-    this.#withHandle((h) => (h.sleeping = value))
+    this._withHandle((h) => (h.sleeping = value))
   }
 
   // ---------------------------------------------------------------- 冲量与力
 
   /** 在质心施加冲量（kg·px/s）：立即改变速度。 */
   applyCentralImpulse(impulse: Vector2): void {
-    this.#withHandle((h) => h.applyImpulse(impulse))
+    this._withHandle((h) => h.applyImpulse(impulse))
   }
 
   /** 在相对质心偏移 `offset`（像素，全局方向）处施加冲量，会同时产生转动。 */
   applyImpulse(impulse: Vector2, offset: Vector2): void {
-    this.#withHandle((h) => h.applyImpulse(impulse, offset))
+    this._withHandle((h) => h.applyImpulse(impulse, offset))
   }
 
   /** 在质心施加力（kg·px/s²），只作用于下一个物理步；要持续施力请在每次 physicsProcess 中调用。 */
   applyCentralForce(force: Vector2): void {
-    this.#withHandle((h) => h.applyForce(force))
+    this._withHandle((h) => h.applyForce(force))
   }
 
   /** 在相对质心偏移处施加力，只作用于下一个物理步。 */
   applyForce(force: Vector2, offset: Vector2): void {
-    this.#withHandle((h) => h.applyForce(force, offset))
+    this._withHandle((h) => h.applyForce(force, offset))
   }
 
   /** 施加角冲量（kg·px²/s）。 */
   applyTorqueImpulse(impulse: number): void {
-    this.#withHandle((h) => h.applyTorqueImpulse(impulse))
+    this._withHandle((h) => h.applyTorqueImpulse(impulse))
   }
 
   /** 施加力矩（kg·px²/s²），只作用于下一个物理步。 */
   applyTorque(torque: number): void {
-    this.#withHandle((h) => h.applyTorque(torque))
+    this._withHandle((h) => h.applyTorque(torque))
   }
 
-  #withHandle(fn: (h: BodyHandle) => void): void {
+  private _withHandle(fn: (h: BodyHandle) => void): void {
     if (this._handle) fn(this._handle)
-    else this.#pending.push(fn)
+    else this._pending.push(fn)
   }
 
   // ---------------------------------------------------------------- 内部
@@ -200,33 +200,33 @@ export class RigidBody2D extends PhysicsBody2D {
   override _props(): BodyProps {
     return {
       ...super._props(),
-      mass: this.#mass,
-      gravityScale: this.#gravityScale,
-      linearDamp: this.#linearDamp,
-      angularDamp: this.#angularDamp,
-      lockRotation: this.#lockRotation,
-      canSleep: this.#canSleep,
-      ccd: this.#ccd,
+      mass: this._mass,
+      gravityScale: this._gravityScale,
+      linearDamp: this._linearDamp,
+      angularDamp: this._angularDamp,
+      lockRotation: this._lockRotation,
+      canSleep: this._canSleep,
+      ccd: this._ccd,
     }
   }
 
   /** @internal 刚体创建：应用排队的速度和冲量。 */
   override _attached(handle: BodyHandle): void {
     super._attached(handle)
-    if (this.#pendingLinearVelocity) handle.linearVelocity = this.#pendingLinearVelocity
-    if (this.#pendingAngularVelocity !== null) handle.angularVelocity = this.#pendingAngularVelocity
-    this.#pendingLinearVelocity = null
-    this.#pendingAngularVelocity = null
-    const pending = this.#pending
-    this.#pending = []
+    if (this._pendingLinearVelocity) handle.linearVelocity = this._pendingLinearVelocity
+    if (this._pendingAngularVelocity !== null) handle.angularVelocity = this._pendingAngularVelocity
+    this._pendingLinearVelocity = null
+    this._pendingAngularVelocity = null
+    const pending = this._pending
+    this._pending = []
     for (const fn of pending) fn(handle)
   }
 
   /** @internal 离开树时记住速度，重新加入后继续。 */
   override _detached(): void {
     if (this._handle) {
-      this.#pendingLinearVelocity = this._handle.linearVelocity
-      this.#pendingAngularVelocity = this._handle.angularVelocity
+      this._pendingLinearVelocity = this._handle.linearVelocity
+      this._pendingAngularVelocity = this._handle.angularVelocity
     }
     super._detached()
   }
@@ -236,7 +236,7 @@ export class RigidBody2D extends PhysicsBody2D {
     const sleeping = this.sleeping
     return {
       ...super.dumpProps(),
-      mass: this.#mass !== 1 ? this.#mass : undefined,
+      mass: this._mass !== 1 ? this._mass : undefined,
       linearVelocity: !sleeping && v.lengthSquared() > 1e-4 ? v : undefined,
       sleeping: sleeping || undefined,
     }

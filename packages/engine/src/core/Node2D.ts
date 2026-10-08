@@ -29,18 +29,18 @@ export interface Node2DOptions extends NodeOptions {
  * 单位是像素，y 轴向下，角度用弧度。
  */
 export class Node2D extends Node {
-  #position: Vector2
-  #rotation: number
-  #scale: Vector2
-  #visible: boolean
-  #zIndex: number
-  #alpha: number
-  #modulate: number
-  #selfModulate: number
-  #pointerDown: Signal<[event: PointerEvent2D]> | null = null
-  #pointerMove: Signal<[event: PointerEvent2D]> | null = null
-  #pointerUp: Signal<[event: PointerEvent2D]> | null = null
-  #clicked: Signal<[event: PointerEvent2D]> | null = null
+  private _position: Vector2
+  private _rotation: number
+  private _scale: Vector2
+  private _visible: boolean
+  private _zIndex: number
+  private _alpha: number
+  private _modulate: number
+  private _selfModulate: number
+  private _pointerDown: Signal<[event: PointerEvent2D]> | null = null
+  private _pointerMove: Signal<[event: PointerEvent2D]> | null = null
+  private _pointerUp: Signal<[event: PointerEvent2D]> | null = null
+  private _clicked: Signal<[event: PointerEvent2D]> | null = null
   /**
    * 是否接收指针事件。为 true 且点击区域命中时，节点会收到 pointerDown；
    * 按下之后同一指针的移动和抬起都发给这个节点（即使移出了区域），抬起时仍在区域内则触发 clicked。
@@ -56,57 +56,57 @@ export class Node2D extends Node {
 
   constructor(options: Node2DOptions = {}) {
     super(options)
-    this.#position = options.position ?? Vector2.ZERO
-    this.#rotation = options.rotation ?? 0
-    this.#scale = options.scale ?? Vector2.ONE
-    this.#visible = options.visible ?? true
-    this.#zIndex = options.zIndex ?? 0
-    this.#alpha = clampAlpha(options.alpha ?? 1)
-    this.#modulate = clampColor(options.modulate ?? WHITE)
-    this.#selfModulate = clampColor(options.selfModulate ?? WHITE)
+    this._position = options.position ?? Vector2.ZERO
+    this._rotation = options.rotation ?? 0
+    this._scale = options.scale ?? Vector2.ONE
+    this._visible = options.visible ?? true
+    this._zIndex = options.zIndex ?? 0
+    this._alpha = clampAlpha(options.alpha ?? 1)
+    this._modulate = clampColor(options.modulate ?? WHITE)
+    this._selfModulate = clampColor(options.selfModulate ?? WHITE)
     this.inputPickable = options.inputPickable ?? false
     this.hitArea = options.hitArea ?? null
   }
 
   get position(): Vector2 {
-    return this.#position
+    return this._position
   }
 
   set position(value: Vector2) {
-    this.#position = value
+    this._position = value
     this._version++
     this._transformChanged()
   }
 
   get x(): number {
-    return this.#position.x
+    return this._position.x
   }
 
   set x(value: number) {
-    this.position = new Vector2(value, this.#position.y)
+    this.position = new Vector2(value, this._position.y)
   }
 
   get y(): number {
-    return this.#position.y
+    return this._position.y
   }
 
   set y(value: number) {
-    this.position = new Vector2(this.#position.x, value)
+    this.position = new Vector2(this._position.x, value)
   }
 
   /** 弧度。 */
   get rotation(): number {
-    return this.#rotation
+    return this._rotation
   }
 
   set rotation(value: number) {
-    this.#rotation = value
+    this._rotation = value
     this._version++
     this._transformChanged()
   }
 
   get rotationDegrees(): number {
-    return (this.#rotation * 180) / Math.PI
+    return (this._rotation * 180) / Math.PI
   }
 
   set rotationDegrees(value: number) {
@@ -114,31 +114,31 @@ export class Node2D extends Node {
   }
 
   get scale(): Vector2 {
-    return this.#scale
+    return this._scale
   }
 
   set scale(value: Vector2) {
-    this.#scale = value
+    this._scale = value
     this._version++
     this._transformChanged()
   }
 
   get visible(): boolean {
-    return this.#visible
+    return this._visible
   }
 
   set visible(value: boolean) {
-    this.#visible = value
+    this._visible = value
     this._version++
   }
 
   /** 同一父节点下的绘制顺序，数值大的画在上面。 */
   get zIndex(): number {
-    return this.#zIndex
+    return this._zIndex
   }
 
   set zIndex(value: number) {
-    this.#zIndex = value
+    this._zIndex = value
     this._version++
   }
 
@@ -147,11 +147,11 @@ export class Node2D extends Node {
    * 为 0 时节点仍然可以被点中；要隐藏请用 `visible`。
    */
   get alpha(): number {
-    return this.#alpha
+    return this._alpha
   }
 
   set alpha(value: number) {
-    this.#alpha = clampAlpha(value)
+    this._alpha = clampAlpha(value)
     this._version++
   }
 
@@ -161,11 +161,11 @@ export class Node2D extends Node {
    * 补间时按 RGB 通道分别插值。
    */
   get modulate(): number {
-    return this.#modulate
+    return this._modulate
   }
 
   set modulate(value: number) {
-    this.#modulate = clampColor(value)
+    this._modulate = clampColor(value)
     this._version++
   }
 
@@ -174,11 +174,11 @@ export class Node2D extends Node {
    * 普通 Node2D 自己不绘制内容，设置它没有可见效果。补间时按 RGB 通道分别插值。
    */
   get selfModulate(): number {
-    return this.#selfModulate
+    return this._selfModulate
   }
 
   set selfModulate(value: number) {
-    this.#selfModulate = clampColor(value)
+    this._selfModulate = clampColor(value)
     this._version++
   }
 
@@ -194,7 +194,7 @@ export class Node2D extends Node {
 
   /** 局部变换：缩放 → 旋转 → 平移。 */
   get transform(): Transform2D {
-    return Transform2D.fromParts(this.#position, this.#rotation, this.#scale)
+    return Transform2D.fromParts(this._position, this._rotation, this._scale)
   }
 
   /** 相对于场景（设计坐标）的变换。非 Node2D 的祖先不参与变换。 */
@@ -239,22 +239,22 @@ export class Node2D extends Node {
 
   /** 指针在点击区域内按下。需要 `inputPickable = true`。 */
   get pointerDown(): Signal<[event: PointerEvent2D]> {
-    return (this.#pointerDown ??= new Signal())
+    return (this._pointerDown ??= new Signal())
   }
 
   /** 按下之后指针移动（拖拽）。 */
   get pointerMove(): Signal<[event: PointerEvent2D]> {
-    return (this.#pointerMove ??= new Signal())
+    return (this._pointerMove ??= new Signal())
   }
 
   /** 按下之后指针抬起（无论是否还在区域内）。 */
   get pointerUp(): Signal<[event: PointerEvent2D]> {
-    return (this.#pointerUp ??= new Signal())
+    return (this._pointerUp ??= new Signal())
   }
 
   /** 按下和抬起都在点击区域内。 */
   get clicked(): Signal<[event: PointerEvent2D]> {
-    return (this.#clicked ??= new Signal())
+    return (this._clicked ??= new Signal())
   }
 
   /** 局部坐标的点是否在点击区域内。子类可以覆写（Sprite2D 默认用贴图范围）。 */
@@ -267,7 +267,7 @@ export class Node2D extends Node {
 
   /** @internal 销毁时一并断开指针信号（它们是惰性创建的私有字段，Node 的通用清理看不到）。 */
   override _onFreed(): void {
-    for (const s of [this.#pointerDown, this.#pointerMove, this.#pointerUp, this.#clicked]) s?.disconnectAll()
+    for (const s of [this._pointerDown, this._pointerMove, this._pointerUp, this._clicked]) s?.disconnectAll()
   }
 
   /**
@@ -280,14 +280,14 @@ export class Node2D extends Node {
 
   protected override dumpProps(): Record<string, unknown> {
     return {
-      position: this.#position,
-      rotationDegrees: this.#rotation !== 0 ? Math.round(this.rotationDegrees * 100) / 100 : undefined,
-      scale: this.#scale.equals(Vector2.ONE) ? undefined : this.#scale,
-      visible: this.#visible ? undefined : false,
-      zIndex: this.#zIndex !== 0 ? this.#zIndex : undefined,
-      alpha: this.#alpha !== 1 ? Math.round(this.#alpha * 100) / 100 : undefined,
-      modulate: this.#modulate !== WHITE ? hex(this.#modulate) : undefined,
-      selfModulate: this.#selfModulate !== WHITE ? hex(this.#selfModulate) : undefined,
+      position: this._position,
+      rotationDegrees: this._rotation !== 0 ? Math.round(this.rotationDegrees * 100) / 100 : undefined,
+      scale: this._scale.equals(Vector2.ONE) ? undefined : this._scale,
+      visible: this._visible ? undefined : false,
+      zIndex: this._zIndex !== 0 ? this._zIndex : undefined,
+      alpha: this._alpha !== 1 ? Math.round(this._alpha * 100) / 100 : undefined,
+      modulate: this._modulate !== WHITE ? hex(this._modulate) : undefined,
+      selfModulate: this._selfModulate !== WHITE ? hex(this._selfModulate) : undefined,
     }
   }
 }

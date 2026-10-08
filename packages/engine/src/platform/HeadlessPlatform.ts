@@ -13,66 +13,66 @@ export class HeadlessPlatform implements Platform {
   readonly audio = new HeadlessAudioBackend()
   /** 内存存储：每个测试游戏独立。 */
   readonly storage = new MemoryStorageBackend()
-  #screen: ScreenInfo
-  #screenListeners = new Set<(screen: ScreenInfo) => void>()
-  #inputListeners = new Set<(event: RawInputEvent) => void>()
-  #focusListeners = new Set<(focused: boolean) => void>()
-  #time = 0
-  #nextId = 1
-  #pending = new Map<number, (timeMs: number) => void>()
+  private _screen: ScreenInfo
+  private _screenListeners = new Set<(screen: ScreenInfo) => void>()
+  private _inputListeners = new Set<(event: RawInputEvent) => void>()
+  private _focusListeners = new Set<(focused: boolean) => void>()
+  private _time = 0
+  private _nextId = 1
+  private _pending = new Map<number, (timeMs: number) => void>()
 
   /** 不传 screen 时，屏幕默认是 750×1334、DPR 为 1。 */
   constructor(screen: ScreenInfo = { width: 750, height: 1334, pixelRatio: 1 }) {
-    this.#screen = screen
+    this._screen = screen
   }
 
   getScreenInfo(): ScreenInfo {
-    return this.#screen
+    return this._screen
   }
 
   onScreenChange(callback: (screen: ScreenInfo) => void): () => void {
-    this.#screenListeners.add(callback)
-    return () => this.#screenListeners.delete(callback)
+    this._screenListeners.add(callback)
+    return () => this._screenListeners.delete(callback)
   }
 
   onInput(callback: (event: RawInputEvent) => void): () => void {
-    this.#inputListeners.add(callback)
-    return () => this.#inputListeners.delete(callback)
+    this._inputListeners.add(callback)
+    return () => this._inputListeners.delete(callback)
   }
 
   /** 注入一个原始输入事件（窗口坐标）。它会在下一帧开始时被处理。 */
   injectInput(event: RawInputEvent): void {
-    for (const cb of [...this.#inputListeners]) cb(event)
+    for (const cb of [...this._inputListeners]) cb(event)
   }
 
   onFocusChange(callback: (focused: boolean) => void): () => void {
-    this.#focusListeners.add(callback)
-    return () => this.#focusListeners.delete(callback)
+    this._focusListeners.add(callback)
+    return () => this._focusListeners.delete(callback)
   }
 
   /** 模拟切到后台（false）/ 回到前台（true）。 */
   setFocus(focused: boolean): void {
-    for (const cb of [...this.#focusListeners]) cb(focused)
+    for (const cb of [...this._focusListeners]) cb(focused)
   }
 
   /** 模拟屏幕变化（旋转、窗口缩放等）。 */
   setScreen(screen: ScreenInfo): void {
-    this.#screen = screen
-    for (const cb of [...this.#screenListeners]) cb(screen)
+    this._screen = screen
+    for (const cb of [...this._screenListeners]) cb(screen)
   }
 
   now(): number {
-    return this.#time
+    return this._time
   }
 
   requestFrame(callback: (timeMs: number) => void): number {
-    const id = this.#nextId++
-    this.#pending.set(id, callback)
+    const id = this._nextId++
+    this._pending.set(id, callback)
     return id
   }
 
   cancelFrame(id: number): void {
-    this.#pending.delete(id)
+    this._pending.delete(id)
   }
 
   /** 无头模式不读取文件：图片立即“加载完成”，宽高为 0。 */
@@ -82,9 +82,9 @@ export class HeadlessPlatform implements Platform {
 
   /** 推进时钟，并触发当前已注册的帧回调。 */
   advance(ms: number): void {
-    this.#time += ms
-    const callbacks = [...this.#pending.values()]
-    this.#pending.clear()
-    for (const cb of callbacks) cb(this.#time)
+    this._time += ms
+    const callbacks = [...this._pending.values()]
+    this._pending.clear()
+    for (const cb of callbacks) cb(this._time)
   }
 }

@@ -42,11 +42,11 @@ export class Viewport {
   /** 屏幕尺寸、DPR 或安全区变化后触发。 */
   readonly resized = new Signal()
 
-  #screen!: Required<ScreenInfo>
-  #scale = 1
-  #offset = Vector2.ZERO
-  #visibleRect!: Rect2
-  #safeRect!: Rect2
+  private _screen!: Required<ScreenInfo>
+  private _scale = 1
+  private _offset = Vector2.ZERO
+  private _visibleRect!: Rect2
+  private _safeRect!: Rect2
   /** @internal 每次 update 递增，渲染层据此判断是否需要调整画布。 */
   _version = 0
 
@@ -67,60 +67,60 @@ export class Viewport {
    * 需要贴屏幕边缘的 UI 应以它为准。
    */
   get visibleRect(): Rect2 {
-    return this.#visibleRect
+    return this._visibleRect
   }
 
   /** 安全区（设计坐标），已与 visibleRect 求交。放按钮、分数等重要 UI 时以它为准。 */
   get safeRect(): Rect2 {
-    return this.#safeRect
+    return this._safeRect
   }
 
   /** 1 个设计像素等于多少个窗口逻辑像素。 */
   get scale(): number {
-    return this.#scale
+    return this._scale
   }
 
   /** 设计坐标原点在窗口中的位置（窗口逻辑像素）。 */
   get offset(): Vector2 {
-    return this.#offset
+    return this._offset
   }
 
   /** 当前屏幕信息（窗口逻辑像素）。 */
   get screen(): Readonly<Required<ScreenInfo>> {
-    return this.#screen
+    return this._screen
   }
 
   /** 渲染分辨率：min(DPR, 2)。 */
   get renderResolution(): number {
-    return Math.min(this.#screen.pixelRatio, MAX_RENDER_RESOLUTION)
+    return Math.min(this._screen.pixelRatio, MAX_RENDER_RESOLUTION)
   }
 
   /** 窗口坐标 → 设计坐标。 */
   screenToDesign(p: Vector2): Vector2 {
-    return new Vector2((p.x - this.#offset.x) / this.#scale, (p.y - this.#offset.y) / this.#scale)
+    return new Vector2((p.x - this._offset.x) / this._scale, (p.y - this._offset.y) / this._scale)
   }
 
   /** 设计坐标 → 窗口坐标。 */
   designToScreen(p: Vector2): Vector2 {
-    return new Vector2(p.x * this.#scale + this.#offset.x, p.y * this.#scale + this.#offset.y)
+    return new Vector2(p.x * this._scale + this._offset.x, p.y * this._scale + this._offset.y)
   }
 
   /** @internal 由平台的 resize 事件驱动。 */
   _update(screen: ScreenInfo, emit = true): void {
     const safeArea = screen.safeArea ?? { left: 0, top: 0, right: screen.width, bottom: screen.height }
-    this.#screen = { width: screen.width, height: screen.height, pixelRatio: screen.pixelRatio, safeArea }
+    this._screen = { width: screen.width, height: screen.height, pixelRatio: screen.pixelRatio, safeArea }
     const scale = Math.min(screen.width / this.designWidth, screen.height / this.designHeight)
-    this.#scale = scale
-    this.#offset = new Vector2((screen.width - this.designWidth * scale) / 2, (screen.height - this.designHeight * scale) / 2)
+    this._scale = scale
+    this._offset = new Vector2((screen.width - this.designWidth * scale) / 2, (screen.height - this.designHeight * scale) / 2)
 
-    this.#visibleRect =
+    this._visibleRect =
       this.aspect === 'keep'
         ? this.designRect
-        : new Rect2((0 - this.#offset.x) / scale, (0 - this.#offset.y) / scale, screen.width / scale, screen.height / scale) // 0 - x：避免 -0
+        : new Rect2((0 - this._offset.x) / scale, (0 - this._offset.y) / scale, screen.width / scale, screen.height / scale) // 0 - x：避免 -0
 
     const tl = this.screenToDesign(new Vector2(safeArea.left, safeArea.top))
     const br = this.screenToDesign(new Vector2(safeArea.right, safeArea.bottom))
-    this.#safeRect = new Rect2(tl.x, tl.y, br.x - tl.x, br.y - tl.y).intersection(this.#visibleRect)
+    this._safeRect = new Rect2(tl.x, tl.y, br.x - tl.x, br.y - tl.y).intersection(this._visibleRect)
 
     this._version++
     if (emit) this.resized.emit()

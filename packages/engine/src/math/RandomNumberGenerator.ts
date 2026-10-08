@@ -3,18 +3,18 @@
  * 无头测试里的随机行为因此可以复现。游戏代码应使用 `this.tree.rng`，不要用 Math.random。
  */
 export class RandomNumberGenerator {
-  #state: number
+  private _state: number
   readonly seed: number
 
   constructor(seed = Date.now()) {
     this.seed = seed >>> 0
-    this.#state = this.seed
+    this._state = this.seed
   }
 
   /** [0, 1) 之间的浮点数。 */
   randf(): number {
-    this.#state = (this.#state + 0x6d2b79f5) >>> 0
-    let t = this.#state
+    this._state = (this._state + 0x6d2b79f5) >>> 0
+    let t = this._state
     t = Math.imul(t ^ (t >>> 15), t | 1)
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296

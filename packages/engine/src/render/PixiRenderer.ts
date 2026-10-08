@@ -45,20 +45,20 @@ interface View {
  * - 画布尺寸跟随屏幕；场景整体按视口缩放、平移到设计坐标；`keep` 模式裁剪到设计区域
  */
 export class PixiRenderer implements Renderer {
-  readonly #renderer: WebGLRenderer
+  private readonly _renderer: WebGLRenderer
   /** 渲染根：包含场景容器和（keep 模式的）裁剪遮罩。 */
-  readonly #root = new Container()
+  private readonly _root = new Container()
   /** 场景容器：施加视口变换，Autoload 和当前场景的显示对象挂在这里。 */
-  readonly #stage = new Container()
-  readonly #mask = new Graphics()
-  #viewportVersion = -1
+  private readonly _sceneContainer = new Container()
+  private readonly _mask = new Graphics()
+  private _viewportVersion = -1
   /** 文字的栅格化分辨率：渲染分辨率 × 视口缩放，保证文字在任何屏幕上都按实际像素清晰绘制。 */
-  #textResolution = 1
-  readonly #views = new Map<Node2D, View>()
+  private _textResolution = 1
+  private readonly _views = new Map<Node2D, View>()
   /** 整张图 → GPU 上的图片源，记下创建时用的资源：资源被卸载或替换后释放。图集的各帧共用整张图的源。 */
-  readonly #sources = new Map<Texture, { resource: unknown; source: ImageSource }>()
+  private readonly _sources = new Map<Texture, { resource: unknown; source: ImageSource }>()
   /** 贴图句柄（整张图或子区域）→ Pixi 贴图；与图片源同时失效。 */
-  readonly #textures = new Map<Texture, { resource: unknown; texture: PixiTexture }>()
+  private readonly _textures = new Map<Texture, { resource: unknown; texture: PixiTexture }>()
 
   /**
    * @internal 测试用：不初始化 WebGL，只做场景树到显示对象的同步（`sync()`），不能调用 `render()`。
@@ -69,13 +69,13 @@ export class PixiRenderer implements Renderer {
 
   /** @internal 测试用：根容器。 */
   get _stage(): Container {
-    return this.#stage
+    return this._sceneContainer
   }
 
   private constructor(renderer: WebGLRenderer) {
-    this.#renderer = renderer
-    this.#stage.sortableChildren = true
-    this.#root.addChild(this.#stage)
+    this._renderer = renderer
+    this._sceneContainer.sortableChildren = true
+    this._root.addChild(this._sceneContainer)
   }
 
   static async create(options: PixiRendererOptions): Promise<PixiRenderer> {
@@ -106,54 +106,54 @@ export class PixiRenderer implements Renderer {
 
   render(tree: SceneTree): void {
     this.sync(tree)
-    this.#renderer.render(this.#root)
+    this._renderer.render(this._root)
   }
 
   /** 只同步，不绘制。测试用。 */
   sync(tree: SceneTree): void {
-    this.#releaseUnloadedTextures()
-    this.#syncViewport(tree.viewport)
+    this._releaseUnloadedTextures()
+    this._syncViewport(tree.viewport)
     const seen = new Set<Node2D>()
-    this.#syncChildren(tree._topLevel(), this.#stage, seen)
-    for (const [node, view] of this.#views) {
-      if (!seen.has(node)) this.#destroyView(node, view)
+    this._syncChildren(tree._topLevel(), this._sceneContainer, seen)
+    for (const [node, view] of this._views) {
+      if (!seen.has(node)) this._destroyView(node, view)
     }
   }
 
-  #syncViewport(viewport: Viewport): void {
-    if (viewport._version === this.#viewportVersion) return
-    this.#viewportVersion = viewport._version
+  private _syncViewport(viewport: Viewport): void {
+    if (viewport._version === this._viewportVersion) return
+    this._viewportVersion = viewport._version
     const { width, height } = viewport.screen
-    this.#renderer?.resize(width, height, viewport.renderResolution)
-    this.#textResolution = viewport.renderResolution * viewport.scale
-    this.#stage.scale.set(viewport.scale)
-    this.#stage.position.set(viewport.offset.x, viewport.offset.y)
+    this._renderer?.resize(width, height, viewport.renderResolution)
+    this._textResolution = viewport.renderResolution * viewport.scale
+    this._sceneContainer.scale.set(viewport.scale)
+    this._sceneContainer.position.set(viewport.offset.x, viewport.offset.y)
     if (viewport.aspect === 'keep') {
       const o = viewport.offset
-      this.#mask.clear().rect(o.x, o.y, viewport.designWidth * viewport.scale, viewport.designHeight * viewport.scale).fill(0xffffff)
-      if (!this.#mask.parent) this.#root.addChild(this.#mask)
-      this.#stage.mask = this.#mask
+      this._mask.clear().rect(o.x, o.y, viewport.designWidth * viewport.scale, viewport.designHeight * viewport.scale).fill(0xffffff)
+      if (!this._mask.parent) this._root.addChild(this._mask)
+      this._sceneContainer.mask = this._mask
     }
   }
 
   destroy(): void {
-    for (const [node, view] of this.#views) this.#destroyView(node, view)
-    for (const cached of this.#textures.values()) cached.texture.destroy(false)
-    for (const cached of this.#sources.values()) cached.source.destroy()
-    this.#textures.clear()
-    this.#sources.clear()
-    this.#renderer?.destroy()
+    for (const [node, view] of this._views) this._destroyView(node, view)
+    for (const cached of this._textures.values()) cached.texture.destroy(false)
+    for (const cached of this._sources.values()) cached.source.destroy()
+    this._textures.clear()
+    this._sources.clear()
+    this._renderer?.destroy()
   }
 
   /** 同步一组兄弟节点，并让 `parent` 的子显示对象与它们的顺序一致。 */
-  #syncChildren(nodes: readonly Node[], parent: Container, seen: Set<Node2D>): void {
+  private _syncChildren(nodes: readonly Node[], parent: Container, seen: Set<Node2D>): void {
     const ordered: Container[] = []
     const visit = (node: Node) => {
       if (node instanceof Node2D) {
         seen.add(node)
-        const view = this.#syncNode(node)
+        const view = this._syncNode(node)
         ordered.push(view.container)
-        this.#syncChildren(node.children, view.container, seen)
+        this._syncChildren(node.children, view.container, seen)
       } else {
         // 非 Node2D：自己不显示，子节点按顺序挂到当前容器
         for (const child of node.children) visit(child)
@@ -171,8 +171,8 @@ export class PixiRenderer implements Renderer {
     }
   }
 
-  #syncNode(node: Node2D): View {
-    let view = this.#views.get(node)
+  private _syncNode(node: Node2D): View {
+    let view = this._views.get(node)
     if (!view) {
       view = { container: new Container({ label: node.name }), version: -1 }
       view.container.sortableChildren = true
@@ -183,12 +183,12 @@ export class PixiRenderer implements Renderer {
         view.text = new Text({ label: CONTENT_LABEL })
         view.container.addChild(view.text)
       }
-      this.#views.set(node, view)
+      this._views.set(node, view)
       node._view = view.container
     }
 
     const textureResource = node instanceof Sprite2D ? node.texture?._resource : undefined
-    if (view.version === node._version && view.textureResource === textureResource && (!view.text || view.textResolution === this.#textResolution)) {
+    if (view.version === node._version && view.textureResource === textureResource && (!view.text || view.textResolution === this._textResolution)) {
       return view
     }
     view.version = node._version
@@ -205,19 +205,19 @@ export class PixiRenderer implements Renderer {
     if (node instanceof Sprite2D && view.sprite) {
       view.textureResource = textureResource
       const s = view.sprite
-      s.texture = node.texture ? this.#pixiTexture(node.texture) : PixiTexture.EMPTY
+      s.texture = node.texture ? this._pixiTexture(node.texture) : PixiTexture.EMPTY
       s.anchor.set(node.centered ? 0.5 : 0)
       s.position.set(node.offset.x, node.offset.y)
       s.scale.set(node.flipH ? -1 : 1, node.flipV ? -1 : 1)
       s.tint = node.selfModulate
     } else if (node instanceof Label && view.text) {
-      this.#syncText(node, view, view.text)
+      this._syncText(node, view, view.text)
       view.text.tint = node.selfModulate
     }
     return view
   }
 
-  #syncText(node: Label, view: View, text: Text): void {
+  private _syncText(node: Label, view: View, text: Text): void {
     const style: TextStyleOptions = {
       fontSize: node.fontSize,
       fill: node.color,
@@ -234,9 +234,9 @@ export class PixiRenderer implements Renderer {
       view.styleKey = styleKey
     }
     text.text = node.text // 相同字符串时 Pixi 不会重绘
-    if (view.textResolution !== this.#textResolution) {
-      text.resolution = this.#textResolution
-      view.textResolution = this.#textResolution
+    if (view.textResolution !== this._textResolution) {
+      text.resolution = this._textResolution
+      view.textResolution = this._textResolution
     }
     text.anchor.set(ANCHOR[node.align], ANCHOR[node.verticalAlign])
   }
@@ -245,41 +245,41 @@ export class PixiRenderer implements Renderer {
    * 资源被卸载（切换场景时）或替换后，立即销毁对应的 Pixi 贴图和图片源、释放显存——不等有精灵再次用到它。
    * 先于节点同步执行：此时引用它的精灵都已随旧场景销毁。
    */
-  #releaseUnloadedTextures(): void {
-    for (const [texture, cached] of this.#textures) {
+  private _releaseUnloadedTextures(): void {
+    for (const [texture, cached] of this._textures) {
       if (cached.resource !== texture._resource) {
         cached.texture.destroy(false)
-        this.#textures.delete(texture)
+        this._textures.delete(texture)
       }
     }
-    for (const [texture, cached] of this.#sources) {
+    for (const [texture, cached] of this._sources) {
       if (cached.resource !== texture._resource) {
         cached.source.destroy()
-        this.#sources.delete(texture)
+        this._sources.delete(texture)
       }
     }
   }
 
   /** @internal 测试用：当前缓存的 Pixi 贴图数量（整张图和子区域各算一个）。 */
   get _textureCount(): number {
-    return this.#textures.size
+    return this._textures.size
   }
 
   /** @internal 测试用：当前 GPU 上的图片源数量（每张图一个，图集的帧共用）。 */
   get _sourceCount(): number {
-    return this.#sources.size
+    return this._sources.size
   }
 
-  #pixiTexture(texture: Texture): PixiTexture {
+  private _pixiTexture(texture: Texture): PixiTexture {
     const resource = texture._resource
-    const cached = this.#textures.get(texture)
+    const cached = this._textures.get(texture)
     if (cached && cached.resource === resource) return cached.texture
     if (cached) {
       cached.texture.destroy(false) // 资源已卸载或换了
-      this.#textures.delete(texture)
+      this._textures.delete(texture)
     }
     if (!resource) return PixiTexture.EMPTY
-    const source = this.#imageSource(texture._base ?? texture, resource)
+    const source = this._imageSource(texture._base ?? texture, resource)
     const f = texture._frame
     const created = f
       ? new PixiTexture({
@@ -289,26 +289,26 @@ export class PixiRenderer implements Renderer {
           ...(f.trim ? { trim: new Rectangle(f.trim.x, f.trim.y, f.region.width, f.region.height) } : {}),
         })
       : new PixiTexture({ source })
-    this.#textures.set(texture, { resource, texture: created })
+    this._textures.set(texture, { resource, texture: created })
     return created
   }
 
-  #imageSource(base: Texture, resource: unknown): ImageSource {
-    const cached = this.#sources.get(base)
+  private _imageSource(base: Texture, resource: unknown): ImageSource {
+    const cached = this._sources.get(base)
     if (cached && cached.resource === resource) return cached.source
     cached?.source.destroy()
     // 显式构造 ImageSource：小游戏的 Image 过不了 Pixi 的自动类型识别（见 spikes/wechat/REPORT.md）
     const source = new ImageSource({ resource: resource as never })
-    this.#sources.set(base, { resource, source })
+    this._sources.set(base, { resource, source })
     return source
   }
 
-  #destroyView(node: Node2D, view: View): void {
+  private _destroyView(node: Node2D, view: View): void {
     view.container.removeFromParent()
     view.sprite?.destroy()
     view.text?.destroy()
     view.container.destroy({ children: false })
-    this.#views.delete(node)
+    this._views.delete(node)
     if (node._view === view.container) node._view = null
   }
 }

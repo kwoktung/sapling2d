@@ -18,21 +18,21 @@ export interface WxAudioApi {
  * InnerAudioContext 用完必须 destroy（Android 同时最多约 10 个）。
  */
 export class WechatAudioBackend implements AudioBackend {
-  readonly #wx: WxAudioApi
-  readonly #ctx: WechatMiniGame.WebAudioContext
-  readonly #master: ReturnType<WechatMiniGame.WebAudioContext['createGain']>
-  #suspended = false
+  private readonly _wx: WxAudioApi
+  private readonly _ctx: WechatMiniGame.WebAudioContext
+  private readonly _master: ReturnType<WechatMiniGame.WebAudioContext['createGain']>
+  private _suspended = false
   /** 正在播放的音乐 */
-  readonly #music = new Set<WechatMiniGame.InnerAudioContext>()
+  private readonly _music = new Set<WechatMiniGame.InnerAudioContext>()
 
   constructor(api: WxAudioApi) {
-    this.#wx = api
-    this.#ctx = api.createWebAudioContext()
-    this.#master = this.#ctx.createGain()
-    this.#master.connect(this.#ctx.destination)
-    this.#tryResume()
+    this._wx = api
+    this._ctx = api.createWebAudioContext()
+    this._master = this._ctx.createGain()
+    this._master.connect(this._ctx.destination)
+    this._tryResume()
     const onTouch = () => {
-      this.#tryResume()
+      this._tryResume()
       if (this.unlocked) api.offTouchStart?.(onTouch)
     }
     api.onTouchStart(onTouch)
@@ -40,19 +40,19 @@ export class WechatAudioBackend implements AudioBackend {
 
   /** WebAudio 是否可以发声。 */
   get unlocked(): boolean {
-    return this.#ctx.state === 'running'
+    return this._ctx.state === 'running'
   }
 
   loadSound(path: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
-      this.#wx.getFileSystemManager().readFile({
+      this._wx.getFileSystemManager().readFile({
         filePath: `assets/${path}`,
         success: (res) => {
           // resolve / reject 只会生效一次，回调和 Promise 两种写法都接上也没问题
           const ok = (buf: unknown) => resolve(buf)
           const fail = (err: unknown) => reject(new Error(`decodeAudioData failed for ${path}: ${JSON.stringify(err)}`))
           // 文档是回调写法；部分版本同时返回 Promise
-          const p = this.#ctx.decodeAudioData(res.data as ArrayBuffer, ok, fail) as { then?: (a: unknown, b: unknown) => void } | undefined
+          const p = this._ctx.decodeAudioData(res.data as ArrayBuffer, ok, fail) as { then?: (a: unknown, b: unknown) => void } | undefined
           if (p && typeof p.then === 'function') p.then(ok, fail)
         },
         fail: (err) => reject(new Error(`cannot read assets/${path}: ${err.errMsg}`)),
@@ -61,14 +61,14 @@ export class WechatAudioBackend implements AudioBackend {
   }
 
   playSound(buffer: unknown, options: { volume: number; loop: boolean }): SoundHandle {
-    if (!this.unlocked || this.#suspended) return endedHandle()
-    const source = this.#ctx.createBufferSource()
+    if (!this.unlocked || this._suspended) return endedHandle()
+    const source = this._ctx.createBufferSource()
     source.buffer = buffer as WechatMiniGame.AudioBufferLike
     source.loop = options.loop
-    const gain = this.#ctx.createGain()
+    const gain = this._ctx.createGain()
     gain.gain.value = options.volume
     source.connect(gain)
-    gain.connect(this.#master)
+    gain.connect(this._master)
     let ended: (() => void) | null = null
     let stopped = false
     source.onended = () => {
@@ -92,14 +92,14 @@ export class WechatAudioBackend implements AudioBackend {
   }
 
   playMusic(path: string, options: { volume: number; loop: boolean }): SoundHandle {
-    const audio = this.#wx.createInnerAudioContext()
+    const audio = this._wx.createInnerAudioContext()
     audio.src = `assets/${path}`
     audio.loop = options.loop
     audio.volume = options.volume
-    this.#music.add(audio)
+    this._music.add(audio)
     let ended: (() => void) | null = null
     const release = () => {
-      if (!this.#music.delete(audio)) return
+      if (!this._music.delete(audio)) return
       audio.destroy()
     }
     audio.onEnded(() => {
@@ -107,7 +107,7 @@ export class WechatAudioBackend implements AudioBackend {
       ended?.()
     })
     audio.onError((err) => console.warn(`[sapling2d] music "${path}" error: ${err.errMsg}`))
-    if (!this.#suspended) audio.play()
+    if (!this._suspended) audio.play()
     return {
       setVolume: (v) => (audio.volume = v),
       stop: () => {
@@ -119,20 +119,20 @@ export class WechatAudioBackend implements AudioBackend {
   }
 
   suspend(): void {
-    this.#suspended = true
-    void this.#ctx.suspend()
-    for (const a of this.#music) a.pause()
+    this._suspended = true
+    void this._ctx.suspend()
+    for (const a of this._music) a.pause()
   }
 
   resume(): void {
-    this.#suspended = false
-    this.#tryResume()
-    for (const a of this.#music) a.play()
+    this._suspended = false
+    this._tryResume()
+    for (const a of this._music) a.play()
   }
 
-  #tryResume(): void {
+  private _tryResume(): void {
     try {
-      const p = this.#ctx.resume() as { catch?: (f: () => void) => void } | undefined
+      const p = this._ctx.resume() as { catch?: (f: () => void) => void } | undefined
       p?.catch?.(() => {})
     } catch {
       // 忽略：等下一次触摸

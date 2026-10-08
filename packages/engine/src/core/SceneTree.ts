@@ -82,55 +82,55 @@ export class SceneTree {
   readonly storage: Storage
 
   /** 内部根节点：子节点依次是各个 Autoload，最后是当前场景。 */
-  readonly #root = new Node({ name: 'root' })
-  #scene: Scene | null = null
-  #autoloads = new Map<NodeClass, Node>()
-  #accumulator = 0
-  #physicsFrames = 0
-  #processFrames = 0
-  #deferred: (() => void)[] = []
-  #paused = false
+  private readonly _root = new Node({ name: 'root' })
+  private _scene: Scene | null = null
+  private _autoloads = new Map<NodeClass, Node>()
+  private _accumulator = 0
+  private _physicsFrames = 0
+  private _processFrames = 0
+  private _deferred: (() => void)[] = []
+  private _paused = false
   /** 当前场景被替换后触发（参数是新场景）。 */
   readonly sceneChanged = new Signal<[scene: Scene]>()
-  #loadAssets: (assets: AssetMap | undefined) => Promise<void> = async () => {}
-  #changeChain: Promise<unknown> = Promise.resolve()
-  #currentArgs: { cls: SceneConstructor; args: unknown[] } | null = null
+  private _loadAssets: (assets: AssetMap | undefined) => Promise<void> = async () => {}
+  private _changeChain: Promise<unknown> = Promise.resolve()
+  private _currentArgs: { cls: SceneConstructor; args: unknown[] } | null = null
   /** 游戏切到后台（false）或回到前台（true）时触发。默认情况下引擎会在后台挂起主循环。 */
   readonly focusChanged = new Signal<[focused: boolean]>()
-  #tweens: Tween[] = []
-  #timers: SceneTreeTimer[] = []
-  #physicsSettings: PhysicsSettings
-  #physics: PhysicsWorld | null = null
-  #freeQueue: Node[] = []
+  private _tweens: Tween[] = []
+  private _timers: SceneTreeTimer[] = []
+  private _physicsSettings: PhysicsSettings
+  private _physics: PhysicsWorld | null = null
+  private _freeQueue: Node[] = []
 
   constructor(options: SceneTreeOptions = {}) {
     this.rng = new RandomNumberGenerator(options.seed)
     this.maxPhysicsStepsPerFrame = options.maxPhysicsStepsPerFrame ?? 2
     this.viewport = options.viewport ?? new Viewport({ width: 750, height: 1334 }, { width: 750, height: 1334, pixelRatio: 1 })
-    this.input = new Input(this.viewport, () => this.#root.children)
-    this.#physicsSettings = options.physics ?? {}
+    this.input = new Input(this.viewport, () => this._root.children)
+    this._physicsSettings = options.physics ?? {}
     this.audio = new AudioServer(options.audioBackend ?? new HeadlessAudioBackend())
     this.storage = new Storage(options.storageBackend ?? new MemoryStorageBackend(), options.storagePrefix ?? 'sapling2d:')
-    this.#root._attachAsRoot(this)
+    this._root._attachAsRoot(this)
   }
 
   get currentScene(): Scene | null {
-    return this.#scene
+    return this._scene
   }
 
   /** 已执行的物理步数。 */
   get physicsFrames(): number {
-    return this.#physicsFrames
+    return this._physicsFrames
   }
 
   /** 已执行的渲染帧数。 */
   get processFrames(): number {
-    return this.#processFrames
+    return this._processFrames
   }
 
   /** 游戏内经过的时间（秒），按物理步累计，与真实时间无关。 */
   get time(): number {
-    return this.#physicsFrames * this.physicsDelta
+    return this._physicsFrames * this.physicsDelta
   }
 
   /** `this.rng.randf()` 的简写：[0, 1) 之间的随机数。 */
@@ -143,16 +143,16 @@ export class SceneTree {
    * processMode 为 always 的节点（如暂停菜单）照常运行。
    */
   get paused(): boolean {
-    return this.#paused
+    return this._paused
   }
 
   set paused(value: boolean) {
-    this.#paused = value
+    this._paused = value
   }
 
   /** 物理世界：重力、像素/米换算。第一次访问（通常是第一个刚体进入树）时创建。 */
   get physics(): PhysicsWorld {
-    return (this.#physics ??= new PhysicsWorld(this.#physicsSettings))
+    return (this._physics ??= new PhysicsWorld(this._physicsSettings))
   }
 
   // ---------------------------------------------------------------- Autoload
@@ -162,17 +162,17 @@ export class SceneTree {
    * 游戏通过启动参数 `autoloads: [...]` 注册，不直接调用这个方法。
    */
   _addAutoload<T extends Node>(cls: NodeClass<T>): T {
-    if (this.#autoloads.has(cls)) throw new Error(`Autoload ${cls.name} is already registered.`)
-    if (this.#scene) throw new Error(`Autoload ${cls.name} must be registered before the first scene starts.`)
+    if (this._autoloads.has(cls)) throw new Error(`Autoload ${cls.name} is already registered.`)
+    if (this._scene) throw new Error(`Autoload ${cls.name} must be registered before the first scene starts.`)
     const node = new cls()
-    this.#autoloads.set(cls, node)
-    this.#root.add(node)
+    this._autoloads.set(cls, node)
+    this._root.add(node)
     return node
   }
 
   /** 按类型取 Autoload 单例：`this.tree.autoload(GameState).score += 1`。 */
   autoload<T extends Node>(cls: NodeClass<T>): T {
-    const node = this.#autoloads.get(cls)
+    const node = this._autoloads.get(cls)
     if (!node) {
       throw new Error(`Autoload ${cls.name} is not registered. Pass it in the game options: autoloads: [${cls.name}].`)
     }
@@ -194,33 +194,33 @@ export class SceneTree {
    */
   changeScene<C extends SceneConstructor>(cls: C, ...args: ConstructorParameters<C>): Promise<InstanceType<C>> {
     const run = async () => {
-      await this.#loadAssets(cls.assets)
+      await this._loadAssets(cls.assets)
       const scene = new cls(...args) as InstanceType<C>
-      const oldAssets = this.#currentArgs?.cls.assets
-      this.#currentArgs = { cls, args }
+      const oldAssets = this._currentArgs?.cls.assets
+      this._currentArgs = { cls, args }
       this._setScene(scene)
-      this.#unloadUnused(oldAssets, cls.assets)
+      this._unloadUnused(oldAssets, cls.assets)
       this.sceneChanged.emit(scene)
       return scene
     }
-    const result = this.#changeChain.then(run, run)
-    this.#changeChain = result.catch(() => {})
+    const result = this._changeChain.then(run, run)
+    this._changeChain = result.catch(() => {})
     return result
   }
 
   /** 用上一次的参数重新创建当前场景（重开一局）。 */
   reloadCurrentScene(): Promise<Scene> {
-    if (!this.#currentArgs) throw new Error('reloadCurrentScene: no scene has been loaded with changeScene yet.')
-    const { cls, args } = this.#currentArgs
+    if (!this._currentArgs) throw new Error('reloadCurrentScene: no scene has been loaded with changeScene yet.')
+    const { cls, args } = this._currentArgs
     return this.changeScene(cls, ...(args as []))
   }
 
   /** @internal 由 Game 注入：加载 / 卸载资源。 */
   _setAssetLoader(load: (assets: AssetMap | undefined) => Promise<void>): void {
-    this.#loadAssets = load
+    this._loadAssets = load
   }
 
-  #unloadUnused(oldAssets: AssetMap | undefined, newAssets: AssetMap | undefined): void {
+  private _unloadUnused(oldAssets: AssetMap | undefined, newAssets: AssetMap | undefined): void {
     if (!oldAssets) return
     // 图集和子区域归结到整张图：新场景用同一张图（哪怕是另一种写法）就保留
     const keep = new Set(Object.values(newAssets ?? {}).map(assetRoot))
@@ -229,10 +229,10 @@ export class SceneTree {
 
   /** @internal 立即替换当前场景并销毁旧场景（不加载资源）。游戏代码请用 changeScene。 */
   _setScene(scene: Scene): void {
-    const old = this.#scene
-    this.#scene = scene
+    const old = this._scene
+    this._scene = scene
     old?._free()
-    this.#root.add(scene)
+    this._root.add(scene)
   }
 
   // ---------------------------------------------------------------- 补间与计时
@@ -244,7 +244,7 @@ export class SceneTree {
 
   /** @internal */
   _addTween(tween: Tween): Tween {
-    this.#tweens.push(tween)
+    this._tweens.push(tween)
     return tween
   }
 
@@ -254,7 +254,7 @@ export class SceneTree {
    */
   createTimer(seconds: number, options: { processAlways?: boolean } = {}): SceneTreeTimer {
     const t = new SceneTreeTimer(seconds, options.processAlways ?? true)
-    this.#timers.push(t)
+    this._timers.push(t)
     return t
   }
 
@@ -265,7 +265,7 @@ export class SceneTree {
    * 在 GroupRegistry 里注册过的组会返回对应的节点类型。
    */
   getNodesInGroup<K extends GroupName>(group: K): GroupNodeType<K>[] {
-    return this.#snapshot().filter((n) => n.isInGroup(group)) as GroupNodeType<K>[]
+    return this._snapshot().filter((n) => n.isInGroup(group)) as GroupNodeType<K>[]
   }
 
   /** 组里的第一个节点，没有则返回 null。 */
@@ -277,26 +277,26 @@ export class SceneTree {
 
   /** 在当前帧末尾调用 `fn`（所有 process 之后、销毁节点之前）。 */
   callDeferred(fn: () => void): void {
-    this.#deferred.push(fn)
+    this._deferred.push(fn)
   }
 
   /** @internal 由 Node.queueFree() 调用。 */
   _queueFree(node: Node): void {
-    this.#freeQueue.push(node)
+    this._freeQueue.push(node)
   }
 
-  #flushFrameEnd(): void {
-    for (let round = 0; this.#deferred.length > 0; round++) {
+  private _flushFrameEnd(): void {
+    for (let round = 0; this._deferred.length > 0; round++) {
       if (round >= MAX_DEFERRED_ROUNDS) throw new Error(`callDeferred kept scheduling new calls for ${MAX_DEFERRED_ROUNDS} rounds; possible infinite loop.`)
-      const calls = this.#deferred
-      this.#deferred = []
+      const calls = this._deferred
+      this._deferred = []
       for (const fn of calls) fn()
     }
-    while (this.#freeQueue.length > 0) {
-      const queue = this.#freeQueue
-      this.#freeQueue = []
+    while (this._freeQueue.length > 0) {
+      const queue = this._freeQueue
+      this._freeQueue = []
       for (const node of queue) {
-        if (node === this.#scene) this.#scene = null
+        if (node === this._scene) this._scene = null
         node._free()
       }
     }
@@ -310,54 +310,54 @@ export class SceneTree {
    */
   advance(dt: number): void {
     // 本帧中新建的补间和计时器从下一帧开始推进
-    const tweenCount = this.#tweens.length
-    const timerCount = this.#timers.length
+    const tweenCount = this._tweens.length
+    const timerCount = this._timers.length
     this.input._flush()
     // 输入回调里的 queueFree / callDeferred 也在本帧末尾生效
     const frameDt = Math.min(Math.max(dt, 0), MAX_FRAME_DELTA)
-    this.#accumulator += frameDt
+    this._accumulator += frameDt
     let steps = 0
-    while (this.#accumulator >= this.physicsDelta - EPSILON && steps < this.maxPhysicsStepsPerFrame) {
-      this.#accumulator -= this.physicsDelta
+    while (this._accumulator >= this.physicsDelta - EPSILON && steps < this.maxPhysicsStepsPerFrame) {
+      this._accumulator -= this.physicsDelta
       steps++
-      this.#physicsFrames++
-      for (const node of this.#snapshot()) if (node.canProcess()) node.physicsProcess(this.physicsDelta)
-      if (!this.#paused) this.#physics?._step(this.physicsDelta)
+      this._physicsFrames++
+      for (const node of this._snapshot()) if (node.canProcess()) node.physicsProcess(this.physicsDelta)
+      if (!this._paused) this._physics?._step(this.physicsDelta)
     }
     // 达到上限还有剩余：丢弃，而不是留到下一帧继续补
-    if (this.#accumulator >= this.physicsDelta - EPSILON) this.#accumulator = 0
-    if (this.#accumulator < 0) this.#accumulator = 0
+    if (this._accumulator >= this.physicsDelta - EPSILON) this._accumulator = 0
+    if (this._accumulator < 0) this._accumulator = 0
 
-    this.#processFrames++
-    for (const node of this.#snapshot()) {
+    this._processFrames++
+    for (const node of this._snapshot()) {
       if (!node.canProcess()) continue
       node._internalProcess(frameDt)
       if (node.canProcess()) node.process(frameDt)
     }
-    const tweens = this.#tweens
-    this.#tweens = []
-    for (let i = 0; i < tweens.length; i++) if (i >= tweenCount || tweens[i]!._advance(frameDt, this.#paused)) this.#tweens.push(tweens[i]!)
-    const timers = this.#timers
-    this.#timers = []
-    for (let i = 0; i < timers.length; i++) if (i >= timerCount || timers[i]!._advance(frameDt, this.#paused)) this.#timers.push(timers[i]!)
+    const tweens = this._tweens
+    this._tweens = []
+    for (let i = 0; i < tweens.length; i++) if (i >= tweenCount || tweens[i]!._advance(frameDt, this._paused)) this._tweens.push(tweens[i]!)
+    const timers = this._timers
+    this._timers = []
+    for (let i = 0; i < timers.length; i++) if (i >= timerCount || timers[i]!._advance(frameDt, this._paused)) this._timers.push(timers[i]!)
 
-    this.#flushFrameEnd()
+    this._flushFrameEnd()
   }
 
   /** @internal 清空物理累加器：从后台回来时调用，避免一次补算很多步。 */
   _resetAccumulator(): void {
-    this.#accumulator = 0
+    this._accumulator = 0
   }
 
   /** @internal 顶层节点：各个 Autoload，然后是当前场景。渲染层从这里开始遍历。 */
   _topLevel(): readonly Node[] {
-    return this.#root.children
+    return this._root.children
   }
 
   /** 树中所有节点（不含内部根节点）的先序快照。 */
-  #snapshot(): Node[] {
+  private _snapshot(): Node[] {
     const out: Node[] = []
-    for (const child of this.#root.children) child._collect(out)
+    for (const child of this._root.children) child._collect(out)
     return out
   }
 
@@ -377,7 +377,7 @@ export class SceneTree {
   dump(options: DumpOptions & { json: true }): DumpNode[]
   dump(options?: DumpOptions): string
   dump(options: DumpOptions = {}): string | DumpNode[] {
-    const roots = this.#root.children.map((c) => c._dump())
+    const roots = this._root.children.map((c) => c._dump())
     if (options.json) return roots
     if (roots.length === 0) return '(empty tree)'
     const lines: string[] = []

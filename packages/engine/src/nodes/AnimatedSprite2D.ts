@@ -57,13 +57,13 @@ export class AnimatedSprite2D<A extends string = string> extends Sprite2D {
   readonly frameChanged = new Signal()
   /** 不循环的动画播到最后一帧。参数是动画名。 */
   readonly animationFinished = new Signal<[animation: A]>()
-  readonly #animations: ReadonlyMap<A, ResolvedAnimation>
-  #animation: A
-  #frame = 0
-  #elapsed = 0
-  #playing: boolean
-  #finished = false
-  #speedScale: number
+  private readonly _animations: ReadonlyMap<A, ResolvedAnimation>
+  private _animation: A
+  private _frame = 0
+  private _elapsed = 0
+  private _playing: boolean
+  private _finished = false
+  private _speedScale: number
 
   constructor(options: AnimatedSprite2DOptions<A>) {
     super(options)
@@ -81,51 +81,51 @@ export class AnimatedSprite2D<A extends string = string> extends Sprite2D {
       if (!(fps > 0)) throw new Error(`AnimatedSprite2D: animation "${name}" fps must be > 0, got ${fps}.`)
       map.set(name as A, { frames: [...def.frames], fps, loop: def.loop ?? true })
     }
-    this.#animations = map
-    this.#animation = options.animation ?? (defs[0]![0] as A)
-    this.#resolve(this.#animation)
-    this.#playing = options.autoplay ?? false
-    this.#speedScale = Math.max(0, options.speedScale ?? 1)
-    this.texture = this.#current.frames[0]!
+    this._animations = map
+    this._animation = options.animation ?? (defs[0]![0] as A)
+    this._resolve(this._animation)
+    this._playing = options.autoplay ?? false
+    this._speedScale = Math.max(0, options.speedScale ?? 1)
+    this.texture = this._current.frames[0]!
   }
 
   /** 当前动画的名字。用 `play(name)` 切换。 */
   get animation(): A {
-    return this.#animation
+    return this._animation
   }
 
   /** 所有动画的名字。 */
   get animationNames(): A[] {
-    return [...this.#animations.keys()]
+    return [...this._animations.keys()]
   }
 
   /** 当前帧号（从 0 开始）。赋值会跳到那一帧（超出范围时截断），并从这一帧的开头计时。 */
   get frame(): number {
-    return this.#frame
+    return this._frame
   }
 
   set frame(value: number) {
-    this.#finished = false
-    this.#elapsed = 0
-    this.#show(Math.min(this.frameCount - 1, Math.max(0, Math.floor(value))))
+    this._finished = false
+    this._elapsed = 0
+    this._show(Math.min(this.frameCount - 1, Math.max(0, Math.floor(value))))
   }
 
   /** 当前动画的帧数。 */
   get frameCount(): number {
-    return this.#current.frames.length
+    return this._current.frames.length
   }
 
   get isPlaying(): boolean {
-    return this.#playing
+    return this._playing
   }
 
   /** 播放倍速（≥ 0）。 */
   get speedScale(): number {
-    return this.#speedScale
+    return this._speedScale
   }
 
   set speedScale(value: number) {
-    this.#speedScale = Math.max(0, value)
+    this._speedScale = Math.max(0, value)
   }
 
   /**
@@ -133,71 +133,71 @@ export class AnimatedSprite2D<A extends string = string> extends Sprite2D {
    * 不循环的动画已经播完的话从头再播。
    */
   play(name?: A): void {
-    if (name !== undefined && name !== this.#animation) {
-      this.#resolve(name)
-      this.#animation = name
-      this.#elapsed = 0
-      this.#finished = false
-      this.#show(0, true)
-    } else if (this.#finished) {
+    if (name !== undefined && name !== this._animation) {
+      this._resolve(name)
+      this._animation = name
+      this._elapsed = 0
+      this._finished = false
+      this._show(0, true)
+    } else if (this._finished) {
       this.frame = 0
     }
-    this.#playing = true
+    this._playing = true
   }
 
   /** 暂停在当前帧；`play()` 从这里继续。 */
   pause(): void {
-    this.#playing = false
+    this._playing = false
   }
 
   /** 停止并回到第 0 帧。 */
   stop(): void {
-    this.#playing = false
+    this._playing = false
     this.frame = 0
   }
 
   /** @internal 动画放在引擎内部钩子里：子类覆写 process() 不会影响播放。 */
   override _internalProcess(dt: number): void {
-    if (!this.#playing) return
-    const anim = this.#current
+    if (!this._playing) return
+    const anim = this._current
     const spf = 1 / anim.fps
-    this.#elapsed += dt * this.#speedScale
-    while (this.#playing && this.#elapsed >= spf - EPSILON) {
-      this.#elapsed -= spf
-      if (this.#frame + 1 < anim.frames.length) this.#show(this.#frame + 1)
-      else if (anim.loop) this.#show(0)
+    this._elapsed += dt * this._speedScale
+    while (this._playing && this._elapsed >= spf - EPSILON) {
+      this._elapsed -= spf
+      if (this._frame + 1 < anim.frames.length) this._show(this._frame + 1)
+      else if (anim.loop) this._show(0)
       else {
-        this.#playing = false
-        this.#finished = true
-        this.#elapsed = 0
-        this.animationFinished.emit(this.#animation)
+        this._playing = false
+        this._finished = true
+        this._elapsed = 0
+        this.animationFinished.emit(this._animation)
       }
     }
   }
 
-  get #current(): ResolvedAnimation {
-    return this.#animations.get(this.#animation)!
+  private get _current(): ResolvedAnimation {
+    return this._animations.get(this._animation)!
   }
 
-  #resolve(name: A): void {
-    if (!this.#animations.has(name)) {
+  private _resolve(name: A): void {
+    if (!this._animations.has(name)) {
       throw new Error(`AnimatedSprite2D: unknown animation "${name}". Animations: ${this.animationNames.join(', ')}.`)
     }
   }
 
-  #show(index: number, force = false): void {
-    if (index === this.#frame && !force) return
-    this.#frame = index
-    this.texture = this.#current.frames[index]!
+  private _show(index: number, force = false): void {
+    if (index === this._frame && !force) return
+    this._frame = index
+    this.texture = this._current.frames[index]!
     this.frameChanged.emit()
   }
 
   protected override dumpProps(): Record<string, unknown> {
     return {
       ...super.dumpProps(),
-      animation: this.#animations.size > 1 ? this.#animation : undefined,
-      frame: this.#frame,
-      playing: this.#playing || undefined,
+      animation: this._animations.size > 1 ? this._animation : undefined,
+      frame: this._frame,
+      playing: this._playing || undefined,
     }
   }
 }

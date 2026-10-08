@@ -10,21 +10,21 @@ export interface StorageBackend {
 
 /** 内存实现：无头模式，以及 localStorage 不可用时的后备。 */
 export class MemoryStorageBackend implements StorageBackend {
-  readonly #data = new Map<string, string>()
+  private readonly _data = new Map<string, string>()
 
   getItem(key: string): string | null {
-    return this.#data.get(key) ?? null
+    return this._data.get(key) ?? null
   }
 
   setItem(key: string, value: string): void {
-    this.#data.set(key, value)
+    this._data.set(key, value)
   }
 
   removeItem(key: string): void {
-    this.#data.delete(key)
+    this._data.delete(key)
   }
 
   keys(): string[] {
-    return [...this.#data.keys()]
+    return [...this._data.keys()]
   }
 }

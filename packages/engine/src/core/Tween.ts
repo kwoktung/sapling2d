@@ -35,22 +35,22 @@ export class Tween {
   /** 所有步骤播放完毕时触发。被 kill（包括绑定节点被销毁）时不触发。 */
   readonly finished = new Signal()
   /** 步骤列表：每个步骤是一组同时进行的动作。 */
-  #steps: Tweener[][] = []
-  #nextParallel = false
-  #stepIndex = 0
-  #stepTime = 0
-  #stepStarted = false
-  #running = true
-  readonly #bound: Node | null
+  private _steps: Tweener[][] = []
+  private _nextParallel = false
+  private _stepIndex = 0
+  private _stepTime = 0
+  private _stepStarted = false
+  private _running = true
+  private readonly _bound: Node | null
 
   /** @internal 请用 node.createTween() 或 tree.createTween()。 */
   constructor(bound: Node | null) {
-    this.#bound = bound
+    this._bound = bound
   }
 
   /** 是否还在播放（未结束、未被 kill）。 */
   get isRunning(): boolean {
-    return this.#running
+    return this._running
   }
 
   /**
@@ -67,11 +67,11 @@ export class Tween {
   to<T extends object>(target: T, props: TweenProps<T>, duration: number, ease: EaseFn = Ease.Linear): this {
     const keys = Object.keys(props) as TweenableKey<T>[]
     for (const [i, key] of keys.entries()) {
-      if (i > 0) this.#nextParallel = true // 同一个 to() 里的多个属性同时进行
+      if (i > 0) this._nextParallel = true // 同一个 to() 里的多个属性同时进行
       const end = props[key] as unknown as number | Vector2
       let start: number | Vector2 = 0
       const obj = target as Record<string, unknown>
-      this.#add({
+      this._add({
         duration: Math.max(0, duration),
         start: () => {
           const current = obj[key]
@@ -94,14 +94,14 @@ export class Tween {
 
   /** 等待一段时间（秒）。 */
   wait(seconds: number): this {
-    this.#add({ duration: Math.max(0, seconds), start: () => {}, update: () => {} })
+    this._add({ duration: Math.max(0, seconds), start: () => {}, update: () => {} })
     return this
   }
 
   /** 调用一个函数（不占时间）。 */
   call(fn: () => void): this {
     let called = false
-    this.#add({
+    this._add({
       duration: 0,
       start: () => (called = false),
       update: () => {
@@ -116,51 +116,51 @@ export class Tween {
 
   /** 让下一个动作（to / wait / call）与前一个动作同时进行。 */
   parallel(): this {
-    this.#nextParallel = true
+    this._nextParallel = true
     return this
   }
 
   /** 立即停止，不触发 finished。 */
   kill(): void {
-    this.#running = false
+    this._running = false
   }
 
-  #add(t: Tweener): void {
-    const last = this.#steps[this.#steps.length - 1]
-    if (this.#nextParallel && last) last.push(t)
-    else this.#steps.push([t])
-    this.#nextParallel = false
+  private _add(t: Tweener): void {
+    const last = this._steps[this._steps.length - 1]
+    if (this._nextParallel && last) last.push(t)
+    else this._steps.push([t])
+    this._nextParallel = false
   }
 
   /** @internal 由 SceneTree 每帧调用；返回 false 表示已结束，可以移除。`paused` 是树的暂停状态（未绑定节点的 Tween 跟随它）。 */
   _advance(dt: number, paused: boolean): boolean {
-    if (!this.#running) return false
-    if (this.#bound && (this.#bound.isFreed || this.#bound.isQueuedForDeletion)) {
-      this.#running = false
+    if (!this._running) return false
+    if (this._bound && (this._bound.isFreed || this._bound.isQueuedForDeletion)) {
+      this._running = false
       return false
     }
-    if (this.#bound ? !this.#bound.canProcess() : paused) return true // 暂停：保留，下一帧再推进
+    if (this._bound ? !this._bound.canProcess() : paused) return true // 暂停：保留，下一帧再推进
     let remaining = dt
-    while (this.#stepIndex < this.#steps.length) {
-      const step = this.#steps[this.#stepIndex]!
-      if (!this.#stepStarted) {
+    while (this._stepIndex < this._steps.length) {
+      const step = this._steps[this._stepIndex]!
+      if (!this._stepStarted) {
         for (const t of step) t.start()
-        this.#stepStarted = true
-        this.#stepTime = 0
+        this._stepStarted = true
+        this._stepTime = 0
       }
       const duration = Math.max(...step.map((t) => t.duration))
-      this.#stepTime += remaining
+      this._stepTime += remaining
       // 容忍浮点累加误差：n 次 1/60 恰好等于 n/60 秒
-      const progress = (t: Tweener) => (this.#stepTime >= t.duration - EPSILON ? 1 : this.#stepTime / t.duration)
+      const progress = (t: Tweener) => (this._stepTime >= t.duration - EPSILON ? 1 : this._stepTime / t.duration)
       for (const t of step) t.update(progress(t))
-      if (!this.#running) return false // 回调里 kill 了
-      if (this.#stepTime < duration - EPSILON) return true
+      if (!this._running) return false // 回调里 kill 了
+      if (this._stepTime < duration - EPSILON) return true
       // 这一步结束：剩余时间顺延给下一步
-      remaining = Math.max(0, this.#stepTime - duration)
-      this.#stepIndex++
-      this.#stepStarted = false
+      remaining = Math.max(0, this._stepTime - duration)
+      this._stepIndex++
+      this._stepStarted = false
     }
-    this.#running = false
+    this._running = false
     this.finished.emit()
     return false
   }

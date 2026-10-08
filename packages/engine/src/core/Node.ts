@@ -42,26 +42,26 @@ export interface DumpNode {
  * 销毁节点用 `queueFree()`，在当前帧末尾统一执行。
  */
 export class Node implements ConnectionOwner {
-  #name: string
-  #parent: Node | null = null
-  #children: Node[] = []
+  private _name: string
+  private _parent: Node | null = null
+  private _children: Node[] = []
   /** 子节点名字 → 子节点：兄弟重名检查是 O(1)（同一父节点下有几百颗同名子弹时，线性扫描会让 add 变成平方级）。 */
-  #childByName = new Map<string, Node>()
+  private _childByName = new Map<string, Node>()
   /** 名字主干 → 下一个尝试的数字后缀，避免每次都从 2 开始数。 */
-  #nextSuffix = new Map<string, number>()
-  #tree: SceneTree | null = null
-  #isReady = false
-  #queuedForDeletion = false
-  #freed = false
-  #groups = new Set<string>()
-  #connections: { signal: Signal<any>; listener: (...args: any[]) => void }[] = []
+  private _nextSuffix = new Map<string, number>()
+  private _tree: SceneTree | null = null
+  private _isReady = false
+  private _queuedForDeletion = false
+  private _freed = false
+  private _groups = new Set<string>()
+  private _connections: { signal: Signal<any>; listener: (...args: any[]) => void }[] = []
   /** 暂停时的处理方式，见 ProcessMode。 */
   processMode: ProcessMode
 
   constructor(options: NodeOptions = {}) {
-    this.#name = options.name ?? this.constructor.name
+    this._name = options.name ?? this.constructor.name
     this.processMode = options.processMode ?? 'inherit'
-    for (const g of options.groups ?? []) this.#groups.add(g)
+    for (const g of options.groups ?? []) this._groups.add(g)
   }
 
   // ---------------------------------------------------------------- 生命周期（供子类覆写）
@@ -75,36 +75,36 @@ export class Node implements ConnectionOwner {
   // ---------------------------------------------------------------- 树结构
 
   get name(): string {
-    return this.#name
+    return this._name
   }
 
   set name(value: string) {
-    const parent = this.#parent
+    const parent = this._parent
     if (!parent) {
-      this.#name = value
+      this._name = value
       return
     }
-    parent.#unindexChild(this)
-    this.#name = parent.#uniqueChildName(value, this)
-    parent.#childByName.set(this.#name, this)
+    parent._unindexChild(this)
+    this._name = parent._uniqueChildName(value, this)
+    parent._childByName.set(this._name, this)
   }
 
   get parent(): Node | null {
-    return this.#parent
+    return this._parent
   }
 
   get children(): readonly Node[] {
-    return this.#children
+    return this._children
   }
 
   /** 节点是否在场景树里。 */
   get isInsideTree(): boolean {
-    return this.#tree !== null
+    return this._tree !== null
   }
 
   /** `ready()` 是否已经调用过。 */
   get isReady(): boolean {
-    return this.#isReady
+    return this._isReady
   }
 
   /**
@@ -112,10 +112,10 @@ export class Node implements ConnectionOwner {
    * 应该挪到 `enterTree()` 或 `ready()` 里。
    */
   get tree(): SceneTree {
-    if (!this.#tree) {
-      throw new Error(`Node "${this.#name}" (${this.constructor.name}) is not inside the scene tree yet. Use the tree in enterTree() or ready(), not in the constructor.`)
+    if (!this._tree) {
+      throw new Error(`Node "${this._name}" (${this.constructor.name}) is not inside the scene tree yet. Use the tree in enterTree() or ready(), not in the constructor.`)
     }
-    return this.#tree
+    return this._tree
   }
 
   /**
@@ -123,21 +123,21 @@ export class Node implements ConnectionOwner {
    * 如果当前节点已在树里，子节点会立刻依次收到 `enterTree` 和 `ready`。
    */
   add<T extends Node>(child: T): T {
-    this.#assertNotFreed('add a child to')
-    child.#assertNotFreed('add')
-    if (child.#parent) {
-      throw new Error(`Cannot add "${child.#name}" to "${this.#name}": it already has a parent "${child.#parent.#name}". Remove it first.`)
+    this._assertNotFreed('add a child to')
+    child._assertNotFreed('add')
+    if (child._parent) {
+      throw new Error(`Cannot add "${child._name}" to "${this._name}": it already has a parent "${child._parent._name}". Remove it first.`)
     }
-    for (let n: Node | null = this; n; n = n.#parent) {
-      if (n === child) throw new Error(`Cannot add "${child.#name}" to "${this.#name}": a node cannot be its own ancestor.`)
+    for (let n: Node | null = this; n; n = n._parent) {
+      if (n === child) throw new Error(`Cannot add "${child._name}" to "${this._name}": a node cannot be its own ancestor.`)
     }
-    child.#name = this.#uniqueChildName(child.#name, child)
-    this.#childByName.set(child.#name, child)
-    child.#parent = this
-    this.#children.push(child)
-    if (this.#tree) {
-      child.#propagateEnterTree(this.#tree)
-      child.#propagateReady()
+    child._name = this._uniqueChildName(child._name, child)
+    this._childByName.set(child._name, child)
+    child._parent = this
+    this._children.push(child)
+    if (this._tree) {
+      child._propagateEnterTree(this._tree)
+      child._propagateReady()
     }
     return child
   }
@@ -147,40 +147,40 @@ export class Node implements ConnectionOwner {
    * 重新进入树时不会再调用 `ready()`。要销毁节点请用 `queueFree()`。
    */
   remove(child: Node): void {
-    const index = this.#children.indexOf(child)
-    if (index === -1) throw new Error(`"${child.#name}" is not a child of "${this.#name}".`)
-    if (child.#tree) child.#propagateExitTree()
-    this.#children.splice(index, 1)
-    this.#unindexChild(child)
-    child.#parent = null
+    const index = this._children.indexOf(child)
+    if (index === -1) throw new Error(`"${child._name}" is not a child of "${this._name}".`)
+    if (child._tree) child._propagateExitTree()
+    this._children.splice(index, 1)
+    this._unindexChild(child)
+    child._parent = null
   }
 
   /**
    * 兄弟节点里不重复的名字：`base` 没被占用就用它，否则加数字后缀（Fruit、Fruit2、Fruit3……）。
    * 后缀只增不减：Fruit2 被销毁后，下一个同名节点是 Fruit4 而不是 Fruit2。
    */
-  #uniqueChildName(base: string, self: Node): string {
+  private _uniqueChildName(base: string, self: Node): string {
     const taken = (name: string) => {
-      const owner = this.#childByName.get(name)
+      const owner = this._childByName.get(name)
       return owner !== undefined && owner !== self
     }
     if (!taken(base)) return base
     const stem = base.replace(/\d+$/, '')
-    let i = this.#nextSuffix.get(stem) ?? 2
+    let i = this._nextSuffix.get(stem) ?? 2
     while (taken(`${stem}${i}`)) i++
-    this.#nextSuffix.set(stem, i + 1)
+    this._nextSuffix.set(stem, i + 1)
     return `${stem}${i}`
   }
 
-  #unindexChild(child: Node): void {
-    if (this.#childByName.get(child.#name) === child) this.#childByName.delete(child.#name)
+  private _unindexChild(child: Node): void {
+    if (this._childByName.get(child._name) === child) this._childByName.delete(child._name)
   }
 
   // ---------------------------------------------------------------- 暂停
 
   /** 沿祖先链解析出的实际处理方式（'pausable' 或 'always'）。 */
   get effectiveProcessMode(): 'pausable' | 'always' {
-    for (let n: Node | null = this; n; n = n.#parent) {
+    for (let n: Node | null = this; n; n = n._parent) {
       if (n.processMode !== 'inherit') return n.processMode
     }
     return 'pausable'
@@ -188,20 +188,20 @@ export class Node implements ConnectionOwner {
 
   /** 当前是否会被处理：在树里，且树没有暂停或本节点是 always。 */
   canProcess(): boolean {
-    if (!this.#tree) return false
-    return !this.#tree.paused || this.effectiveProcessMode === 'always'
+    if (!this._tree) return false
+    return !this._tree.paused || this.effectiveProcessMode === 'always'
   }
 
   // ---------------------------------------------------------------- 销毁与延迟调用
 
   /** 已经调用过 `queueFree()`、等待帧末销毁。 */
   get isQueuedForDeletion(): boolean {
-    return this.#queuedForDeletion
+    return this._queuedForDeletion
   }
 
   /** 已经被销毁。销毁后的节点不能再使用。 */
   get isFreed(): boolean {
-    return this.#freed
+    return this._freed
   }
 
   /**
@@ -209,10 +209,10 @@ export class Node implements ConnectionOwner {
    * 同一帧内重复调用是安全的。不在树里的节点会立即销毁。
    */
   queueFree(): void {
-    if (this.#freed || this.#queuedForDeletion) return
-    if (this.#tree) {
-      this.#queuedForDeletion = true
-      this.#tree._queueFree(this)
+    if (this._freed || this._queuedForDeletion) return
+    if (this._tree) {
+      this._queuedForDeletion = true
+      this._tree._queueFree(this)
     } else {
       this._free()
     }
@@ -224,28 +224,28 @@ export class Node implements ConnectionOwner {
    */
   callDeferred(fn: () => void): void {
     this.tree.callDeferred(() => {
-      if (!this.#freed) fn()
+      if (!this._freed) fn()
     })
   }
 
   /** @internal 立即销毁。游戏代码请使用 queueFree()。 */
   _free(): void {
-    if (this.#freed) return
-    if (this.#parent) this.#parent.remove(this)
-    else if (this.#tree) this.#propagateExitTree()
-    this.#markFreed()
+    if (this._freed) return
+    if (this._parent) this._parent.remove(this)
+    else if (this._tree) this._propagateExitTree()
+    this._markFreed()
   }
 
-  #markFreed(): void {
-    for (const child of this.#children) child.#markFreed()
-    this.#freed = true
-    this.#queuedForDeletion = false
+  private _markFreed(): void {
+    for (const child of this._children) child._markFreed()
+    this._freed = true
+    this._queuedForDeletion = false
     // 断开自己作为监听方的连接（disconnect 会回调 _untrackConnection，所以先取快照）
-    for (const { signal, listener } of [...this.#connections]) signal.disconnect(listener)
-    this.#connections = []
+    for (const { signal, listener } of [...this._connections]) signal.disconnect(listener)
+    this._connections = []
     // 断开自己声明的信号上的所有监听
     for (const value of Object.values(this)) if (value instanceof Signal) value.disconnectAll()
-    this.#groups.clear()
+    this._groups.clear()
     this._onFreed()
   }
 
@@ -279,84 +279,84 @@ export class Node implements ConnectionOwner {
 
   /** @internal */
   _trackConnection(signal: Signal<any>, listener: (...args: any[]) => void): void {
-    this.#assertNotFreed('connect a signal to')
-    this.#connections.push({ signal, listener })
+    this._assertNotFreed('connect a signal to')
+    this._connections.push({ signal, listener })
   }
 
   /** @internal 连接已断开（或 once 已触发）：不再记住它，避免常驻节点的连接列表无限增长。 */
   _untrackConnection(signal: Signal<any>, listener: (...args: any[]) => void): void {
-    const i = this.#connections.findIndex((c) => c.signal === signal && c.listener === listener)
-    if (i !== -1) this.#connections.splice(i, 1)
+    const i = this._connections.findIndex((c) => c.signal === signal && c.listener === listener)
+    if (i !== -1) this._connections.splice(i, 1)
   }
 
   /** @internal 测试用：以本节点为 owner 的连接数。 */
   get _connectionCount(): number {
-    return this.#connections.length
+    return this._connections.length
   }
 
-  #assertNotFreed(action: string): void {
-    if (this.#freed) throw new Error(`Cannot ${action} "${this.#name}" (${this.constructor.name}): the node has been freed.`)
+  private _assertNotFreed(action: string): void {
+    if (this._freed) throw new Error(`Cannot ${action} "${this._name}" (${this.constructor.name}): the node has been freed.`)
   }
 
   // ---------------------------------------------------------------- 分组
 
   /** 节点所属的分组。 */
   get groups(): readonly string[] {
-    return [...this.#groups]
+    return [...this._groups]
   }
 
   /** 加入分组，之后可以用 `tree.getNodesInGroup(name)` 查到它。组名可以通过 GroupRegistry 声明强类型。 */
   addToGroup(group: GroupName): void {
-    this.#groups.add(group)
+    this._groups.add(group)
   }
 
   removeFromGroup(group: GroupName): void {
-    this.#groups.delete(group)
+    this._groups.delete(group)
   }
 
   isInGroup(group: GroupName): boolean {
-    return this.#groups.has(group)
+    return this._groups.has(group)
   }
 
   // ---------------------------------------------------------------- 内部：由 SceneTree 驱动
 
   /** @internal */
   _attachAsRoot(tree: SceneTree): void {
-    this.#propagateEnterTree(tree)
-    this.#propagateReady()
+    this._propagateEnterTree(tree)
+    this._propagateReady()
   }
 
-  #propagateEnterTree(tree: SceneTree): void {
-    this.#tree = tree
+  private _propagateEnterTree(tree: SceneTree): void {
+    this._tree = tree
     this._onEnterTree()
     this.enterTree()
-    for (const child of [...this.#children]) {
+    for (const child of [...this._children]) {
       // 在 enterTree() 里 add 的子节点已经由 add() 送进树了，这里跳过
-      if (child.#parent === this && child.#tree !== tree) child.#propagateEnterTree(tree)
+      if (child._parent === this && child._tree !== tree) child._propagateEnterTree(tree)
     }
   }
 
-  #propagateReady(): void {
-    for (const child of [...this.#children]) {
-      if (child.#parent === this && child.#tree) child.#propagateReady()
+  private _propagateReady(): void {
+    for (const child of [...this._children]) {
+      if (child._parent === this && child._tree) child._propagateReady()
     }
-    if (!this.#isReady && this.#tree) {
-      this.#isReady = true
+    if (!this._isReady && this._tree) {
+      this._isReady = true
       this.ready()
     }
   }
 
-  #propagateExitTree(): void {
-    for (const child of [...this.#children]) child.#propagateExitTree()
+  private _propagateExitTree(): void {
+    for (const child of [...this._children]) child._propagateExitTree()
     this.exitTree()
     this._onExitTree()
-    this.#tree = null
+    this._tree = null
   }
 
   /** @internal 先序遍历（父先于子）。 */
   _collect(out: Node[]): void {
     out.push(this)
-    for (const child of this.#children) child._collect(out)
+    for (const child of this._children) child._collect(out)
   }
 
   // ---------------------------------------------------------------- 调试
@@ -372,8 +372,8 @@ export class Node implements ConnectionOwner {
     for (const [k, val] of Object.entries(this.dumpProps())) {
       if (val !== undefined) props[k] = val instanceof Vector2 ? val.toString() : val
     }
-    if (this.#groups.size) props.groups = [...this.#groups]
+    if (this._groups.size) props.groups = [...this._groups]
     if (this.processMode !== 'inherit') props.processMode = this.processMode
-    return { type: this.constructor.name, name: this.#name, props, children: this.#children.map((c) => c._dump()) }
+    return { type: this.constructor.name, name: this._name, props, children: this._children.map((c) => c._dump()) }
   }
 }

@@ -6,7 +6,7 @@
  * 同一路径永远返回同一个句柄。格式统一用 mp3（浏览器和小游戏都支持）。
  */
 export class AudioStream {
-  #loaded: boolean
+  private _loaded: boolean
   /** @internal 平台解码后的音频数据（只有 sfx 有）。 */
   _buffer: unknown = null
 
@@ -16,24 +16,24 @@ export class AudioStream {
     readonly path: string,
   ) {
     // 音乐是流式的，不需要预加载
-    this.#loaded = kind === 'music'
+    this._loaded = kind === 'music'
   }
 
   get isLoaded(): boolean {
-    return this.#loaded
+    return this._loaded
   }
 
   /** @internal */
   _setLoaded(buffer: unknown): void {
     this._buffer = buffer
-    this.#loaded = true
+    this._loaded = true
   }
 
   /** @internal 释放解码后的音频；音乐是流式的，没有可释放的数据。 */
   _unload(): void {
     if (this.kind === 'music') return
     this._buffer = null
-    this.#loaded = false
+    this._loaded = false
   }
 }
 

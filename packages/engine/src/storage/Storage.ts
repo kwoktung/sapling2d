@@ -23,11 +23,11 @@ type UnregisteredKey = [keyof StorageRegistry] extends [never] ? string : never
  */
 export class Storage {
   readonly prefix: string
-  readonly #backend: StorageBackend
+  private readonly _backend: StorageBackend
 
   /** @internal */
   constructor(backend: StorageBackend, prefix: string) {
-    this.#backend = backend
+    this._backend = backend
     this.prefix = prefix
   }
 
@@ -37,7 +37,7 @@ export class Storage {
   get(key: string, defaultValue: unknown): unknown {
     let raw: string | null
     try {
-      raw = this.#backend.getItem(this.prefix + key)
+      raw = this._backend.getItem(this.prefix + key)
     } catch {
       return defaultValue
     }
@@ -57,7 +57,7 @@ export class Storage {
   set(key: UnregisteredKey, value: unknown): boolean
   set(key: string, value: unknown): boolean {
     try {
-      this.#backend.setItem(this.prefix + key, JSON.stringify(value))
+      this._backend.setItem(this.prefix + key, JSON.stringify(value))
       return true
     } catch (err) {
       console.warn(`Storage: failed to save "${key}":`, err)
@@ -67,7 +67,7 @@ export class Storage {
 
   has(key: (keyof StorageRegistry & string) | UnregisteredKey): boolean {
     try {
-      return this.#backend.getItem(this.prefix + key) !== null
+      return this._backend.getItem(this.prefix + key) !== null
     } catch {
       return false
     }
@@ -75,7 +75,7 @@ export class Storage {
 
   remove(key: (keyof StorageRegistry & string) | UnregisteredKey): void {
     try {
-      this.#backend.removeItem(this.prefix + key)
+      this._backend.removeItem(this.prefix + key)
     } catch {
       // 忽略
     }
@@ -84,7 +84,7 @@ export class Storage {
   /** 本游戏（当前前缀下）保存的所有 key，不含前缀。 */
   keys(): string[] {
     try {
-      return this.#backend
+      return this._backend
         .keys()
         .filter((k) => k.startsWith(this.prefix))
         .map((k) => k.slice(this.prefix.length))
@@ -95,7 +95,7 @@ export class Storage {
 
   /** 删除本游戏（当前前缀下）的所有数据；不影响其他前缀。 */
   clear(): void {
-    for (const k of this.keys()) this.#backend.removeItem(this.prefix + k)
+    for (const k of this.keys()) this._backend.removeItem(this.prefix + k)
   }
 }
 

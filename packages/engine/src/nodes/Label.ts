@@ -41,128 +41,128 @@ export interface LabelOptions extends Node2DOptions {
  * 注意：真机上的字间距（letterSpacing）不保证生效，没有提供；见 spikes/wechat/REPORT.md。
  */
 export class Label extends Node2D {
-  #text: string
-  #fontSize: number
-  #color: number
-  #fontFamily: string
-  #fontWeight: 'normal' | 'bold'
-  #align: HorizontalAlignment
-  #verticalAlign: VerticalAlignment
-  #stroke: LabelStroke | null
-  #wrapWidth: number | null
-  #lineHeight: number | null
+  private _text: string
+  private _fontSize: number
+  private _color: number
+  private _fontFamily: string
+  private _fontWeight: 'normal' | 'bold'
+  private _align: HorizontalAlignment
+  private _verticalAlign: VerticalAlignment
+  private _stroke: LabelStroke | null
+  private _wrapWidth: number | null
+  private _lineHeight: number | null
 
   constructor(options: LabelOptions = {}) {
     super(options)
-    this.#text = options.text ?? ''
-    this.#fontSize = options.fontSize ?? 32
-    this.#color = options.color ?? 0xffffff
-    this.#fontFamily = options.fontFamily ?? 'sans-serif'
-    this.#fontWeight = options.fontWeight ?? 'normal'
-    this.#align = options.align ?? 'left'
-    this.#verticalAlign = options.verticalAlign ?? 'top'
-    this.#stroke = options.stroke ?? null
-    this.#wrapWidth = options.wrapWidth ?? null
-    this.#lineHeight = options.lineHeight ?? null
+    this._text = options.text ?? ''
+    this._fontSize = options.fontSize ?? 32
+    this._color = options.color ?? 0xffffff
+    this._fontFamily = options.fontFamily ?? 'sans-serif'
+    this._fontWeight = options.fontWeight ?? 'normal'
+    this._align = options.align ?? 'left'
+    this._verticalAlign = options.verticalAlign ?? 'top'
+    this._stroke = options.stroke ?? null
+    this._wrapWidth = options.wrapWidth ?? null
+    this._lineHeight = options.lineHeight ?? null
   }
 
   get text(): string {
-    return this.#text
+    return this._text
   }
 
   set text(value: string) {
-    if (value === this.#text) return
-    this.#text = value
+    if (value === this._text) return
+    this._text = value
     this._version++
   }
 
   get fontSize(): number {
-    return this.#fontSize
+    return this._fontSize
   }
 
   set fontSize(value: number) {
-    this.#fontSize = value
+    this._fontSize = value
     this._version++
   }
 
   get color(): number {
-    return this.#color
+    return this._color
   }
 
   set color(value: number) {
-    this.#color = value
+    this._color = value
     this._version++
   }
 
   get fontFamily(): string {
-    return this.#fontFamily
+    return this._fontFamily
   }
 
   set fontFamily(value: string) {
-    this.#fontFamily = value
+    this._fontFamily = value
     this._version++
   }
 
   get fontWeight(): 'normal' | 'bold' {
-    return this.#fontWeight
+    return this._fontWeight
   }
 
   set fontWeight(value: 'normal' | 'bold') {
-    this.#fontWeight = value
+    this._fontWeight = value
     this._version++
   }
 
   get align(): HorizontalAlignment {
-    return this.#align
+    return this._align
   }
 
   set align(value: HorizontalAlignment) {
-    this.#align = value
+    this._align = value
     this._version++
   }
 
   get verticalAlign(): VerticalAlignment {
-    return this.#verticalAlign
+    return this._verticalAlign
   }
 
   set verticalAlign(value: VerticalAlignment) {
-    this.#verticalAlign = value
+    this._verticalAlign = value
     this._version++
   }
 
   get stroke(): LabelStroke | null {
-    return this.#stroke
+    return this._stroke
   }
 
   set stroke(value: LabelStroke | null) {
-    this.#stroke = value
+    this._stroke = value
     this._version++
   }
 
   get wrapWidth(): number | null {
-    return this.#wrapWidth
+    return this._wrapWidth
   }
 
   set wrapWidth(value: number | null) {
-    this.#wrapWidth = value
+    this._wrapWidth = value
     this._version++
   }
 
   get lineHeight(): number | null {
-    return this.#lineHeight
+    return this._lineHeight
   }
 
   set lineHeight(value: number | null) {
-    this.#lineHeight = value
+    this._lineHeight = value
     this._version++
   }
 
   protected override dumpProps(): Record<string, unknown> {
     return {
       ...super.dumpProps(),
-      text: this.#text,
-      fontSize: this.#fontSize !== 32 ? this.#fontSize : undefined,
-      align: this.#align !== 'left' ? this.#align : undefined,
+      text: this._text,
+      fontSize: this._fontSize !== 32 ? this._fontSize : undefined,
+      align: this._align !== 'left' ? this._align : undefined,
     }
   }
 }

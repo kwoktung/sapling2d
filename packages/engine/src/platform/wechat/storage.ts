@@ -13,26 +13,26 @@ export interface WxStorageApi {
  * `wx.getStorageSync` 对不存在的 key 返回空字符串；引擎存的值都是 JSON（不会是空串），所以 '' 视为不存在。
  */
 export class WechatStorageBackend implements StorageBackend {
-  readonly #wx: WxStorageApi
+  private readonly _wx: WxStorageApi
 
   constructor(api: WxStorageApi) {
-    this.#wx = api
+    this._wx = api
   }
 
   getItem(key: string): string | null {
-    const value = this.#wx.getStorageSync(key)
+    const value = this._wx.getStorageSync(key)
     return typeof value === 'string' && value !== '' ? value : null
   }
 
   setItem(key: string, value: string): void {
-    this.#wx.setStorageSync(key, value)
+    this._wx.setStorageSync(key, value)
   }
 
   removeItem(key: string): void {
-    this.#wx.removeStorageSync(key)
+    this._wx.removeStorageSync(key)
   }
 
   keys(): string[] {
-    return this.#wx.getStorageInfoSync().keys
+    return this._wx.getStorageInfoSync().keys
   }
 }

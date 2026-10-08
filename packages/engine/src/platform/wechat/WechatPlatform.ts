@@ -19,10 +19,10 @@ export class WechatPlatform implements Platform {
   readonly storage = new WechatStorageBackend(wx)
   /** 上屏 canvas（第一次 wx.createCanvas() 的结果）。 */
   readonly canvas = screenCanvas
-  readonly #clock = _createClock(wx.getPerformance(), () => Date.now())
+  private readonly _clock = _createClock(wx.getPerformance(), () => Date.now())
 
   now(): number {
-    return this.#clock()
+    return this._clock()
   }
 
   requestFrame(callback: (timeMs: number) => void): number {

@@ -206,6 +206,7 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 - **`this.tree` 只在树里可用**：不要在构造函数里用；放到 `ready()`。
 - **`await signal` 会错过同步紧接着的 emit**：先注册再触发时用 `signal.wait()`。
 - **带类型的 AnimatedSprite2D**：`AnimatedSprite2D<'fly' | 'hurt'>` 不能赋给 `AnimatedSprite2D`（即 `<string>`）类型的变量或数组；字段按具体类型声明，或在用到的地方写 `AnimatedSprite2D<any>`。
+- **每帧都要跑的类不要用 `#private`**：小游戏构建目标是 ES2017，`#x` 会被编译成 WeakMap 查找，iOS 上慢 2–3 倍（ADR 0006）。用 TS 的 `private _x`。
 - **随机数**：用 `this.tree.rng`（带 seed，测试可复现），不要用 `Math.random`。
 - **声明合并**：给组名、动作名、存档 key 加类型：`declare module 'sapling2d' { interface GroupRegistry { … } interface ActionRegistry { … } interface StorageRegistry { … } }`。
 - **Tween 在类方法里**：`this.createTween().to(this, {...})` 按 `Node2D` 的属性做类型检查；补间子类特有的属性写 `to(this as MyNode, …)`。

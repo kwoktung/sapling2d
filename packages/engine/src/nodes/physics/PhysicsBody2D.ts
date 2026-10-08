@@ -17,32 +17,32 @@ export interface PhysicsBody2DOptions extends CollisionObject2DOptions {
  */
 export abstract class PhysicsBody2D extends CollisionObject2D {
   readonly _isArea = false
-  #friction: number
-  #bounce: number
+  private _friction: number
+  private _bounce: number
   /** 写回期间为 true，此时的 position 赋值不算“用户瞬移”。 */
-  #writingBack = false
+  private _writingBack = false
 
   constructor(options: PhysicsBody2DOptions = {}) {
     super(options)
-    this.#friction = options.friction ?? 0.5
-    this.#bounce = options.bounce ?? 0
+    this._friction = options.friction ?? 0.5
+    this._bounce = options.bounce ?? 0
   }
 
   get friction(): number {
-    return this.#friction
+    return this._friction
   }
 
   set friction(value: number) {
-    this.#friction = value
+    this._friction = value
     this._propsChanged()
   }
 
   get bounce(): number {
-    return this.#bounce
+    return this._bounce
   }
 
   set bounce(value: number) {
-    this.#bounce = value
+    this._bounce = value
     this._propsChanged()
   }
 
@@ -53,14 +53,14 @@ export abstract class PhysicsBody2D extends CollisionObject2D {
 
   /** @internal */
   override _props(): BodyProps {
-    return { ...super._props(), friction: this.#friction, bounce: this.#bounce }
+    return { ...super._props(), friction: this._friction, bounce: this._bounce }
   }
 
   /** @internal */
   override _writeBack(globalPosition: Vector2, globalRotation: number): void {
-    this.#writingBack = true
+    this._writingBack = true
     try {
-      const parent = this.#parent2D()
+      const parent = this._parent2D()
       if (parent) {
         // 父节点缩放为 0 时无法换算到局部坐标：这一步不写回，避免刚体被拉到父节点原点
         const inverse = parent.globalTransform.inverse()
@@ -72,16 +72,16 @@ export abstract class PhysicsBody2D extends CollisionObject2D {
         this.rotation = globalRotation
       }
     } finally {
-      this.#writingBack = false
+      this._writingBack = false
     }
   }
 
   /** @internal 用户赋值 position / rotation：瞬移刚体。 */
   override _transformChanged(): void {
-    if (!this.#writingBack && this.isInsideTree) this.tree.physics._teleport(this)
+    if (!this._writingBack && this.isInsideTree) this.tree.physics._teleport(this)
   }
 
-  #parent2D(): Node2D | null {
+  private _parent2D(): Node2D | null {
     for (let p = this.parent; p; p = p.parent) if (p instanceof Node2D) return p
     return null
   }
@@ -89,8 +89,8 @@ export abstract class PhysicsBody2D extends CollisionObject2D {
   protected override dumpProps(): Record<string, unknown> {
     return {
       ...super.dumpProps(),
-      friction: this.#friction !== 0.5 ? this.#friction : undefined,
-      bounce: this.#bounce !== 0 ? this.#bounce : undefined,
+      friction: this._friction !== 0.5 ? this._friction : undefined,
+      bounce: this._bounce !== 0 ? this._bounce : undefined,
     }
   }
 }

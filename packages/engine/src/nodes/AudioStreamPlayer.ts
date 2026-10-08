@@ -31,53 +31,53 @@ export class AudioStreamPlayer extends Node {
   loop: boolean
   bus: AudioBus | null
   autoplay: boolean
-  #volume: number
-  #voice: Voice | null = null
-  #autoplayed = false
+  private _volume: number
+  private _voice: Voice | null = null
+  private _autoplayed = false
 
   constructor(options: AudioStreamPlayerOptions = {}) {
     super(options)
     this.stream = options.stream ?? null
-    this.#volume = options.volume ?? 1
+    this._volume = options.volume ?? 1
     this.loop = options.loop ?? false
     this.bus = options.bus ?? null
     this.autoplay = options.autoplay ?? false
   }
 
   get volume(): number {
-    return this.#volume
+    return this._volume
   }
 
   set volume(value: number) {
-    this.#volume = value
-    if (this.#voice) this.#voice.volume = value
+    this._volume = value
+    if (this._voice) this._voice.volume = value
   }
 
   get playing(): boolean {
-    return this.#voice?.playing ?? false
+    return this._voice?.playing ?? false
   }
 
   /** 从头播放 stream。节点必须在树里。 */
   play(): void {
     if (!this.stream) throw new Error(`AudioStreamPlayer "${this.name}" has no stream to play.`)
     this.stop()
-    const voice = this.tree.audio.play(this.stream, { volume: this.#volume, loop: this.loop, ...(this.bus ? { bus: this.bus } : {}) })
+    const voice = this.tree.audio.play(this.stream, { volume: this._volume, loop: this.loop, ...(this.bus ? { bus: this.bus } : {}) })
     voice.finished.connect(() => {
-      if (this.#voice === voice) this.#voice = null
+      if (this._voice === voice) this._voice = null
       this.finished.emit()
     })
-    this.#voice = voice
+    this._voice = voice
   }
 
   stop(): void {
-    this.#voice?.stop()
-    this.#voice = null
+    this._voice?.stop()
+    this._voice = null
   }
 
   /** @internal */
   override _onEnterTree(): void {
-    if (this.autoplay && !this.#autoplayed && this.stream) {
-      this.#autoplayed = true
+    if (this.autoplay && !this._autoplayed && this.stream) {
+      this._autoplayed = true
       this.play()
     }
   }
@@ -92,7 +92,7 @@ export class AudioStreamPlayer extends Node {
       stream: this.stream?.path ?? null,
       playing: this.playing || undefined,
       loop: this.loop || undefined,
-      volume: this.#volume !== 1 ? this.#volume : undefined,
+      volume: this._volume !== 1 ? this._volume : undefined,
     }
   }
 }

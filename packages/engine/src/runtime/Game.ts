@@ -38,28 +38,28 @@ export interface GameOptions<S extends Scene> {
  */
 export class Game<S extends Scene = Scene> {
   readonly tree: SceneTree
-  #platform: Platform
-  #renderer: Renderer | null
-  #frameId: number | null = null
-  #lastTime = 0
-  #unsubscribeScreen: () => void
-  #unsubscribeInput: () => void
-  #unsubscribeFocus: () => void
-  #suspended = false
+  private _platform: Platform
+  private _renderer: Renderer | null
+  private _frameId: number | null = null
+  private _lastTime = 0
+  private _unsubscribeScreen: () => void
+  private _unsubscribeInput: () => void
+  private _unsubscribeFocus: () => void
+  private _suspended = false
 
   private constructor(platform: Platform, renderer: Renderer | null, tree: SceneTree, pauseOnBackground: boolean) {
-    this.#platform = platform
-    this.#renderer = renderer
+    this._platform = platform
+    this._renderer = renderer
     this.tree = tree
-    this.#unsubscribeScreen = platform.onScreenChange((screen) => tree.viewport._update(screen))
-    this.#unsubscribeInput = platform.onInput((event) => tree.input._enqueue(event))
-    this.#unsubscribeFocus = platform.onFocusChange((focused) => {
+    this._unsubscribeScreen = platform.onScreenChange((screen) => tree.viewport._update(screen))
+    this._unsubscribeInput = platform.onInput((event) => tree.input._enqueue(event))
+    this._unsubscribeFocus = platform.onFocusChange((focused) => {
       if (pauseOnBackground) {
-        this.#suspended = !focused
+        this._suspended = !focused
         if (focused) {
           // 回到前台：时间从现在重新算，物理不补算后台那段
           tree._resetAccumulator()
-          this.#lastTime = platform.now()
+          this._lastTime = platform.now()
         }
       }
       tree.audio._setFocused(focused) // 后台时总是挂起声音
@@ -89,7 +89,7 @@ export class Game<S extends Scene = Scene> {
   }
 
   get platform(): Platform {
-    return this.#platform
+    return this._platform
   }
 
   get scene(): S {
@@ -98,39 +98,39 @@ export class Game<S extends Scene = Scene> {
 
   /** 是否因切到后台而挂起。 */
   get suspended(): boolean {
-    return this.#suspended
+    return this._suspended
   }
 
   /** 推进一帧并渲染。`dt` 单位为秒。挂起时什么都不做。 */
   frame(dt: number): void {
-    if (this.#suspended) return
+    if (this._suspended) return
     this.tree.advance(dt)
-    this.#renderer?.render(this.tree)
+    this._renderer?.render(this.tree)
   }
 
   /** 开始由平台驱动的帧循环。 */
   start(): void {
-    if (this.#frameId !== null) return
-    this.#lastTime = this.#platform.now()
+    if (this._frameId !== null) return
+    this._lastTime = this._platform.now()
     const loop = (time: number) => {
-      const dt = (time - this.#lastTime) / 1000
-      this.#lastTime = time
+      const dt = (time - this._lastTime) / 1000
+      this._lastTime = time
       this.frame(dt)
-      this.#frameId = this.#platform.requestFrame(loop)
+      this._frameId = this._platform.requestFrame(loop)
     }
-    this.#frameId = this.#platform.requestFrame(loop)
+    this._frameId = this._platform.requestFrame(loop)
   }
 
   stop(): void {
-    if (this.#frameId !== null) this.#platform.cancelFrame(this.#frameId)
-    this.#frameId = null
+    if (this._frameId !== null) this._platform.cancelFrame(this._frameId)
+    this._frameId = null
   }
 
   destroy(): void {
     this.stop()
-    this.#unsubscribeScreen()
-    this.#unsubscribeInput()
-    this.#unsubscribeFocus()
-    this.#renderer?.destroy()
+    this._unsubscribeScreen()
+    this._unsubscribeInput()
+    this._unsubscribeFocus()
+    this._renderer?.destroy()
   }
 }

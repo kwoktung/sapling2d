@@ -15,6 +15,14 @@ describe('findAssetReferences', () => {
     ])
   })
 
+  it('sheet / atlas：检查第一个参数（图片路径）', () => {
+    const code = "sheet('boom.png', { columns: 4, rows: 2 }); atlas(\"ui/sprites.png\", data); sheet(path, grid)"
+    expect(findAssetReferences(code)).toEqual([
+      { fn: 'sheet', path: 'boom.png', line: 1, column: 0 },
+      { fn: 'atlas', path: 'ui/sprites.png', line: 1, column: 44 },
+    ])
+  })
+
   it('忽略注释里的示例；字符串里的 // 不影响后面的识别', () => {
     const code = ["/** 用法：tex('doc.png') */", "// sfx('commented.mp3')", "const u = 'http://cdn/x'; tex('real.png')"].join('\n')
     expect(findAssetReferences(code)).toEqual([{ fn: 'tex', path: 'real.png', line: 3, column: 26 }])

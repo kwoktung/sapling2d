@@ -1,0 +1,9 @@
+{
+  "frames": {
+    "enemy_red": { "frame": { "x": 0, "y": 0, "w": 96, "h": 80 }, "rotated": false, "trimmed": false, "spriteSourceSize": { "x": 0, "y": 0, "w": 96, "h": 80 }, "sourceSize": { "w": 96, "h": 80 } },
+    "explosion_1": { "frame": { "x": 96, "y": 0, "w": 64, "h": 64 }, "rotated": false, "trimmed": false, "spriteSourceSize": { "x": 0, "y": 0, "w": 64, "h": 64 }, "sourceSize": { "w": 64, "h": 64 } },
+    "explosion_2": { "frame": { "x": 160, "y": 0, "w": 64, "h": 64 }, "rotated": false, "trimmed": false, "spriteSourceSize": { "x": 0, "y": 0, "w": 64, "h": 64 }, "sourceSize": { "w": 64, "h": 64 } },
+    "explosion_3": { "frame": { "x": 224, "y": 0, "w": 64, "h": 64 }, "rotated": false, "trimmed": false, "spriteSourceSize": { "x": 0, "y": 0, "w": 64, "h": 64 }, "sourceSize": { "w": 64, "h": 64 } }
+  },
+  "meta": { "app": "https://www.codeandweb.com/texturepacker", "image": "sprites.png", "format": "RGBA8888", "size": { "w": 288, "h": 80 }, "scale": "1" }
+}

@@ -70,6 +70,17 @@
 
 <!-- example:timer-tween -->
 
+### 帧动画与图集
+
+<!-- example:animation -->
+
+<!-- example:animation#test -->
+
+- `sheet(path, { columns, rows })`：等大格子的网格图集，`frame(i)` / `frames(start, end)`（含两端）/ `count`。帧尺寸 = 整张图尺寸 / 列数（行数），图片加载后才确定，无头模式下为 0。
+- `atlas(path, data)`：打包图集，`data` 是 TexturePacker 等工具导出的 JSON（Hash 或 Array 格式，直接 import）。`get(name)` / `frames(prefix)`（数字自然排序）/ `names` / `has`。尺寸来自 JSON，无头模式下也正确；支持裁剪透明边（trimmed），不支持旋转打包。
+- 图集的帧就是 `Texture`，可以给任何 `Sprite2D`；同一张图的帧共用一份显存，绘制时能合批。`static assets` 里放 `sheet` / `atlas`，切换场景时按整张图判断是否卸载。
+- `AnimatedSprite2D`：`frames` + `fps`（默认 10）+ `loop`（默认 true），或 `animations: { 名字: { frames, fps, loop } }`。`play(name?)` / `pause()` / `stop()`（回到第 0 帧）、`frame`（可赋值）、`frameCount`、`speedScale`、`isPlaying`、`animation`；信号 `frameChanged`、`animationFinished`（不循环的动画播完，参数是动画名）。`texture` 由动画控制，不要直接赋值。
+
 ### 场景切换与存档
 
 <!-- example:scenes-storage -->
@@ -126,6 +137,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `Node2D` | 带变换 | `position` `x` `y` `rotation` `scale` `visible` `zIndex` `alpha` `modulate` `selfModulate` `globalPosition` `toLocal` `toGlobal`；`inputPickable` `hitArea` + 信号 `pointerDown` `pointerMove` `pointerUp` `clicked` |
 | `Scene` | 场景根 | `static assets` |
 | `Sprite2D` | 贴图 | `texture` `centered`（默认 true）`offset` `flipH` `flipV` |
+| `AnimatedSprite2D` | 帧动画（继承 Sprite2D） | `frames` / `animations` `fps` `loop` `autoplay` `play()` `pause()` `stop()` `frame` `speedScale` `isPlaying` `animation`；信号 `frameChanged` `animationFinished` |
 | `Label` | 文字 | `text` `fontSize` `color` `fontWeight` `align` `verticalAlign` `stroke` `wrapWidth` `lineHeight` |
 | `RigidBody2D` | 动态刚体 | `mass` `friction` `bounce` `gravityScale` `linearVelocity` `angularVelocity` `lockRotation` `ccd` `applyCentralImpulse` `applyForce` `sleeping`；信号 `bodyEntered` `bodyExited` |
 | `StaticBody2D` | 静态刚体（地面、墙） | `friction` `bounce` |
@@ -159,7 +171,8 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 |---|---|
 | 所有节点 | `groups`、`processMode` |
 | `Node2D` 及子类 | `position`（总是显示）、`rotationDegrees`、`scale`、`visible`、`zIndex`、`alpha`、`modulate` / `selfModulate`（`#ff6666` 形式） |
-| `Sprite2D` | `texture`（路径）、`centered`、`offset`、`flipH`、`flipV` |
+| `Sprite2D` | `texture`（路径；图集的帧是 `sprites.png#enemy_red` / `explosion.png#3`）、`centered`、`offset`、`flipH`、`flipV` |
+| `AnimatedSprite2D` | 同 Sprite2D，加 `animation`（有多套时）、`frame`（总是显示）、`playing` |
 | `Label` | `text`（总是显示，含空格时加引号）、`fontSize`、`align` |
 | `RigidBody2D` | `mass`、`friction`、`bounce`、`linearVelocity`（运动时）、`sleeping`、`collisionLayer`、`collisionMask` |
 | `StaticBody2D` / `Area2D` | `friction`、`bounce`（静态刚体）、`collisionLayer`、`collisionMask` |
@@ -192,6 +205,7 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 - **发布构建会压缩类名**：节点不传 `name` 时默认用类名，但真机发布包里类名会被压缩（变成 `cP` 之类）。逻辑里不要依赖默认名字或 `constructor.name`：要按名字找就显式传 `name`，判断类型用 `instanceof`。
 - **`this.tree` 只在树里可用**：不要在构造函数里用；放到 `ready()`。
 - **`await signal` 会错过同步紧接着的 emit**：先注册再触发时用 `signal.wait()`。
+- **带类型的 AnimatedSprite2D**：`AnimatedSprite2D<'fly' | 'hurt'>` 不能赋给 `AnimatedSprite2D`（即 `<string>`）类型的变量或数组；字段按具体类型声明，或在用到的地方写 `AnimatedSprite2D<any>`。
 - **随机数**：用 `this.tree.rng`（带 seed，测试可复现），不要用 `Math.random`。
 - **声明合并**：给组名、动作名、存档 key 加类型：`declare module 'sapling2d' { interface GroupRegistry { … } interface ActionRegistry { … } interface StorageRegistry { … } }`。
 - **Tween 在类方法里**：`this.createTween().to(this, {...})` 按 `Node2D` 的属性做类型检查；补间子类特有的属性写 `to(this as MyNode, …)`。

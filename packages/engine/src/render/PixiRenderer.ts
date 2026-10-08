@@ -1,4 +1,4 @@
-import { Container, Graphics, ImageSource, Sprite, Text, Texture as PixiTexture, WebGLRenderer, type TextStyleOptions } from 'pixi.js'
+import { Container, Graphics, ImageSource, Rectangle, Sprite, Text, Texture as PixiTexture, WebGLRenderer, type TextStyleOptions } from 'pixi.js'
 import type { Texture } from '../core/assets'
 import type { Node } from '../core/Node'
 import { Node2D } from '../core/Node2D'
@@ -55,7 +55,9 @@ export class PixiRenderer implements Renderer {
   /** 文字的栅格化分辨率：渲染分辨率 × 视口缩放，保证文字在任何屏幕上都按实际像素清晰绘制。 */
   #textResolution = 1
   readonly #views = new Map<Node2D, View>()
-  /** 贴图句柄 → Pixi 贴图，记下创建时用的资源：资源被卸载或替换后重建。 */
+  /** 整张图 → GPU 上的图片源，记下创建时用的资源：资源被卸载或替换后释放。图集的各帧共用整张图的源。 */
+  readonly #sources = new Map<Texture, { resource: unknown; source: ImageSource }>()
+  /** 贴图句柄（整张图或子区域）→ Pixi 贴图；与图片源同时失效。 */
   readonly #textures = new Map<Texture, { resource: unknown; texture: PixiTexture }>()
 
   /**
@@ -136,8 +138,10 @@ export class PixiRenderer implements Renderer {
 
   destroy(): void {
     for (const [node, view] of this.#views) this.#destroyView(node, view)
-    for (const cached of this.#textures.values()) cached.texture.destroy(true)
+    for (const cached of this.#textures.values()) cached.texture.destroy(false)
+    for (const cached of this.#sources.values()) cached.source.destroy()
     this.#textures.clear()
+    this.#sources.clear()
     this.#renderer?.destroy()
   }
 
@@ -238,35 +242,65 @@ export class PixiRenderer implements Renderer {
   }
 
   /**
-   * 资源被卸载（切换场景时）或替换后，立即销毁对应的 Pixi 贴图、释放显存——不等有精灵再次用到它。
+   * 资源被卸载（切换场景时）或替换后，立即销毁对应的 Pixi 贴图和图片源、释放显存——不等有精灵再次用到它。
    * 先于节点同步执行：此时引用它的精灵都已随旧场景销毁。
    */
   #releaseUnloadedTextures(): void {
     for (const [texture, cached] of this.#textures) {
-      if (cached.resource === texture._resource) continue
-      cached.texture.destroy(true)
-      this.#textures.delete(texture)
+      if (cached.resource !== texture._resource) {
+        cached.texture.destroy(false)
+        this.#textures.delete(texture)
+      }
+    }
+    for (const [texture, cached] of this.#sources) {
+      if (cached.resource !== texture._resource) {
+        cached.source.destroy()
+        this.#sources.delete(texture)
+      }
     }
   }
 
-  /** @internal 测试用：当前缓存的 Pixi 贴图数量。 */
+  /** @internal 测试用：当前缓存的 Pixi 贴图数量（整张图和子区域各算一个）。 */
   get _textureCount(): number {
     return this.#textures.size
   }
 
+  /** @internal 测试用：当前 GPU 上的图片源数量（每张图一个，图集的帧共用）。 */
+  get _sourceCount(): number {
+    return this.#sources.size
+  }
+
   #pixiTexture(texture: Texture): PixiTexture {
+    const resource = texture._resource
     const cached = this.#textures.get(texture)
-    if (cached && cached.resource !== texture._resource) {
-      cached.texture.destroy(true) // 资源已卸载或换了：释放显存
+    if (cached && cached.resource === resource) return cached.texture
+    if (cached) {
+      cached.texture.destroy(false) // 资源已卸载或换了
       this.#textures.delete(texture)
     }
-    if (!texture._resource) return PixiTexture.EMPTY
-    const hit = this.#textures.get(texture)
-    if (hit) return hit.texture
-    // 显式构造 ImageSource：小游戏的 Image 过不了 Pixi 的自动类型识别（见 spikes/wechat/REPORT.md）
-    const created = new PixiTexture({ source: new ImageSource({ resource: texture._resource as never }) })
-    this.#textures.set(texture, { resource: texture._resource, texture: created })
+    if (!resource) return PixiTexture.EMPTY
+    const source = this.#imageSource(texture._base ?? texture, resource)
+    const f = texture._frame
+    const created = f
+      ? new PixiTexture({
+          source,
+          frame: new Rectangle(f.region.x, f.region.y, f.region.width, f.region.height),
+          orig: new Rectangle(0, 0, f.width, f.height),
+          ...(f.trim ? { trim: new Rectangle(f.trim.x, f.trim.y, f.region.width, f.region.height) } : {}),
+        })
+      : new PixiTexture({ source })
+    this.#textures.set(texture, { resource, texture: created })
     return created
+  }
+
+  #imageSource(base: Texture, resource: unknown): ImageSource {
+    const cached = this.#sources.get(base)
+    if (cached && cached.resource === resource) return cached.source
+    cached?.source.destroy()
+    // 显式构造 ImageSource：小游戏的 Image 过不了 Pixi 的自动类型识别（见 spikes/wechat/REPORT.md）
+    const source = new ImageSource({ resource: resource as never })
+    this.#sources.set(base, { resource, source })
+    return source
   }
 
   #destroyView(node: Node2D, view: View): void {

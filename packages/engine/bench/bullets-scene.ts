@@ -10,13 +10,16 @@ import { AnimatedSprite2D, Node2D, Scene, sheet, Sprite2D, tex, v } from 'saplin
 
 export const config = { bullets: 500, enemies: 30 }
 
+/** 剖析用：设置 clock 后，场景逻辑按阶段累计耗时（毫秒）到 sceneTimes。 */
+export const profiling = { clock: null as (() => number) | null, sceneTimes: { filter: 0, spawn: 0, collide: 0 } }
+
 const W = 750
 const H = 1334
 const BULLET_SPEED = 900
 const BULLET_R = 8
 const ENEMY_R = 40
 
-class Bullet extends Sprite2D {
+export class Bullet extends Sprite2D {
   vx = 0
   vy = -BULLET_SPEED
   dead = false
@@ -34,7 +37,7 @@ class Bullet extends Sprite2D {
   }
 }
 
-class Enemy extends Sprite2D {
+export class Enemy extends Sprite2D {
   hp = 5
   phase = 0
 
@@ -58,21 +61,24 @@ export class BulletStorm extends Scene {
   enemies: Enemy[] = []
   player!: Sprite2D
   kills = 0
-  #t = 0
+  private _t = 0
 
   override ready() {
     this.bulletLayer = this.add(new Node2D({ name: 'Bullets' }))
     this.fxLayer = this.add(new Node2D({ name: 'Fx' }))
     this.player = this.add(new Sprite2D({ name: 'Player', texture: BulletStorm.assets.enemy, position: v(W / 2, H - 120), flipV: true }))
-    for (let i = 0; i < config.enemies; i++) this.enemies.push(this.add(new Enemy({ texture: BulletStorm.assets.enemy, position: this.#randomSpot() })))
+    for (let i = 0; i < config.enemies; i++) this.enemies.push(this.add(new Enemy({ texture: BulletStorm.assets.enemy, position: this._randomSpot() })))
   }
 
   override process(dt: number) {
-    this.#t += dt
-    this.player.x = W / 2 + Math.sin(this.#t * 1.5) * 280
+    this._t += dt
+    this.player.x = W / 2 + Math.sin(this._t * 1.5) * 280
 
+    const clock = profiling.clock
+    const t0 = clock?.() ?? 0
     // 补充子弹：每帧最多补 1/20，弹幕平滑地增长到目标数量
     this.bullets = this.bullets.filter((b) => !b.dead)
+    const t1 = clock?.() ?? 0
     const missing = Math.min(config.bullets - this.bullets.length, Math.ceil(config.bullets / 20))
     for (let i = 0; i < missing; i++) {
       const angle = ((i % 9) - 4) * 0.12 + (this.tree.rng.randf() - 0.5) * 0.05
@@ -82,6 +88,7 @@ export class BulletStorm extends Scene {
       this.bullets.push(this.bulletLayer.add(b))
     }
 
+    const t2 = clock?.() ?? 0
     // 子弹 × 敌机：朴素的圆形判定
     const r2 = (BULLET_R + ENEMY_R) ** 2
     for (const b of this.bullets) {
@@ -92,21 +99,27 @@ export class BulletStorm extends Scene {
         if (dx * dx + dy * dy > r2) continue
         b.kill()
         e.hit()
-        if (--e.hp <= 0) this.#explode(e)
+        if (--e.hp <= 0) this._explode(e)
         break
       }
     }
+    if (clock) {
+      const t3 = clock()
+      profiling.sceneTimes.filter += t1 - t0
+      profiling.sceneTimes.spawn += t2 - t1
+      profiling.sceneTimes.collide += t3 - t2
+    }
   }
 
-  #explode(e: Enemy) {
+  private _explode(e: Enemy) {
     this.kills++
     const fx = this.fxLayer.add(new AnimatedSprite2D({ frames: BulletStorm.assets.boom.frames(), fps: 24, loop: false, autoplay: true, position: e.position }))
     fx.animationFinished.connect(() => fx.queueFree(), fx)
     e.hp = 5
-    e.position = this.#randomSpot()
+    e.position = this._randomSpot()
   }
 
-  #randomSpot() {
+  private _randomSpot() {
     const rng = this.tree.rng
     return v(60 + rng.randf() * (W - 120), 80 + rng.randf() * (H * 0.45))
   }

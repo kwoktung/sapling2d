@@ -10,9 +10,13 @@ import { snapshot, WechatPlatform } from 'sapling2d/wechat'
 import { WechatAdapter } from '@engine/src/platform/wechat/adapter'
 import { PixiRenderer } from '@engine/src/render/PixiRenderer'
 import { BulletStorm, config } from '@engine/bench/bullets-scene'
+import { formatMicro, instrument, micro, perFrame } from '@engine/bench/bullets-profile'
 
 const LEVELS = [100, 250, 500, 1000]
 declare const __BULLETS_BUILD__: string | undefined
+/** 构建时 BULLETS_PROFILE=1：不跑档位扫描，改为 500 颗的剖析（阶段耗时 + 基本操作）。 */
+declare const __BULLETS_PROFILE__: boolean | undefined
+const PROFILE = typeof __BULLETS_PROFILE__ === 'boolean' && __BULLETS_PROFILE__
 const BUILD = typeof __BULLETS_BUILD__ === 'string' ? __BULLETS_BUILD__ : 'es2017'
 const LEVEL_MS = 8000
 const WARMUP_MS = 2000
@@ -37,6 +41,8 @@ async function main() {
   const device = `${info.brand} ${info.model} · ${info.system} · ${info.platform} · SDK ${info.SDKVersion} · build ${BUILD}`
   console.log(`[bullets] start ${device} benchmarkLevel=${info.benchmarkLevel}`)
 
+  if (PROFILE) return profile(game, renderer, platform, hud, device)
+
   const results: Row[] = []
   for (const n of LEVELS) {
     config.bullets = n
@@ -49,6 +55,36 @@ async function main() {
   hud.text = `${device}\n\n${table}\n\ndone`
   console.log(`[bullets] done ${device}\n${table}`)
   snapshot('bullets-done')
+}
+
+/** 500 颗：先跑不包装的基线，再包装各阶段计时，最后在同一棵树上测基本操作。 */
+async function profile(game: Game, renderer: PixiRenderer, platform: WechatPlatform, hud: Hud, device: string) {
+  config.bullets = 500
+  await game.tree.reloadCurrentScene()
+  hud.text = 'profiling 500 bullets: baseline…'
+  const baseline = await run(game, renderer, platform, 500, hud, [])
+  const inst = instrument(() => platform.now())
+  let frames = 0
+  hud.text = 'profiling: instrumented…'
+  await new Promise<void>((resolve) => {
+    const loop = () => {
+      game.tree.advance(1 / 60)
+      renderer.render(game.tree)
+      if (++frames === 60) inst.reset() // 前 60 帧不计
+      if (frames === 60 + 300) return resolve()
+      platform.requestFrame(loop)
+    }
+    platform.requestFrame(loop)
+  })
+  const phases = perFrame(inst, 300)
+  inst.restore()
+  hud.text = 'profiling: micro…'
+  await new Promise((r) => setTimeout(r, 50))
+  const rows = formatMicro(micro(() => platform.now(), game.tree, renderer))
+  const text = `${device}\nbaseline 500: ${fmt(baseline)}\n\nphases (instrumented, ms/frame):\n${phases.join('\n')}\n\nmicro (ns/op):\n${rows.join('\n')}`
+  console.log(`[bullets] profile ${text}`)
+  hud.text = text + '\n\ndone'
+  snapshot('bullets-profile')
 }
 
 function run(game: Game, renderer: PixiRenderer, platform: WechatPlatform, n: number, hud: Hud, results: Row[]): Promise<Row> {

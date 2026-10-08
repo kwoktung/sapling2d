@@ -89,6 +89,32 @@ describe('lifecycle', () => {
     const names = [root.add(new Node({ name: 'Fruit' })), root.add(new Node({ name: 'Fruit' })), root.add(new Node({ name: 'Fruit' }))].map((n) => n.name)
     expect(names).toEqual(['Fruit', 'Fruit2', 'Fruit3'])
   })
+
+  it('重名检查在移除、改名后保持正确；后缀只增不减', () => {
+    const root = new Node()
+    const a = root.add(new Node({ name: 'Fruit' }))
+    const b = root.add(new Node({ name: 'Fruit' }))
+    root.remove(a)
+    expect(root.add(new Node({ name: 'Fruit' })).name).toBe('Fruit') // 'Fruit' 已空出
+    expect(root.add(new Node({ name: 'Fruit' })).name).toBe('Fruit3')
+    b.name = 'Apple'
+    expect(root.add(new Node({ name: 'Fruit2' })).name).toBe('Fruit2') // 改名后旧名字空出
+    b.name = 'Apple' // 改成自己现在的名字：不加后缀
+    expect(b.name).toBe('Apple')
+    expect(root.add(new Node({ name: 'Apple' })).name).toBe('Apple2')
+  })
+
+  it('同一父节点下大量同名节点：add 不随兄弟数量变慢（不是平方级）', () => {
+    const time = (n: number) => {
+      const root = new Node()
+      const t = performance.now()
+      for (let i = 0; i < n; i++) root.add(new Node({ name: 'Bullet' }))
+      return performance.now() - t
+    }
+    time(2000) // 预热
+    // 修复前 4000 个约需数秒（每次 add 都从 2 开始逐个扫描兄弟）；现在是毫秒级
+    expect(time(4000)).toBeLessThan(200)
+  })
 })
 
 describe('main loop', () => {

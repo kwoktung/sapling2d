@@ -19,6 +19,7 @@ export default {
       { find: /^@engine\//, replacement: `${engine}/` },
     ],
   },
+  define: { __BULLETS_PROFILE__: JSON.stringify(process.env.BULLETS_PROFILE === '1') },
   plugins: [saplingWechat({ entry: 'src/main.wechat.ts', projectName: 'sapling2d-bullets' }), ...(process.env.BULLETS_TARGET ? [target(process.env.BULLETS_TARGET)] : [])],
 }
 

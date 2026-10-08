@@ -29,7 +29,11 @@ export interface Node2DOptions extends NodeOptions {
  * 单位是像素，y 轴向下，角度用弧度。
  */
 export class Node2D extends Node {
-  private _position: Vector2
+  // x / y 存成数字：`x += …` 不分配对象（iOS 小游戏上分配很贵，见 spikes/bullets/REPORT.md）。
+  // position 在读取时才创建 Vector2，并缓存到下一次修改
+  private _x: number
+  private _y: number
+  private _positionCache: Vector2 | null = null
   private _rotation: number
   private _scale: Vector2
   private _visible: boolean
@@ -49,14 +53,19 @@ export class Node2D extends Node {
   inputPickable: boolean
   /** 点击区域（局部坐标）。不设置时，Sprite2D 用贴图范围，其他节点无法被点中。 */
   hitArea: Rect2 | CircleHitArea | null
-  /** @internal 每次变换、可见性或外观变化时递增，渲染同步用它判断是否需要更新。 */
+  /** @internal position / rotation / scale 变化时递增，渲染同步据此只更新容器的变换。 */
+  _transformVersion = 0
+  /** @internal 变换以外的显示状态（可见性、zIndex、颜色、贴图、文字……）变化时递增。 */
   _version = 0
   /** @internal 渲染层创建的显示对象；无头模式下始终为 null。 */
   _view: unknown = null
 
   constructor(options: Node2DOptions = {}) {
     super(options)
-    this._position = options.position ?? Vector2.ZERO
+    const position = options.position ?? Vector2.ZERO
+    this._x = position.x
+    this._y = position.y
+    this._positionCache = position
     this._rotation = options.rotation ?? 0
     this._scale = options.scale ?? Vector2.ONE
     this._visible = options.visible ?? true
@@ -69,29 +78,37 @@ export class Node2D extends Node {
   }
 
   get position(): Vector2 {
-    return this._position
+    return (this._positionCache ??= new Vector2(this._x, this._y))
   }
 
   set position(value: Vector2) {
-    this._position = value
-    this._version++
+    this._x = value.x
+    this._y = value.y
+    this._positionCache = value // Vector2 不可变，可以直接缓存
+    this._transformVersion++
     this._transformChanged()
   }
 
   get x(): number {
-    return this._position.x
+    return this._x
   }
 
   set x(value: number) {
-    this.position = new Vector2(value, this._position.y)
+    this._x = value
+    this._positionCache = null
+    this._transformVersion++
+    this._transformChanged()
   }
 
   get y(): number {
-    return this._position.y
+    return this._y
   }
 
   set y(value: number) {
-    this.position = new Vector2(this._position.x, value)
+    this._y = value
+    this._positionCache = null
+    this._transformVersion++
+    this._transformChanged()
   }
 
   /** 弧度。 */
@@ -101,7 +118,7 @@ export class Node2D extends Node {
 
   set rotation(value: number) {
     this._rotation = value
-    this._version++
+    this._transformVersion++
     this._transformChanged()
   }
 
@@ -119,7 +136,7 @@ export class Node2D extends Node {
 
   set scale(value: Vector2) {
     this._scale = value
-    this._version++
+    this._transformVersion++
     this._transformChanged()
   }
 
@@ -194,7 +211,7 @@ export class Node2D extends Node {
 
   /** 局部变换：缩放 → 旋转 → 平移。 */
   get transform(): Transform2D {
-    return Transform2D.fromParts(this._position, this._rotation, this._scale)
+    return Transform2D.fromParts(this.position, this._rotation, this._scale)
   }
 
   /** 相对于场景（设计坐标）的变换。非 Node2D 的祖先不参与变换。 */
@@ -280,7 +297,7 @@ export class Node2D extends Node {
 
   protected override dumpProps(): Record<string, unknown> {
     return {
-      position: this._position,
+      position: this.position,
       rotationDegrees: this._rotation !== 0 ? Math.round(this.rotationDegrees * 100) / 100 : undefined,
       scale: this._scale.equals(Vector2.ONE) ? undefined : this._scale,
       visible: this._visible ? undefined : false,

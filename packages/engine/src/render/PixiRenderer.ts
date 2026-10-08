@@ -22,8 +22,12 @@ export interface PixiRendererOptions {
 interface View {
   /** 承载节点变换的容器；子节点的显示对象都挂在它下面。 */
   container: Container
-  /** 上次同步时节点的 `_version`，相同则跳过。 */
+  /** 上次同步时节点的 `_transformVersion`，变了只更新容器的变换。 */
+  transformVersion: number
+  /** 上次同步时节点的 `_version`（变换以外的显示状态），变了才更新可见性、颜色、贴图、文字。 */
   version: number
+  /** 最近一次同步到它的帧号；同步结束时帧号不是本帧的显示对象属于已离开树的节点。 */
+  frame: number
   /** Sprite2D 的贴图层：放在容器内，offset、centered、flip 作用在它上面，不影响子节点。 */
   sprite?: Sprite
   /** 上次同步时贴图句柄背后的资源，用来发现“贴图后来才加载完成”。 */
@@ -39,7 +43,8 @@ interface View {
 /**
  * 把场景树同步到 Pixi（见 ADR 0002）：
  * - 节点首次被渲染时才创建显示对象
- * - 只有 `_version` 变化的节点才更新变换和外观
+ * - 只有 `_transformVersion` / `_version` 变化的节点才分别更新变换 / 外观
+ * - 每帧都要遍历整棵树，所以遍历本身不分配对象（iOS 小游戏上分配很贵，见 spikes/bullets/REPORT.md）
  * - 显示对象的层级和顺序与场景树一致；不是 Node2D 的节点不产生显示对象，其子节点挂到最近的 Node2D 祖先下
  * - 离开树的节点，显示对象在下一次同步时销毁
  * - 画布尺寸跟随屏幕；场景整体按视口缩放、平移到设计坐标；`keep` 模式裁剪到设计区域
@@ -55,6 +60,11 @@ export class PixiRenderer implements Renderer {
   /** 文字的栅格化分辨率：渲染分辨率 × 视口缩放，保证文字在任何屏幕上都按实际像素清晰绘制。 */
   private _textResolution = 1
   private readonly _views = new Map<Node2D, View>()
+  /** 同步的帧号，和本帧同步到的显示对象数量（与 `_views.size` 相同说明没有节点离开树）。 */
+  private _frame = 0
+  private _seen = 0
+  /** `_syncChildren` 每层递归复用的数组。 */
+  private readonly _orderedByDepth: Container[][] = []
   /** 整张图 → GPU 上的图片源，记下创建时用的资源：资源被卸载或替换后释放。图集的各帧共用整张图的源。 */
   private readonly _sources = new Map<Texture, { resource: unknown; source: ImageSource }>()
   /** 贴图句柄（整张图或子区域）→ Pixi 贴图；与图片源同时失效。 */
@@ -113,11 +123,14 @@ export class PixiRenderer implements Renderer {
   sync(tree: SceneTree): void {
     this._releaseUnloadedTextures()
     this._syncViewport(tree.viewport)
-    const seen = new Set<Node2D>()
-    this._syncChildren(tree._topLevel(), this._sceneContainer, seen)
-    for (const [node, view] of this._views) {
-      if (!seen.has(node)) this._destroyView(node, view)
-    }
+    const frame = ++this._frame
+    this._seen = 0
+    this._syncChildren(tree._topLevel(), this._sceneContainer, 0)
+    if (this._seen === this._views.size) return
+    // 有节点离开了树：销毁它们的显示对象（Map 的 forEach 里删除当前项是安全的）
+    this._views.forEach((view, node) => {
+      if (view.frame !== frame) this._destroyView(node, view)
+    })
   }
 
   private _syncViewport(viewport: Viewport): void {
@@ -145,36 +158,45 @@ export class PixiRenderer implements Renderer {
     this._renderer?.destroy()
   }
 
-  /** 同步一组兄弟节点，并让 `parent` 的子显示对象与它们的顺序一致。 */
-  private _syncChildren(nodes: readonly Node[], parent: Container, seen: Set<Node2D>): void {
-    const ordered: Container[] = []
-    const visit = (node: Node) => {
-      if (node instanceof Node2D) {
-        seen.add(node)
-        const view = this._syncNode(node)
-        ordered.push(view.container)
-        this._syncChildren(node.children, view.container, seen)
-      } else {
-        // 非 Node2D：自己不显示，子节点按顺序挂到当前容器
-        for (const child of node.children) visit(child)
-      }
-    }
-    for (const node of nodes) visit(node)
+  /**
+   * 同步一组兄弟节点，并让 `parent` 的子显示对象与它们的顺序一致。
+   * `depth` 选用哪个复用数组：每层递归一个，同一层的兄弟调用依次复用（上一个用完才轮到下一个）。
+   */
+  private _syncChildren(nodes: readonly Node[], parent: Container, depth: number): void {
+    const ordered = (this._orderedByDepth[depth] ??= [])
+    ordered.length = 0
+    for (let i = 0; i < nodes.length; i++) this._visit(nodes[i]!, ordered, depth)
 
-    // 保持顺序：Sprite2D / Label 的内容层永远在最前（最底层），之后是子节点的容器
-    const fixed = parent.children.filter((c) => !ordered.includes(c as Container) && c.label === CONTENT_LABEL)
-    const desired = [...fixed, ...ordered]
+    // 保持顺序：Sprite2D / Label 的内容层永远在第 0 个（最底层），之后是子节点的容器
     const current = parent.children
-    if (current.length !== desired.length || desired.some((c, i) => current[i] !== c)) {
-      parent.removeChildren()
-      if (desired.length) parent.addChild(...desired)
+    const offset = current.length > 0 && current[0]!.label === CONTENT_LABEL ? 1 : 0
+    let inOrder = current.length === offset + ordered.length
+    for (let i = 0; inOrder && i < ordered.length; i++) inOrder = current[offset + i] === ordered[i]
+    if (inOrder) return
+    const content = offset ? current[0]! : null
+    parent.removeChildren()
+    if (content) parent.addChild(content)
+    for (let i = 0; i < ordered.length; i++) parent.addChild(ordered[i]!)
+  }
+
+  private _visit(node: Node, ordered: Container[], depth: number): void {
+    const children = node.children
+    if (!(node instanceof Node2D)) {
+      // 非 Node2D：自己不显示，子节点按顺序挂到当前容器
+      for (let i = 0; i < children.length; i++) this._visit(children[i]!, ordered, depth)
+      return
     }
+    const view = this._syncNode(node)
+    ordered.push(view.container)
+    // 叶子节点（大多数子弹、精灵）不用递归：除非它的容器里还留着已经移走的子节点
+    const contentCount = view.sprite || view.text ? 1 : 0
+    if (children.length > 0 || view.container.children.length > contentCount) this._syncChildren(children, view.container, depth + 1)
   }
 
   private _syncNode(node: Node2D): View {
     let view = this._views.get(node)
     if (!view) {
-      view = { container: new Container({ label: node.name }), version: -1 }
+      view = { container: new Container({ label: node.name }), transformVersion: -1, version: -1, frame: 0 }
       view.container.sortableChildren = true
       if (node instanceof Sprite2D) {
         view.sprite = new Sprite({ label: CONTENT_LABEL })
@@ -187,16 +209,23 @@ export class PixiRenderer implements Renderer {
       node._view = view.container
     }
 
+    view.frame = this._frame
+    this._seen++
+    const c = view.container
+    if (view.transformVersion !== node._transformVersion) {
+      view.transformVersion = node._transformVersion
+      c.position.set(node.x, node.y)
+      c.rotation = node.rotation
+      const scale = node.scale
+      c.scale.set(scale.x, scale.y)
+    }
+
     const textureResource = node instanceof Sprite2D ? node.texture?._resource : undefined
     if (view.version === node._version && view.textureResource === textureResource && (!view.text || view.textResolution === this._textResolution)) {
       return view
     }
     view.version = node._version
 
-    const c = view.container
-    c.position.set(node.x, node.y)
-    c.rotation = node.rotation
-    c.scale.set(node.scale.x, node.scale.y)
     c.visible = node.visible
     c.zIndex = node.zIndex
     c.alpha = node.alpha

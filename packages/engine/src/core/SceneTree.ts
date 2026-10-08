@@ -101,6 +101,8 @@ export class SceneTree {
   private _timers: SceneTreeTimer[] = []
   private _physicsSettings: PhysicsSettings
   private _physics: PhysicsWorld | null = null
+  /** @internal 树里覆写了 `physicsProcess` 的节点数；为 0 时物理步不遍历节点。 */
+  _physicsProcessNodes = 0
   private _freeQueue: Node[] = []
 
   constructor(options: SceneTreeOptions = {}) {
@@ -321,7 +323,7 @@ export class SceneTree {
       this._accumulator -= this.physicsDelta
       steps++
       this._physicsFrames++
-      for (const node of this._snapshot()) if (node.canProcess()) node.physicsProcess(this.physicsDelta)
+      if (this._physicsProcessNodes > 0) for (const node of this._snapshot()) if (node.canProcess()) node.physicsProcess(this.physicsDelta)
       if (!this._paused) this._physics?._step(this.physicsDelta)
     }
     // 达到上限还有剩余：丢弃，而不是留到下一帧继续补

@@ -26,15 +26,36 @@ describe('Vector2', () => {
 })
 
 describe('Node2D', () => {
-  it('position 通过重新赋值修改，x / y 是快捷属性，修改会让 _version 递增', () => {
+  it('position 通过重新赋值修改，x / y 是快捷属性；变换变化让 _transformVersion 递增，不动 _version', () => {
     const n = new Node2D({ position: v(1, 2) })
-    const before = n._version
+    const before = n._transformVersion
+    const appearance = n._version
     n.x += 10
     n.y = 5
     expect(n.position).toEqual(v(11, 5))
     n.position = n.position.add(v(1, 1))
     expect(n.position).toEqual(v(12, 6))
-    expect(n._version).toBe(before + 3)
+    n.rotation = 1
+    n.scale = v(2, 2)
+    expect(n._transformVersion).toBe(before + 5)
+    expect(n._version).toBe(appearance)
+    n.alpha = 0.5
+    expect(n._version).toBe(appearance + 1)
+  })
+
+  it('x / y 赋值不分配 Vector2；position 读取时创建并缓存到下一次修改', () => {
+    const n = new Node2D({ position: v(1, 2) })
+    n.x = 3
+    const p = n.position
+    expect(p).toEqual(v(3, 2))
+    expect(n.position).toBe(p) // 没有修改：同一个对象
+    n.y = 4
+    expect(n.position).not.toBe(p)
+    expect(p).toEqual(v(3, 2)) // 旧的 Vector2 不受影响（不可变）
+    const q = v(7, 8)
+    n.position = q
+    expect(n.position).toBe(q)
+    expect([n.x, n.y]).toEqual([7, 8])
   })
 
   it('rotationDegrees 与 rotation 互相换算', () => {

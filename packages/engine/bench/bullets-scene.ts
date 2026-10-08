@@ -2,7 +2,8 @@
  * 弹幕压测场景（飞机大战的典型负载），无头基准和浏览器 spike（spikes/bullets）共用。
  *
  * - 玩家在底部左右移动，持续发射扇形子弹，保持 `config.bullets` 颗子弹在屏幕上
- * - `config.enemies` 架敌机在上半屏漂移；子弹与敌机用手写的圆形判定（不走物理引擎）
+ * - `config.enemies` 架敌机在上半屏漂移；子弹与敌机用手写的圆形判定（不走物理引擎）：
+ *   先把敌机位置读进数组、每颗子弹的位置只读一次，内层循环只做算术（llms.txt「性能」一节的写法）
  * - 敌机被击中闪红（modulate），血量归零时播放爆炸帧动画并在别处重生
  * - 所有子弹挂在同一个父节点下：这是渲染同步最坏的情况
  */
@@ -62,6 +63,8 @@ export class BulletStorm extends Scene {
   player!: Sprite2D
   kills = 0
   private _t = 0
+  private readonly _ex = new Float64Array(config.enemies)
+  private readonly _ey = new Float64Array(config.enemies)
 
   override ready() {
     this.bulletLayer = this.add(new Node2D({ name: 'Bullets' }))
@@ -89,17 +92,33 @@ export class BulletStorm extends Scene {
     }
 
     const t2 = clock?.() ?? 0
-    // 子弹 × 敌机：朴素的圆形判定
+    // 子弹 × 敌机：圆形判定。位置先读进数组，内层循环不调用 getter
     const r2 = (BULLET_R + ENEMY_R) ** 2
-    for (const b of this.bullets) {
+    const enemies = this.enemies
+    const ex = this._ex
+    const ey = this._ey
+    for (let j = 0; j < enemies.length; j++) {
+      ex[j] = enemies[j]!.x
+      ey[j] = enemies[j]!.y
+    }
+    const bullets = this.bullets
+    for (let i = 0; i < bullets.length; i++) {
+      const b = bullets[i]!
       if (b.dead) continue
-      for (const e of this.enemies) {
-        const dx = b.x - e.x
-        const dy = b.y - e.y
+      const bx = b.x
+      const by = b.y
+      for (let j = 0; j < enemies.length; j++) {
+        const dx = bx - ex[j]!
+        const dy = by - ey[j]!
         if (dx * dx + dy * dy > r2) continue
+        const e = enemies[j]!
         b.kill()
         e.hit()
-        if (--e.hp <= 0) this._explode(e)
+        if (--e.hp <= 0) {
+          this._explode(e)
+          ex[j] = e.x // 敌机换了位置
+          ey[j] = e.y
+        }
         break
       }
     }

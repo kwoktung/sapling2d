@@ -101,6 +101,35 @@ describe('render sync', () => {
     expect(labels(view(g.scene)!)).toEqual(['B', 'A'])
   })
 
+  it('只移动的节点只更新容器变换，不重设贴图层；外观变了才重设', async () => {
+    const { g, sync } = await setup()
+    const s = g.scene.add(new Sprite2D({ name: 'S', texture: tex('move.png'), selfModulate: 0x00ff00 }))
+    sync()
+    const sprite = view(s)!.children[0] as Sprite
+    sprite.tint = 0xff0000 // 如果同步重设了贴图层，会被改回 0x00ff00
+    s.x = 30
+    s.rotation = 0.5
+    sync()
+    expect([view(s)!.x, view(s)!.rotation, sprite.tint]).toEqual([30, 0.5, 0xff0000])
+    s.alpha = 0.5
+    sync()
+    expect(sprite.tint).toBe(0x00ff00)
+  })
+
+  it('子节点全部移走后，叶子节点的容器里也不留旧的显示对象', async () => {
+    const { g, sync } = await setup()
+    const a = g.scene.add(new Sprite2D({ name: 'A', texture: tex('leaf.png') }))
+    const b = a.add(new Node2D({ name: 'B' }))
+    sync()
+    expect(labels(view(a)!)).toEqual(['__content', 'B'])
+    a.remove(b)
+    sync()
+    expect(labels(view(a)!)).toEqual(['__content'])
+    g.scene.add(b) // 移到别处：复用同一个显示对象
+    sync()
+    expect(labels(view(g.scene)!)).toEqual(['A', 'B'])
+  })
+
   it('Sprite2D：贴图层在子节点之下；centered、offset、flip 作用在贴图层上', async () => {
     const { g, sync } = await setup()
     const s = g.scene.add(new Sprite2D({ name: 'S', texture: tex('s.png'), offset: v(3, 4), flipH: true }))

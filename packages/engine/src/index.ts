@@ -29,6 +29,7 @@ export type { GroupName, GroupNodeType } from './core/groups'
  */
 export interface GroupRegistry {}
 export { Sprite2D, type Sprite2DOptions } from './nodes/Sprite2D'
+export { AnimatedSprite2D, type AnimatedSprite2DOptions, type SpriteAnimation } from './nodes/AnimatedSprite2D'
 export { CollisionObject2D, type CollisionObject2DOptions } from './nodes/physics/CollisionObject2D'
 export { PhysicsBody2D, StaticBody2D, type PhysicsBody2DOptions } from './nodes/physics/PhysicsBody2D'
 export { Area2D, type Area2DOptions } from './nodes/physics/Area2D'
@@ -37,7 +38,7 @@ export { CollisionShape2D, type CollisionShape2DOptions } from './nodes/physics/
 export { CircleShape2D, RectangleShape2D, ConvexPolygonShape2D, circle, rectangle, polygon, MAX_POLYGON_VERTICES, type Shape2D } from './physics/shapes'
 export { PhysicsWorld, type PhysicsSettings } from './physics/PhysicsWorld'
 export { Label, type LabelOptions, type LabelStroke, type HorizontalAlignment, type VerticalAlignment } from './nodes/Label'
-export { Texture, tex, type AssetMap } from './core/assets'
+export { Texture, tex, SpriteSheet, sheet, Atlas, atlas, type AssetMap, type AtlasData, type AtlasFrameData } from './core/assets'
 export { AudioStream, sfx, music } from './audio/AudioStream'
 export { Storage } from './storage/Storage'
 export { MemoryStorageBackend, type StorageBackend } from './storage/backend'

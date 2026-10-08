@@ -1,5 +1,6 @@
 // 游戏本体：与平台无关。浏览器入口是 main.ts，微信小游戏入口是 main.wechat.ts
-import { key, Label, Node2D, pointerPress, Scene, Sprite2D, tex, v, type Vector2 } from 'sapling2d'
+import { AnimatedSprite2D, atlas, key, Label, Node2D, pointerPress, Scene, sheet, Sprite2D, tex, v, type Vector2 } from 'sapling2d'
+import spritesData from './sprites.json'
 
 declare module 'sapling2d' {
   interface ActionRegistry {
@@ -87,27 +88,35 @@ class Counter extends Label {
 }
 
 export class Main extends Scene {
-  static override assets = { fruit: tex('fruit.png') }
+  static override assets = {
+    fruit: tex('fruit.png'),
+    boom: sheet('explosion.png', { columns: 4, rows: 2 }), // 网格图集：8 帧爆炸
+    sprites: atlas('sprites.png', spritesData), // 打包图集：ship、star（star 裁剪过透明边）
+  }
 
   override ready() {
     this.add(new CornerMarkers())
     const safe = this.tree.viewport.safeRect
     this.add(new Label({ name: 'Title', text: 'sapling2d 示例', fontSize: 56, fontWeight: 'bold', align: 'center', position: v(375, safe.top + 60) }))
-    this.add(new Label({ name: 'Hint', text: '点大球反转（闪红）· 拖动下面的球\n点空白处生成小球（淡出）· 空格反转', fontSize: 28, color: 0xaee6ff, align: 'center', lineHeight: 40, position: v(375, safe.top + 140) }))
+    this.add(new Label({ name: 'Hint', text: '点大球反转（闪红）· 拖动下面的球\n点空白处爆炸（帧动画）· 空格反转', fontSize: 28, color: 0xaee6ff, align: 'center', lineHeight: 40, position: v(375, safe.top + 140) }))
     this.add(new Counter({ text: '0 秒', fontSize: 72, color: 0xffd166, stroke: { color: 0x000000, width: 6 }, align: 'center', verticalAlign: 'center', position: v(375, 380) }))
     this.add(new Spinner({ name: 'Spinner', texture: Main.assets.fruit, position: v(375, 667), scale: v(1.5, 1.5) }))
     const row = this.add(new Node2D({ name: 'Row', position: v(375, 1100) }))
     for (let i = -2; i <= 2; i++) {
       row.add(new Draggable({ texture: Main.assets.fruit, position: v(i * 110, 0), zIndex: -Math.abs(i) }))
     }
+    // 图集里的帧：和普通贴图一样用
+    this.add(new Sprite2D({ name: 'Ship', texture: Main.assets.sprites.get('ship'), position: v(250, 900) }))
+    this.add(new Sprite2D({ name: 'Star', texture: Main.assets.sprites.get('star'), position: v(500, 900) }))
   }
 
   override process() {
     // 点在空白处（没有被可点击节点处理）才会触发 spawn
     const input = this.tree.input
     if (input.isActionJustPressed('spawn') && input.pointerPosition) {
-      const s = this.add(new Sprite2D({ name: 'Spawned', texture: Main.assets.fruit, position: input.pointerPosition, scale: v(0.25, 0.25) }))
-      s.createTween().wait(1).to(s, { alpha: 0 }, 0.6).call(() => s.queueFree()) // 停留一秒后淡出、销毁
+      // 一次性帧动画：播完（不循环）就销毁
+      const fx = this.add(new AnimatedSprite2D({ name: 'Boom', frames: Main.assets.boom.frames(), fps: 16, loop: false, autoplay: true, position: input.pointerPosition }))
+      fx.animationFinished.connect(() => fx.queueFree(), fx)
     }
   }
 }

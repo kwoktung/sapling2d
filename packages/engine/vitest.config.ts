@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config'
 
-// 基准测试（bench/）很慢，不进入普通的 `pnpm test`；用 `pnpm bench:physics[:jitless]` 单独运行。
+// 基准测试（bench/）很慢，不进入普通的 `pnpm test`；用 `pnpm bench:physics[:jitless]` / `pnpm bench:bullets[:jitless]` 单独运行。
 const bench = process.env.SAPLING_BENCH === '1'
 
 export default defineConfig({

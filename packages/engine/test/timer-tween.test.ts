@@ -76,6 +76,18 @@ describe('Tween', () => {
     expect(tween.isRunning).toBe(false)
   })
 
+  it('alpha 按数值补间；modulate / selfModulate 按 RGB 通道补间', async () => {
+    const g = await createTestGame({ main: Scene })
+    const n = g.scene.add(new Node2D({ modulate: 0xc80000, selfModulate: 0xc8c8c8 }))
+    n.createTween().to(n, { alpha: 0, modulate: 0x00c800, selfModulate: 0x000000 }, 1)
+    g.step(30)
+    expect(n.alpha).toBeCloseTo(0.5)
+    expect(n.modulate).toBe(0x646400) // 不是两个数值的中点
+    expect(n.selfModulate).toBe(0x646464)
+    g.step(30)
+    expect([n.alpha, n.modulate, n.selfModulate]).toEqual([0, 0x00c800, 0x000000])
+  })
+
   it('默认按顺序执行；parallel() 与前一个同时进行；wait 和 call', async () => {
     const g = await createTestGame({ main: Scene })
     const a = g.scene.add(new Node2D())

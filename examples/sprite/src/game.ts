@@ -8,7 +8,7 @@ declare module 'sapling2d' {
   }
 }
 
-/** 绕自身旋转，带着一个子精灵公转。点击它（或按空格）反向。 */
+/** 绕自身旋转，带着一个子精灵公转。点击它（或按空格）反向，并闪一下红色（modulate 连同子精灵一起染色）。 */
 class Spinner extends Sprite2D {
   speed = 1.5 // 弧度/秒
 
@@ -20,6 +20,8 @@ class Spinner extends Sprite2D {
 
   reverse() {
     this.speed = -this.speed
+    this.modulate = 0xff4040
+    this.createTween().to(this, { modulate: 0xffffff }, 0.4) // 颜色按 RGB 通道渐变
   }
 
   override process(dt: number) {
@@ -28,15 +30,23 @@ class Spinner extends Sprite2D {
   }
 }
 
-/** 可以拖动的精灵。 */
+/** 可以拖动的精灵。拖动时变蓝、半透明（selfModulate 只染自己）。 */
 class Draggable extends Sprite2D {
   #grab: Vector2 | null = null
 
   override ready() {
     this.inputPickable = true
-    this.pointerDown.connect((e) => (this.#grab = this.position.sub(this.parentLocal(e.position))), this)
+    this.pointerDown.connect((e) => {
+      this.#grab = this.position.sub(this.parentLocal(e.position))
+      this.selfModulate = 0x80c0ff
+      this.alpha = 0.6
+    }, this)
     this.pointerMove.connect((e) => this.#grab && (this.position = this.parentLocal(e.position).add(this.#grab)), this)
-    this.pointerUp.connect(() => (this.#grab = null), this)
+    this.pointerUp.connect(() => {
+      this.#grab = null
+      this.selfModulate = 0xffffff
+      this.alpha = 1
+    }, this)
   }
 
   /** 全局坐标 → 父节点的局部坐标。 */
@@ -83,7 +93,7 @@ export class Main extends Scene {
     this.add(new CornerMarkers())
     const safe = this.tree.viewport.safeRect
     this.add(new Label({ name: 'Title', text: 'sapling2d 示例', fontSize: 56, fontWeight: 'bold', align: 'center', position: v(375, safe.top + 60) }))
-    this.add(new Label({ name: 'Hint', text: '点大球反转 · 拖动下面的球\n点空白处生成小球 · 空格反转', fontSize: 28, color: 0xaee6ff, align: 'center', lineHeight: 40, position: v(375, safe.top + 140) }))
+    this.add(new Label({ name: 'Hint', text: '点大球反转（闪红）· 拖动下面的球\n点空白处生成小球（淡出）· 空格反转', fontSize: 28, color: 0xaee6ff, align: 'center', lineHeight: 40, position: v(375, safe.top + 140) }))
     this.add(new Counter({ text: '0 秒', fontSize: 72, color: 0xffd166, stroke: { color: 0x000000, width: 6 }, align: 'center', verticalAlign: 'center', position: v(375, 380) }))
     this.add(new Spinner({ name: 'Spinner', texture: Main.assets.fruit, position: v(375, 667), scale: v(1.5, 1.5) }))
     const row = this.add(new Node2D({ name: 'Row', position: v(375, 1100) }))
@@ -96,7 +106,8 @@ export class Main extends Scene {
     // 点在空白处（没有被可点击节点处理）才会触发 spawn
     const input = this.tree.input
     if (input.isActionJustPressed('spawn') && input.pointerPosition) {
-      this.add(new Sprite2D({ name: 'Spawned', texture: Main.assets.fruit, position: input.pointerPosition, scale: v(0.25, 0.25) }))
+      const s = this.add(new Sprite2D({ name: 'Spawned', texture: Main.assets.fruit, position: input.pointerPosition, scale: v(0.25, 0.25) }))
+      s.createTween().wait(1).to(s, { alpha: 0 }, 0.6).call(() => s.queueFree()) // 停留一秒后淡出、销毁
     }
   }
 }

@@ -195,6 +195,8 @@ export class PixiRenderer implements Renderer {
     c.scale.set(node.scale.x, node.scale.y)
     c.visible = node.visible
     c.zIndex = node.zIndex
+    c.alpha = node.alpha
+    c.tint = node.modulate // Pixi v8 的容器 tint 会乘到所有子对象上
 
     if (node instanceof Sprite2D && view.sprite) {
       view.textureResource = textureResource
@@ -203,8 +205,10 @@ export class PixiRenderer implements Renderer {
       s.anchor.set(node.centered ? 0.5 : 0)
       s.position.set(node.offset.x, node.offset.y)
       s.scale.set(node.flipH ? -1 : 1, node.flipV ? -1 : 1)
+      s.tint = node.selfModulate
     } else if (node instanceof Label && view.text) {
       this.#syncText(node, view, view.text)
+      view.text.tint = node.selfModulate
     }
     return view
   }

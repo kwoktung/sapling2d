@@ -1,6 +1,6 @@
-import type { Container, Sprite } from 'pixi.js'
+import type { Container, Sprite, Text } from 'pixi.js'
 import { describe, expect, it } from 'vitest'
-import { Node, Node2D, Scene, Sprite2D, tex, v } from 'sapling2d'
+import { Label, Node, Node2D, Scene, Sprite2D, tex, v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { PixiRenderer } from '../src/render/PixiRenderer'
 
@@ -114,5 +114,35 @@ describe('render sync', () => {
     s.centered = false
     sync()
     expect(sprite.anchor.x).toBe(0)
+  })
+
+  it('alpha / modulate 写到容器上（Pixi 会乘到子对象），selfModulate 只写到内容层', async () => {
+    const { g, sync } = await setup()
+    const s = g.scene.add(new Sprite2D({ name: 'S', texture: tex('s.png'), alpha: 0.5, modulate: 0xff8080 }))
+    const label = s.add(new Label({ name: 'L', text: 'hi', selfModulate: 0x00ff00 }))
+    sync()
+    const c = view(s)!
+    const sprite = c.children[0] as Sprite
+    expect([c.alpha, c.tint, sprite.tint]).toEqual([0.5, 0xff8080, 0xffffff])
+    expect((view(label)!.children[0] as Text).tint).toBe(0x00ff00)
+    expect(view(label)!.tint).toBe(0xffffff)
+
+    s.alpha = 1
+    s.selfModulate = 0x808080
+    sync()
+    expect([c.alpha, sprite.tint]).toEqual([1, 0x808080])
+  })
+})
+
+describe('alpha / modulate', () => {
+  it('截断到合法范围；不是默认值时出现在 dump 里', async () => {
+    const g = await createTestGame({ main: Scene })
+    const n = g.scene.add(new Node2D({ name: 'N', alpha: 2, modulate: 0x1000000 }))
+    expect([n.alpha, n.modulate, n.selfModulate]).toEqual([1, 0xffffff, 0xffffff])
+    n.alpha = -1
+    n.modulate = 0xff6666
+    n.selfModulate = 0x0000ff
+    expect(n.alpha).toBe(0)
+    expect(g.dump()).toContain('N (Node2D) position=(0, 0) alpha=0 modulate=#ff6666 selfModulate=#0000ff')
   })
 })

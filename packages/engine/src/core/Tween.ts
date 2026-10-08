@@ -54,7 +54,8 @@ export class Tween {
   }
 
   /**
-   * 在 `duration` 秒内把 target 的属性补间到目标值。支持 number 和 Vector2 属性。
+   * 在 `duration` 秒内把 target 的属性补间到目标值。支持 number 和 Vector2 属性；
+   * 颜色属性（Node2D 的 `modulate` / `selfModulate`）按 RGB 通道插值。
    * `ease` 默认线性。
    */
   to<T extends object>(target: T, props: TweenProps<T>, duration: number, ease?: EaseFn): this
@@ -82,7 +83,9 @@ export class Tween {
         update: (p) => {
           if (isTargetGone(target)) return
           const k = ease(p)
-          obj[key] = typeof start === 'number' ? start + ((end as number) - start) * k : start.lerp(end as Vector2, k)
+          if (typeof start !== 'number') obj[key] = start.lerp(end as Vector2, k)
+          else if (isColorProp(target, key)) obj[key] = lerpColor(start, end as number, k)
+          else obj[key] = start + ((end as number) - start) * k
         },
       })
     }
@@ -164,6 +167,23 @@ export class Tween {
 }
 
 const EPSILON = 1e-9
+
+/** 颜色属性（如 Node2D 的 modulate）：目标通过 `_colorProps` 声明。 */
+function isColorProp(target: object, key: string): boolean {
+  const props = (target as { _colorProps?: unknown })._colorProps
+  return props instanceof Set && props.has(key)
+}
+
+/** 0xRRGGBB 按通道线性插值。 */
+function lerpColor(a: number, b: number, k: number): number {
+  let out = 0
+  for (const shift of [16, 8, 0]) {
+    const ca = (a >> shift) & 0xff
+    const cb = (b >> shift) & 0xff
+    out |= Math.round(ca + (cb - ca) * k) << shift
+  }
+  return out
+}
 
 /** 目标是节点且已被销毁时，不再写入属性。 */
 function isTargetGone(target: object): boolean {

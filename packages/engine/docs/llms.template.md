@@ -22,7 +22,7 @@
 - **生命周期**：`enterTree()`（父先于子）→ `ready()`（子先于父，一生一次）→ 每帧 `process(dt)` / 固定 60Hz 的 `physicsProcess(dt)` → `exitTree()`（子先于父）。覆写时不需要调用 `super`。
 - **场景**：`Scene` 是树的根，同一时间一个。`static assets` 声明的资源在 `ready()` 之前加载完成；场景参数通过构造函数声明，用 `this.tree.changeScene(Cls, params)` 切换。
 - **场景树**：`this.tree` 提供 `input`、`audio`、`storage`、`physics`、`viewport`、`rng`、`paused`、`createTween()`、`createTimer()`、`getNodesInGroup()`、`autoload()`、`changeScene()`、`dump()`；时间：`time`（游戏时间，秒，按物理步累计，暂停时不走）、`physicsFrames`、`processFrames`。节点不在树里时访问 `this.tree` 会抛错（构造函数里不要用）。
-- **构造参数**：每个节点的构造函数接受一个选项对象，键就是它可写的属性：通用的 `name`、`groups`、`processMode`；`Node2D` 的 `position`、`rotation`、`scale`、`visible`、`zIndex`、`inputPickable`、`hitArea`；再加各节点自己的属性（如 `Label` 的 `text`（默认 `''`）、`fontSize`，`RigidBody2D` 的 `mass`、`bounce`）。
+- **构造参数**：每个节点的构造函数接受一个选项对象，键就是它可写的属性：通用的 `name`、`groups`、`processMode`；`Node2D` 的 `position`、`rotation`、`scale`、`visible`、`zIndex`、`alpha`、`modulate`、`selfModulate`、`inputPickable`、`hitArea`；再加各节点自己的属性（如 `Label` 的 `text`（默认 `''`）、`fontSize`，`RigidBody2D` 的 `mass`、`bounce`）。
 - **单位与坐标**：像素、y 轴向下、弧度（另有 `rotationDegrees`）、重力 px/s²。游戏坐标是设计分辨率（默认 750×1334）；`expand` 模式下屏幕多出来的部分向两侧对称扩展，贴边的 UI 用 `this.tree.viewport.visibleRect` / `safeRect`。
 - **每帧顺序**：处理输入队列（指针信号在这里触发）→ 若干次物理步（每步：所有节点的 `physicsProcess`，再推进物理世界、写回刚体位置、派发接触信号）→ `process` → Tween / Timer → `callDeferred` → `queueFree`。每帧最多补 2 个物理步。
 
@@ -100,12 +100,30 @@ pop() {
 }
 ```
 
+## 透明度与颜色
+
+`Node2D` 有三个外观属性，都可以写在构造参数里、也都可以补间：
+
+| 属性 | 默认 | 作用范围 | 说明 |
+|---|---|---|---|
+| `alpha` | `1` | 自己和子节点 | 不透明度 0–1（超出截断），父子相乘。为 0 时仍能被点中，要隐藏用 `visible` |
+| `modulate` | `0xffffff` | 自己和子节点 | 颜色乘子 0xRRGGBB：每个像素乘上它。`0xff6666` 偏红、`0x888888` 变暗；只能变暗或偏色，不能变亮 |
+| `selfModulate` | `0xffffff` | 只有自己的贴图 / 文字 | 同上，但不影响子节点（如 Boss 变红而血条不变）；与 `modulate` 叠乘 |
+
+```ts
+// 受伤变红再恢复：颜色属性按 RGB 通道补间
+enemy.modulate = 0xff4040
+enemy.createTween().to(enemy, { modulate: 0xffffff }, 0.2)
+// 淡出后销毁
+fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
+```
+
 ## 节点清单
 
 | 节点 | 用途 | 关键成员 |
 |---|---|---|
 | `Node` | 基类 | `add` `remove` `queueFree` `callDeferred` `addToGroup` `createTween` `processMode` `tree` |
-| `Node2D` | 带变换 | `position` `x` `y` `rotation` `scale` `visible` `zIndex` `globalPosition` `toLocal` `toGlobal`；`inputPickable` `hitArea` + 信号 `pointerDown` `pointerMove` `pointerUp` `clicked` |
+| `Node2D` | 带变换 | `position` `x` `y` `rotation` `scale` `visible` `zIndex` `alpha` `modulate` `selfModulate` `globalPosition` `toLocal` `toGlobal`；`inputPickable` `hitArea` + 信号 `pointerDown` `pointerMove` `pointerUp` `clicked` |
 | `Scene` | 场景根 | `static assets` |
 | `Sprite2D` | 贴图 | `texture` `centered`（默认 true）`offset` `flipH` `flipV` |
 | `Label` | 文字 | `text` `fontSize` `color` `fontWeight` `align` `verticalAlign` `stroke` `wrapWidth` `lineHeight` |
@@ -140,7 +158,7 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 | 节点 | 属性 |
 |---|---|
 | 所有节点 | `groups`、`processMode` |
-| `Node2D` 及子类 | `position`（总是显示）、`rotationDegrees`、`scale`、`visible`、`zIndex` |
+| `Node2D` 及子类 | `position`（总是显示）、`rotationDegrees`、`scale`、`visible`、`zIndex`、`alpha`、`modulate` / `selfModulate`（`#ff6666` 形式） |
 | `Sprite2D` | `texture`（路径）、`centered`、`offset`、`flipH`、`flipV` |
 | `Label` | `text`（总是显示，含空格时加引号）、`fontSize`、`align` |
 | `RigidBody2D` | `mass`、`friction`、`bounce`、`linearVelocity`（运动时）、`sleeping`、`collisionLayer`、`collisionMask` |

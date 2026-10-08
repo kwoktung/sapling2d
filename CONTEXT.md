@@ -17,6 +17,7 @@ Code-first、agent-friendly 的 2D 游戏引擎。基于 PixiJS v8（渲染）+ 
 - **Focus** — 平台的前后台事件统一为 `tree.focusChanged(focused)`。默认（`pauseOnBackground: true`）后台时挂起整个主循环，回到前台时清空物理累加器。
 - **Platform** — 引擎访问外部世界的唯一接口（canvas、时间、rAF、输入事件源、资源读取、音频、存储、屏幕信息）。实现：`BrowserPlatform`、`WechatPlatform`、`HeadlessPlatform`。核心代码禁止直接访问 `window` / `document` / `wx`。
 - **Headless** — 不创建渲染器、仅运行节点树与物理的模式，用于确定性测试（`createTestGame`）。
+- **alpha / modulate** — `Node2D` 的外观属性：`alpha`（不透明度 0–1）和 `modulate`（颜色乘子 0xRRGGBB）作用于整个子树、父子相乘；`selfModulate` 只作用于节点自己的贴图 / 文字。补间时颜色按 RGB 通道插值。
 - **Render sync** — 渲染层每帧把脏节点状态同步到懒创建的 Pixi 显示对象。用户代码不接触 Pixi 对象（逃生口：`unsafePixi`）。非 Node2D 节点不产生显示对象，其子节点挂到最近的 Node2D 祖先下。
 - **Texture / tex()** — 贴图资源句柄，`tex('fruit.png')` 按路径去重；路径相对于资源目录。
 - **Assets directory** — 游戏项目的资源放在 `<root>/public/assets/`（Vite 原样发布，页面地址 `assets/<path>`，即 `startGame` 默认的 `assetsBaseUrl`）。`tex` / `sfx` / `music` 里的路径与平台无关；微信构建时拷贝进小游戏包（工单 16/17）。`sapling2d/vite` 插件在构建和开发时检查字面量路径是否存在，缺失时报错并给出最相近的文件名；动态拼接的路径不检查。

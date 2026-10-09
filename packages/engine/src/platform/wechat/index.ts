@@ -64,6 +64,7 @@ export async function startGame<S extends Scene>(options: WechatGameOptions<S>):
     // iOS 没有 OES_element_index_uint：批次超过 65535 个索引（约 1 万个精灵）才有影响，降级为 debug 日志
     quietWarnings: [/does not support 32 index buffer/],
     ...(options.background !== undefined ? { background: options.background } : {}),
+    ...(options.pixelArt ? { pixelArt: true } : {}),
   })
   const game = await Game.create({ ...options, platform, renderer })
   game.start()

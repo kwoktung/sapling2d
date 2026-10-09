@@ -16,6 +16,8 @@ export interface PixiRendererOptions {
   webglVersion?: 1 | 2
   /** 初始化期间这些 Pixi 警告降级为 console.debug（平台已知、无害的警告）。 */
   quietWarnings?: RegExp[]
+  /** 像素风：贴图用最近邻采样，精灵的顶点对齐到物理像素。见 `GameOptions` 里的同名选项。 */
+  pixelArt?: boolean
 }
 
 /** 每个 Node2D 对应的显示对象。 */
@@ -73,8 +75,8 @@ export class PixiRenderer implements Renderer {
   /**
    * @internal 测试用：不初始化 WebGL，只做场景树到显示对象的同步（`sync()`），不能调用 `render()`。
    */
-  static _createForSyncTests(): PixiRenderer {
-    return new PixiRenderer(null as unknown as WebGLRenderer)
+  static _createForSyncTests(options: { pixelArt?: boolean } = {}): PixiRenderer {
+    return new PixiRenderer(null as unknown as WebGLRenderer, options.pixelArt ?? false)
   }
 
   /** @internal 测试用：根容器。 */
@@ -82,8 +84,15 @@ export class PixiRenderer implements Renderer {
     return this._sceneContainer
   }
 
-  private constructor(renderer: WebGLRenderer) {
+  /**
+   * 像素风：图片源用最近邻采样；Sprite2D 的贴图层打开 Pixi 的 `roundPixels`（在顶点着色器里把顶点对齐到物理像素）。
+   * 只对贴图层打开，不对整个渲染器：文字、Graphics 和视口遮罩不受影响。
+   */
+  private readonly _pixelArt: boolean
+
+  private constructor(renderer: WebGLRenderer, pixelArt: boolean) {
     this._renderer = renderer
+    this._pixelArt = pixelArt
     this._sceneContainer.sortableChildren = true
     this._root.addChild(this._sceneContainer)
   }
@@ -111,7 +120,7 @@ export class PixiRenderer implements Renderer {
     } finally {
       console.warn = warn
     }
-    return new PixiRenderer(renderer)
+    return new PixiRenderer(renderer, options.pixelArt ?? false)
   }
 
   render(tree: SceneTree): void {
@@ -199,7 +208,7 @@ export class PixiRenderer implements Renderer {
       view = { container: new Container({ label: node.name }), transformVersion: -1, version: -1, frame: 0 }
       view.container.sortableChildren = true
       if (node instanceof Sprite2D) {
-        view.sprite = new Sprite({ label: CONTENT_LABEL })
+        view.sprite = new Sprite({ label: CONTENT_LABEL, roundPixels: this._pixelArt })
         view.container.addChild(view.sprite)
       } else if (node instanceof Label) {
         view.text = new Text({ label: CONTENT_LABEL })
@@ -327,7 +336,7 @@ export class PixiRenderer implements Renderer {
     if (cached && cached.resource === resource) return cached.source
     cached?.source.destroy()
     // 显式构造 ImageSource：小游戏的 Image 过不了 Pixi 的自动类型识别（见 spikes/wechat/REPORT.md）
-    const source = new ImageSource({ resource: resource as never })
+    const source = new ImageSource({ resource: resource as never, ...(this._pixelArt ? { scaleMode: 'nearest' as const } : {}) })
     this._sources.set(base, { resource, source })
     return source
   }

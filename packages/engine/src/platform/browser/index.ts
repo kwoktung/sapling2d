@@ -28,6 +28,7 @@ export async function startGame<S extends Scene>(options: BrowserGameOptions<S>)
   const renderer = await PixiRenderer.create({
     canvas,
     ...(options.background !== undefined ? { background: options.background } : {}),
+    ...(options.pixelArt ? { pixelArt: true } : {}),
   })
   const game = await Game.create({ ...options, platform, renderer })
   game.start()

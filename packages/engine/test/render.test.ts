@@ -1,6 +1,6 @@
 import type { Container, Sprite, Text } from 'pixi.js'
 import { describe, expect, it } from 'vitest'
-import { Label, Node, Node2D, Scene, Sprite2D, tex, v } from 'sapling2d'
+import { Label, Node, Node2D, Scene, sheet, Sprite2D, tex, v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { PixiRenderer } from '../src/render/PixiRenderer'
 
@@ -173,5 +173,35 @@ describe('alpha / modulate', () => {
     n.selfModulate = 0x0000ff
     expect(n.alpha).toBe(0)
     expect(g.dump()).toContain('N (Node2D) position=(0, 0) alpha=0 modulate=#ff6666 selfModulate=#0000ff')
+  })
+})
+
+describe('pixelArt', () => {
+  const sync = async (pixelArt: boolean) => {
+    const g = await createTestGame({ main: Scene })
+    const r = PixiRenderer._createForSyncTests({ pixelArt })
+    const hero = tex(`pixel-hero-${pixelArt}.png`)
+    const frames = sheet(`pixel-sheet-${pixelArt}.png`, { columns: 2, rows: 1 })
+    hero._setLoaded({ width: 16, height: 16 }, 16, 16) // 假图片对象：同步阶段不会上传到 GPU
+    frames.texture._setLoaded({ width: 32, height: 16 }, 32, 16)
+    const a = g.scene.add(new Sprite2D({ texture: hero }))
+    const b = g.scene.add(new Sprite2D({ texture: frames.frame(1) }))
+    const label = g.scene.add(new Label({ text: 'hi' }))
+    r.sync(g.tree)
+    const content = (n: Node2D) => view(n)!.children[0] as Sprite | Text
+    return {
+      scaleModes: [a, b].map((n) => (content(n) as Sprite).texture.source.scaleMode),
+      roundPixels: [a, b, label].map((n) => content(n).roundPixels),
+    }
+  }
+
+  it('打开后贴图（包括图集的帧）用最近邻采样；默认是线性采样', async () => {
+    expect((await sync(true)).scaleModes).toEqual(['nearest', 'nearest'])
+    expect((await sync(false)).scaleModes).toEqual(['linear', 'linear'])
+  })
+
+  it('打开后精灵的顶点对齐到物理像素（Pixi 的 roundPixels），文字不对齐；默认都不对齐', async () => {
+    expect((await sync(true)).roundPixels).toEqual([true, true, false])
+    expect((await sync(false)).roundPixels).toEqual([false, false, false])
   })
 })

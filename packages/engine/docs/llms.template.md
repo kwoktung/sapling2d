@@ -14,7 +14,7 @@
 | `sapling2d/testing` | `createTestGame(options)`：无头运行，测试用 |
 | `sapling2d/vite` | `sapling()` 资源路径检查；`saplingWechat()` 构建小游戏；`startLogServer()` 接收真机日志 |
 
-启动参数（三个入口通用）：`main`（入口场景类）、`autoloads`、`actions`、`design`（默认 750×1334、`expand`）、`physics`、`seed`、`storagePrefix`、`pauseOnBackground`；浏览器和小游戏另有 `background`。
+启动参数（三个入口通用）：`main`（入口场景类）、`autoloads`、`actions`、`design`（默认 750×1334、`expand`）、`physics`、`seed`、`storagePrefix`、`pauseOnBackground`、`pixelArt`（见“贴图与文字”，无头模式下没有效果）；浏览器和小游戏另有 `background`。
 
 ## 核心概念
 
@@ -39,6 +39,13 @@
 ### 贴图与文字
 
 <!-- example:sprite-label -->
+
+像素风游戏（小图放大显示）在启动参数里设 `pixelArt: true`：所有贴图用最近邻采样，放大后不模糊；绘制时精灵的每个顶点对齐到物理像素，缩放倍数不是整数时也没有半像素的模糊边缘。文字不受影响。
+只影响画面，节点的 `position` 照常是小数。对齐是按顶点做的，缩放倍数不是整数时有两个代价：
+- 移动中的精灵宽度可能在相邻两个物理像素之间跳动；
+- 旋转或缩放中的精灵，四个角各自对齐，形状会轻微抖动。像素风游戏里尽量不要旋转、缩放精灵。
+
+要完全避免，就让设计分辨率按整数倍放大到屏幕。
 
 ### 信号
 

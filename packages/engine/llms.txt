@@ -627,4 +627,4 @@ for (let i = 0; i < bullets.length; i++) {
 ## 更多
 
 - 术语表：仓库根目录 `CONTEXT.md`；架构决策：`docs/adr/`；微信环境实测：`spikes/wechat/REPORT.md`。
-- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。
+- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/plane`（飞机大战：图集、帧动画、不用物理引擎的碰撞、暂停）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。

@@ -15,6 +15,7 @@ import type { Texture } from '../core/assets'
 import { identityAffine, invertAffine } from '../math/Affine'
 import type { Rect2 } from '../math/Rect2'
 import { TILE_CHUNK, type TileMapLayer } from '../nodes/TileMapLayer'
+import type { TextureCache } from './TextureCache'
 
 /** TileMapLayer 的显示对象：内容层里每个区块一个 Mesh（ADR 0008），区块进入屏幕时才创建。 */
 export interface TileView {
@@ -43,8 +44,8 @@ export interface TileMapRendererOptions {
   pixelArt: boolean
   /** 能否编译着色器程序：编译要探测 WebGL 的精度，同步测试（没有 WebGL）里不编译。 */
   compileShaders: boolean
-  /** 贴图句柄 → Pixi 贴图（由渲染器的贴图缓存提供，图块集和精灵共用图片源）。 */
-  pixiTexture: (texture: Texture) => PixiTexture
+  /** 渲染器的贴图缓存：图块集和精灵共用图片源。 */
+  textures: TextureCache
 }
 
 /**
@@ -54,7 +55,7 @@ export interface TileMapRendererOptions {
 export class TileMapRenderer {
   private readonly _pixelArt: boolean
   private readonly _compileShaders: boolean
-  private readonly _pixiTexture: (texture: Texture) => PixiTexture
+  private readonly _textures: TextureCache
   /**
    * 图块集的整张图 → 区块 Mesh 用的着色器。每张图一个，而不用 Pixi 共用的 Mesh 着色器：
    * 共用的着色器会一直绑着最后画过的图，释放那张图时 Pixi 会警告“贴图还绑在着色器上”。这里先销毁着色器，再释放图。
@@ -71,7 +72,7 @@ export class TileMapRenderer {
   constructor(options: TileMapRendererOptions) {
     this._pixelArt = options.pixelArt
     this._compileShaders = options.compileShaders
-    this._pixiTexture = options.pixiTexture
+    this._textures = options.textures
   }
 
   /** 当前的着色器数量（每张图块集图片一个）。 */
@@ -197,7 +198,7 @@ export class TileMapRenderer {
   }
 
   private _createChunk(node: TileMapLayer, tv: TileView, x: number, y: number): TileChunk {
-    const texture = this._pixiTexture(node.tileSet.texture)
+    const texture = this._textures.get(node.tileSet.texture)
     const quads = TILE_CHUNK * TILE_CHUNK
     const geometry = new MeshGeometry({
       positions: new Float32Array(quads * 8),

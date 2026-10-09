@@ -6,6 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run",
+    "bench": "SAPLING_BENCH=1 vitest run",
+    "bench:jitless": "SAPLING_BENCH=1 SAPLING_JITLESS=1 vitest run",
     "typecheck": "tsc -p tsconfig.json",
     "dev:wechat": "vite build -c vite.wechat.config.ts --watch",
     "build:wechat": "vite build -c vite.wechat.config.ts",

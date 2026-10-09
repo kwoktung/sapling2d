@@ -13,17 +13,21 @@ export class Knife extends Sprite2D {
   /** 捡拾判定的圆（HitTester）。 */
   readonly hitShape = PICK_SHAPE
   owner: Fighter | null = null
+  /** 被打飞、还没落地：不能捡。 */
+  flying = false
+  /** 游戏时间到这之后才能再次造成伤害（`tree.time`）。 */
+  hitReadyAt = 0
 
   constructor(options: Sprite2DOptions = {}) {
     super({ name: 'Knife', texture: ASSETS.knife, ...options })
   }
 
-  /** HitTester 只让地上的刀参与捡拾：有主人的刀算失效，`HitTester.compact` 会把它从地上的刀里去掉。 */
+  /** HitTester 只让落在地上的刀参与捡拾：有主人或还在飞的刀算失效，`HitTester.compact` 会把它从地上的刀里去掉。 */
   get dead(): boolean {
-    return this.owner !== null
+    return this.owner !== null || this.flying
   }
 
   protected override dumpProps(): Record<string, unknown> {
-    return { ...super.dumpProps(), held: this.owner !== null || undefined }
+    return { ...super.dumpProps(), held: this.owner !== null || undefined, flying: this.flying || undefined }
   }
 }

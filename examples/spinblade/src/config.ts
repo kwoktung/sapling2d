@@ -9,6 +9,9 @@ export const FIGHTER = {
   box: 56,
   /** 推挤的强度：每个物理步消除剩下重叠的比例（0–1）。 */
   pushStiffness: 0.5,
+  hp: 10,
+  /** 受伤时变红的时间。 */
+  flashTime: 0.15,
 }
 
 export const PLAYER = {
@@ -28,6 +31,14 @@ export const RING = {
 export const KNIFE = {
   /** 地上的刀被捡起的距离：角色身体碰到这个圆就算捡到。 */
   pickRadius: 18,
+  /** 碰撞盒（贴图 14×64，碰撞盒略小）：沿刀身的长度、宽度。 */
+  length: 60,
+  width: 12,
+  /** 同一把刀砍中身体后，多久才能再次造成伤害。 */
+  hitCooldown: 0.5,
+  /** 刀碰刀后被打飞：飞出的距离和时间。 */
+  flyDistance: 150,
+  flyTime: 0.35,
 }
 
 /** 绘制顺序：地上的刀在角色下面，刀圈在角色上面。 */

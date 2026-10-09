@@ -91,3 +91,28 @@ export const WAVES = {
 }
 
 export const BACKGROUND_SPEED = 120
+
+export const BOSS = {
+  /** 第一个 Boss 的出现时间（战斗开始后，秒；警告从这时开始）。 */
+  firstAt: 60,
+  /** 击败 Boss 后，下一个 Boss 在恢复出怪后多久出现。 */
+  interval: 75,
+  /** 击败后多久恢复普通出怪。 */
+  resumeDelay: 3,
+  warningSeconds: 2.5,
+  /** 从屏幕上方飞到位的时间；期间打不动。 */
+  enterSeconds: 2.5,
+  /** 到位后离可见区域顶边的高度。 */
+  hoverY: 300,
+  hp: 300,
+  /** 每个 Boss 比上一个多多少血。 */
+  hpGrowth: 1.5,
+  radius: 100,
+  score: 10000,
+  sway: 220,
+  swayHz: 0.12,
+  bulletRadius: 11,
+  /** 血量比例低于这些值时进入第二、第三阶段。 */
+  phase2Below: 0.6,
+  phase3Below: 0.3,
+}

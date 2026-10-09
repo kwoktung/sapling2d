@@ -1,7 +1,8 @@
 import { AnimatedSprite2D, AudioStreamPlayer, Node2D, Scene, v, type Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
-import { ENEMIES, ENEMY_BULLET, PLAYER, WAVES, WEAPON, type EnemyKind, type PowerUpKind } from '../config'
+import { BOSS, ENEMIES, ENEMY_BULLET, PLAYER, WAVES, WEAPON, type EnemyKind, type PowerUpKind } from '../config'
 import { Background } from '../nodes/Background'
+import { Boss } from '../nodes/Boss'
 import { bounds, setBounds } from '../nodes/bounds'
 import { Bullet } from '../nodes/Bullet'
 import { compact, HitTester } from '../nodes/collision'
@@ -31,6 +32,11 @@ const VOLLEYS: readonly (readonly [number, number])[][] = [
 const GAME_OVER_DELAY = 1.5
 
 /**
+ * 出怪的节奏：普通出怪（waves）→ 到时间先警告（warning）→ Boss 战（boss）→ 击败后歇一会儿（cleared）→ 回到普通出怪。
+ */
+type Stage = 'waves' | 'warning' | 'boss' | 'cleared'
+
+/**
  * 战斗场景。所有会动的东西各自在 process 里移动；本场景负责输入、射击、出怪和碰撞。
  * 碰撞不用物理引擎（几百颗子弹会超出 iOS 小游戏的刚体预算），用 HitTester 做圆形判定。
  */
@@ -43,6 +49,7 @@ export class BattleScene extends Scene implements EnemyHost {
   /** 统计：射出的子弹数、射击轮数、出怪数和出怪记录（测试、调试用）。 */
   firedShots = 0
   firedVolleys = 0
+  enemyBulletsFired = 0
   spawned = 0
   readonly spawnLog: { kind: EnemyKind; x: number; t: number }[] = []
 
@@ -50,7 +57,13 @@ export class BattleScene extends Scene implements EnemyHost {
   readonly enemyBullets: Bullet[] = []
   readonly enemies: Enemy[] = []
   readonly powerUps: PowerUp[] = []
+  /** 在场的 Boss（同一时间最多一个）。 */
+  boss: Boss | null = null
+  /** 已经出现过的 Boss 数。 */
+  bossCount = 0
 
+  /** 战场的所有图层都挂在它下面：震屏时整体晃动，界面不动。 */
+  private _world!: Node2D
   private _playerBulletLayer!: Node2D
   private _enemyLayer!: Node2D
   private _powerUpLayer!: Node2D
@@ -61,6 +74,12 @@ export class BattleScene extends Scene implements EnemyHost {
   private _fireIn = 0
   private _spawnIn = 0.6
   private _gameOver = false
+  private _stage: Stage = 'waves'
+  /** 当前阶段的计时：warning / cleared 剩余秒数。 */
+  private _stageLeft = 0
+  /** 战斗时间到这里时开始下一个 Boss 的警告。 */
+  private _nextBossAt = BOSS.firstAt
+  private _shake = 0
   /** 正在拖动的指针和它上一帧的位置。 */
   private _dragId: number | null = null
   private _dragLast: Vector2 | null = null
@@ -75,15 +94,16 @@ export class BattleScene extends Scene implements EnemyHost {
     setBounds(this.tree.viewport.visibleRect)
     this.tree.viewport.resized.connect(() => setBounds(this.tree.viewport.visibleRect), this)
 
-    // 绘制顺序 = 添加顺序：背景、玩家子弹、敌机、道具、玩家、敌方子弹、爆炸、界面
+    // 绘制顺序 = 添加顺序：背景、玩家子弹、敌机（含 Boss）、道具、玩家、敌方子弹、爆炸，最后是界面
     this.add(new Background({ name: 'Background' }))
-    this._playerBulletLayer = this.add(new Node2D({ name: 'PlayerBullets' }))
-    this._enemyLayer = this.add(new Node2D({ name: 'Enemies' }))
-    this._powerUpLayer = this.add(new Node2D({ name: 'PowerUps' }))
-    this.player = this.add(new Player(v((bounds.left + bounds.right) / 2, bounds.bottom - PLAYER.bottomMargin)))
+    const world = (this._world = this.add(new Node2D({ name: 'World' })))
+    this._playerBulletLayer = world.add(new Node2D({ name: 'PlayerBullets' }))
+    this._enemyLayer = world.add(new Node2D({ name: 'Enemies' }))
+    this._powerUpLayer = world.add(new Node2D({ name: 'PowerUps' }))
+    this.player = world.add(new Player(v((bounds.left + bounds.right) / 2, bounds.bottom - PLAYER.bottomMargin)))
     this.player.god = this.params.godMode ?? false
-    this._enemyBulletLayer = this.add(new Node2D({ name: 'EnemyBullets' }))
-    this._fxLayer = this.add(new Node2D({ name: 'Effects' }))
+    this._enemyBulletLayer = world.add(new Node2D({ name: 'EnemyBullets' }))
+    this._fxLayer = world.add(new Node2D({ name: 'Effects' }))
     this.hud = this.add(new Hud({ name: 'Hud' }))
     this.hud.setLives(this.player.lives)
     const pause = this.add(new PauseController())
@@ -101,8 +121,10 @@ export class BattleScene extends Scene implements EnemyHost {
       this._movePlayer(dt)
       this._fire(dt)
     }
-    if (this.params.waves ?? true) this._spawnWaves(dt)
+    if (this.params.waves ?? true) this._updateStage(dt)
     this._collide()
+    this._updateShake(dt)
+    if (this.boss) this.hud.setBossRatio(this.boss.hp / this.boss.maxHp)
     compact(this.playerBullets)
     compact(this.enemyBullets)
     compact(this.enemies)
@@ -118,10 +140,30 @@ export class BattleScene extends Scene implements EnemyHost {
     return enemy
   }
 
-  spawnEnemyBullet(position: Vector2, velocity: Vector2): Bullet {
-    const b = this._enemyBulletLayer.add(new Bullet({ name: 'EnemyBullet', texture: ASSETS.sprites.get('bullet_enemy'), position, vx: velocity.x, vy: velocity.y, radius: ENEMY_BULLET.radius }))
+  spawnEnemyBullet(position: Vector2, velocity: Vector2, style: 'normal' | 'boss' = 'normal'): Bullet {
+    const boss = style === 'boss'
+    const b = this._enemyBulletLayer.add(
+      new Bullet({
+        name: 'EnemyBullet',
+        texture: ASSETS.sprites.get(boss ? 'bullet_boss' : 'bullet_enemy'),
+        position,
+        vx: velocity.x,
+        vy: velocity.y,
+        radius: boss ? BOSS.bulletRadius : ENEMY_BULLET.radius,
+      }),
+    )
     this.enemyBullets.push(b)
+    this.enemyBulletsFired++
     return b
+  }
+
+  /** 让 Boss 入场（血量随出场次数增长），显示血条。 */
+  spawnBoss(): Boss {
+    const hp = Math.round(BOSS.hp * BOSS.hpGrowth ** this.bossCount)
+    this.bossCount++
+    this.boss = this._enemyLayer.add(new Boss(hp, this))
+    this.hud.showBossBar()
+    return this.boss
   }
 
   spawnPowerUp(kind: PowerUpKind, position: Vector2): PowerUp {
@@ -197,6 +239,32 @@ export class BattleScene extends Scene implements EnemyHost {
 
   // ---------------------------------------------------------------- 出怪
 
+  private _updateStage(dt: number) {
+    switch (this._stage) {
+      case 'waves':
+        if (this._time >= this._nextBossAt) {
+          this._stage = 'warning'
+          this._stageLeft = BOSS.warningSeconds
+          this.hud.showWarning(BOSS.warningSeconds)
+        } else this._spawnWaves(dt)
+        break
+      case 'warning':
+        if ((this._stageLeft -= dt) <= 0) {
+          this._stage = 'boss'
+          this.spawnBoss()
+        }
+        break
+      case 'boss':
+        break // 等 Boss 被击败（_destroyBoss 切到 cleared）
+      case 'cleared':
+        if ((this._stageLeft -= dt) <= 0) {
+          this._stage = 'waves'
+          this._nextBossAt = this._time + BOSS.interval
+        }
+        break
+    }
+  }
+
   private _spawnWaves(dt: number) {
     this._spawnIn -= dt
     while (this._spawnIn <= 0) {
@@ -230,10 +298,31 @@ export class BattleScene extends Scene implements EnemyHost {
       if (enemy.hit(WEAPON.damage)) this._destroyEnemy(enemy)
       return true
     })
+    const boss = this.boss
+    const bosses = BOSSES
+    bosses.length = 0
+    if (boss) {
+      bosses.push(boss)
+      // 玩家子弹 × Boss：入场途中子弹直接穿过
+      if (!boss.entering) {
+        this._hits.forEachHit(this.playerBullets, bosses, (bullet) => {
+          bullet.kill()
+          if (boss.hit(WEAPON.damage)) this._destroyBoss(boss)
+          return true
+        })
+      }
+    }
     const p = this.player
     if (!p.alive) return
     const players = PLAYERS
     players[0] = p
+    // Boss × 玩家：掉命，Boss 不受影响
+    if (this.boss) {
+      this._hits.forEachHit(bosses, players, () => {
+        if (!p.invincible) this._hurtPlayer()
+        return true
+      })
+    }
     // 敌方子弹 × 玩家
     this._hits.forEachHit(this.enemyBullets, players, (bullet) => {
       if (p.invincible) return true
@@ -270,6 +359,42 @@ export class BattleScene extends Scene implements EnemyHost {
     else if (r < drop.power + drop.life) this.spawnPowerUp('life', enemy.position)
   }
 
+  private _destroyBoss(boss: Boss) {
+    boss.kill()
+    this.boss = null
+    this.hud.hideBossBar()
+    this.score += BOSS.score
+    this.tree.audio.play(ASSETS.explode)
+    this._shake = 0.8
+    for (const b of this.enemyBullets) b.kill() // 清掉场上的敌方子弹：击败 Boss 后给玩家喘口气
+    // 连环爆炸：先一个大的，然后在机身各处每 0.12 秒炸一个
+    const at = boss.position
+    this._explode(at, 3)
+    for (let i = 1; i <= 6; i++) {
+      this.tree.createTimer(i * 0.12, { processAlways: false }).timeout.connect(() => {
+        const rng = this.tree.rng
+        this._explode(v(at.x + rng.randfRange(-110, 110), at.y + rng.randfRange(-70, 70)), rng.randfRange(1.2, 2))
+        this.tree.audio.play(ASSETS.explode, { volume: 0.5 })
+      }, this)
+    }
+    this.spawnPowerUp('power', v(at.x - 60, at.y))
+    this.spawnPowerUp('power', v(at.x + 60, at.y))
+    this.spawnPowerUp('life', v(at.x, at.y + 40))
+    if (this._stage === 'boss') {
+      this._stage = 'cleared'
+      this._stageLeft = BOSS.resumeDelay
+    }
+  }
+
+  /** 震屏：整个战场随机偏移，幅度随时间衰减。 */
+  private _updateShake(dt: number) {
+    if (this._shake <= 0) return
+    this._shake = Math.max(0, this._shake - dt)
+    const amp = 18 * this._shake
+    const rng = this.tree.rng
+    this._world.position = this._shake > 0 ? v(rng.randfRange(-amp, amp), rng.randfRange(-amp, amp)) : v(0, 0)
+  }
+
   private _hurtPlayer() {
     const p = this.player
     if (!p.hurt()) return
@@ -298,5 +423,6 @@ export class BattleScene extends Scene implements EnemyHost {
   }
 }
 
-/** 只有玩家一个元素的数组（复用，不每帧分配）。 */
+/** 只有玩家 / Boss 一个元素的数组（复用，不每帧分配）。 */
 const PLAYERS: Player[] = []
+const BOSSES: Boss[] = []

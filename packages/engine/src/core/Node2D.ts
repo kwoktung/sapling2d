@@ -1,3 +1,4 @@
+import { identityAffine, type Affine } from '../math/Affine'
 import { Rect2 } from '../math/Rect2'
 import { Transform2D } from '../math/Transform2D'
 import { Vector2 } from '../math/Vector2'
@@ -219,11 +220,49 @@ export class Node2D extends Node {
    * 在 CanvasLayer 下面时只算到 CanvasLayer 为止，结果是设计坐标（屏幕上的位置）。
    */
   get globalTransform(): Transform2D {
-    let t = this.transform
-    for (let p = this._canvasParent; p; p = p._canvasParent) {
-      if (p instanceof Node2D) t = p.transform.multiply(t)
+    const m = _scratch
+    this._computeGlobalInto(m)
+    return new Transform2D(m.a, m.b, m.c, m.d, m.tx, m.ty)
+  }
+
+  /** @internal 和 `globalTransform` 相同，但用数字累乘写进 `out`，不分配内存（每帧都跑的路径用）。 */
+  _computeGlobalInto(out: Affine): void {
+    let a = 1
+    let b = 0
+    let c = 0
+    let d = 1
+    let tx = 0
+    let ty = 0
+    for (let n: Node | null = this; n; n = n._canvasParent) {
+      if (!(n instanceof Node2D)) continue
+      // 这一级的局部变换 L = 平移 · 旋转 · 缩放；全局 = L · 已经算好的部分
+      const s = n.scale
+      const r = n.rotation
+      const cos = r === 0 ? 1 : Math.cos(r)
+      const sin = r === 0 ? 0 : Math.sin(r)
+      const la = cos * s.x
+      const lb = sin * s.x
+      const lc = -sin * s.y
+      const ld = cos * s.y
+      const na = la * a + lc * b
+      const nb = lb * a + ld * b
+      const nc = la * c + lc * d
+      const nd = lb * c + ld * d
+      const ntx = la * tx + lc * ty + n.x
+      const nty = lb * tx + ld * ty + n.y
+      a = na
+      b = nb
+      c = nc
+      d = nd
+      tx = ntx
+      ty = nty
     }
-    return t
+    out.a = a
+    out.b = b
+    out.c = c
+    out.d = d
+    out.tx = tx
+    out.ty = ty
   }
 
   /** 全局旋转（弧度）。 */
@@ -332,3 +371,6 @@ export function clampColor(value: number): number {
 export function hex(color: number): string {
   return '#' + color.toString(16).padStart(6, '0')
 }
+
+/** `globalTransform` 的中间结果（复用；同步计算完马上读出，不会被重入）。 */
+const _scratch = identityAffine()

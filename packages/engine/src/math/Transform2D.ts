@@ -1,3 +1,4 @@
+import { identityAffine, invertAffine } from './Affine'
 import { Vector2 } from './Vector2'
 
 /**
@@ -45,16 +46,9 @@ export class Transform2D {
 
   /** 逆变换；缩放为 0 时不可逆，返回 null。 */
   inverse(): Transform2D | null {
-    const det = this.a * this.d - this.b * this.c
-    if (det === 0) return null
-    return new Transform2D(
-      this.d / det,
-      -this.b / det,
-      -this.c / det,
-      this.a / det,
-      (this.c * this.ty - this.d * this.tx) / det,
-      (this.b * this.tx - this.a * this.ty) / det,
-    )
+    const m = _scratch
+    if (!invertAffine(this, m)) return null
+    return new Transform2D(m.a, m.b, m.c, m.d, m.tx, m.ty)
   }
 
   apply(p: Vector2): Vector2 {
@@ -65,3 +59,6 @@ export class Transform2D {
     return new Vector2(this.tx, this.ty)
   }
 }
+
+/** `inverse()` 的中间结果（复用；同步计算完马上读出，不会被重入）。 */
+const _scratch = identityAffine()

@@ -230,13 +230,14 @@ describe('Particles2D 渲染', () => {
     pc.updateLocalTransform()
     const m = pc.localTransform
     p._computeGlobal()
+    const g = p._global
     // 节点全局变换 × 内容层变换 = 单位矩阵
-    const a = p._ga * m.a + p._gc * m.b
-    const b = p._gb * m.a + p._gd * m.b
-    const c = p._ga * m.c + p._gc * m.d
-    const d = p._gb * m.c + p._gd * m.d
-    const tx = p._ga * m.tx + p._gc * m.ty + p._gtx
-    const ty = p._gb * m.tx + p._gd * m.ty + p._gty
+    const a = g.a * m.a + g.c * m.b
+    const b = g.b * m.a + g.d * m.b
+    const c = g.a * m.c + g.c * m.d
+    const d = g.b * m.c + g.d * m.d
+    const tx = g.a * m.tx + g.c * m.ty + g.tx
+    const ty = g.b * m.tx + g.d * m.ty + g.ty
     for (const [got, want] of [[a, 1], [b, 0], [c, 0], [d, 1], [tx, 0], [ty, 0]] as const) expect(got).toBeCloseTo(want)
   })
 

@@ -69,6 +69,27 @@ function fighter(color, outline) {
 }
 save('player.png', fighter(0x3a8dde, 0x1d4f80))
 save('enemy.png', fighter(0xde4a3a, 0x80261d))
+// Boss：更大的紫色圆，眼睛更凶（贴图 120×120）
+{
+  const c = canvas(120, 120)
+  fillCircle(c, 60, 60, 60, 0x8a3ad6, 0x4a1a80, 6)
+  fillCircle(c, 40, 42, 11, 0xffffff, 0x222222, 3)
+  fillCircle(c, 80, 42, 11, 0xffffff, 0x222222, 3)
+  fillRect(c, 26, 26, 26, 6, 0x2a0a50) // 眉毛
+  fillRect(c, 68, 26, 26, 6, 0x2a0a50)
+  save('boss.png', c)
+}
+// 火花：中间亮、边缘渐隐的小圆点（白色，用 selfModulate 染色）
+{
+  const c = canvas(12, 12)
+  for (let y = 0; y < 12; y++) {
+    for (let x = 0; x < 12; x++) {
+      const d = Math.hypot(x + 0.5 - 6, y + 0.5 - 6) / 6
+      if (d < 1) setPx(c, x, y, 0xffffff, Math.round(255 * (1 - d * d)))
+    }
+  }
+  save('spark.png', c)
+}
 
 // 刀：14×64，刀尖朝上。上面 44px 是刀身（带刀尖），中间护手，下面刀柄
 const knife = canvas(14, 64)
@@ -137,7 +158,7 @@ const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x800000
 const props = (o) => Object.entries(o).map(([name, value]) => ({ name, type: typeof value === 'number' ? 'int' : typeof value === 'boolean' ? 'bool' : 'string', value }))
 let nextId = 1
 const point = (type, x, y, extra = {}) => ({ id: nextId++, name: '', type, x, y, width: 0, height: 0, rotation: 0, visible: true, point: true, ...extra })
-const objects = [point('Spawn', 16 * TILE, 38 * TILE)]
+const objects = [point('Spawn', 16 * TILE, 38 * TILE), point('Boss', 16 * TILE, 8 * TILE)]
 for (const [x, y, knives] of [[8, 8, 4], [24, 5, 6], [16, 19, 5], [6, 26, 3], [25, 28, 4]]) objects.push(point('Enemy', x * TILE, y * TILE, { properties: props({ knives }) }))
 // 地上散落的刀：随机位置，避开墙和石头（离格子中心不超过 16px）
 for (let n = 0; n < 40;) {
@@ -162,4 +183,4 @@ const map = {
 }
 writeFileSync(new URL('levels/tiles.json', OUT), JSON.stringify(tilesetFile, null, 1))
 writeFileSync(new URL('levels/arena.json', OUT), JSON.stringify(map))
-console.log('assets generated: player.png enemy.png knife.png stick-*.png tiles.png levels/arena.json levels/tiles.json')
+console.log('assets generated: player.png enemy.png boss.png knife.png spark.png stick-*.png tiles.png levels/arena.json levels/tiles.json')

@@ -13,7 +13,10 @@ async function start() {
 
 /** 把场地清空成只剩玩家：其他角色和地上的刀都不在附近，不干扰测试。 */
 function isolate(arena: Arena) {
-  arena.enemies.forEach((e, i) => (e.position = v(-2000 * (i + 1), -1000))) // 彼此离开，刀圈不会互相碰到
+  arena.enemies.forEach((e, i) => {
+    e.position = v(-2000 * (i + 1), -1000) // 彼此离开，刀圈不会互相碰到
+    e.passive = true // 站着不动
+  })
   for (const k of arena.groundKnives) k.position = v(-5000, -5000) // 和敌人分开放，否则会被敌人捡走
 }
 
@@ -222,7 +225,7 @@ describe('刀的碰撞', () => {
     e.position = v(p.x + p.ringRadius, p.y)
     const steps = 60
     g.step(steps)
-    const lost = FIGHTER.hp - e.hp
+    const lost = e.maxHp - e.hp
     expect(lost).toBeGreaterThan(0)
     // 每把刀每 hitCooldown 秒最多砍一次
     expect(lost).toBeLessThanOrEqual(p.knives.length * (Math.floor(steps / 60 / KNIFE.hitCooldown) + 1))

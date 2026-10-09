@@ -5,7 +5,7 @@ import { Fighter } from './Fighter'
 /** 玩家：摇杆或方向键移动（斜着走不更快；摇杆推得越远走得越快）。 */
 export class Player extends Fighter {
   constructor(x: number, y: number) {
-    super('Player', ASSETS.player, x, y, RING.spin)
+    super({ name: 'Player', texture: ASSETS.player, x, y, spin: RING.spin, hp: PLAYER.hp })
   }
 
   protected think(): void {

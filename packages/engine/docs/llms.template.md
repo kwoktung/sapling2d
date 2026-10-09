@@ -173,6 +173,21 @@
   `tree.viewport.screenToWorld` / `worldToScreen` 换算窗口坐标，`designToWorld` / `worldToDesign` 换算设计坐标（屏幕上的位置）；`visibleWorldRect` 是屏幕上可见的世界范围（`visibleRect` 是设计坐标）。
   手指按住不动而相机移动时，`pressedPointers` / `pointerPosition` 每帧按新的相机位置更新。
 - 有相机时，固定在屏幕上的界面（分数、按钮）要放在 `CanvasLayer` 里，否则会跟着画面一起移走。
+- **屏幕震动**没有专门的接口：用 Tween 把 `offset` 随机抖几下再回到 0（上一次没抖完先 `kill()`）。在边界附近会被 `limit*` 截掉一部分。
+
+```ts
+#shake: Tween | null = null
+shake(camera: Camera2D, strength: number, duration: number) {
+  this.#shake?.kill()
+  const rng = this.tree.rng
+  const t = camera.createTween()
+  for (let i = 0; i < 4; i++) {
+    const s = strength * (1 - i / 4) // 越抖越小
+    t.to(camera, { offset: v(rng.randfRange(-s, s), rng.randfRange(-s, s)) }, duration / 5)
+  }
+  this.#shake = t.to(camera, { offset: Vector2.ZERO }, duration / 5)
+}
+```
 
 ### 界面层（CanvasLayer）
 
@@ -388,4 +403,4 @@ for (let i = 0; i < bullets.length; i++) {
 ## 更多
 
 - 术语表：仓库根目录 `CONTEXT.md`；架构决策：`docs/adr/`；微信环境实测：`spikes/wechat/REPORT.md`。
-- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/plane`（飞机大战：图集、帧动画、粒子、用 HitTester 做碰撞、暂停）、`examples/platformer`（横版跳跃：Tiled 关卡、CharacterBody2D、Camera2D、CanvasLayer 的 HUD、屏幕按钮、像素风、横屏）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。
+- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/plane`（飞机大战：图集、帧动画、粒子、用 HitTester 做碰撞、暂停）、`examples/platformer`（横版跳跃：Tiled 关卡、CharacterBody2D、Camera2D、CanvasLayer 的 HUD、屏幕按钮、像素风、横屏）、`examples/spinblade`（俯视角转刀：摇杆、俯视角 CharacterBody2D、旋转矩形的命中判定（游戏自己的 KnifeCollider）、打击停顿、屏幕震动、粒子、ColorRect 血条、Boss）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。

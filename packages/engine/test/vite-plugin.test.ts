@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { build } from 'vite'
 import { afterEach, describe, expect, it } from 'vitest'
-import { findAssetReferences, sapling } from 'sapling2d/vite'
+import { fileURLToPath } from 'node:url'
+import { checkTiledFiles, findAssetReferences, sapling } from 'sapling2d/vite'
 
 describe('findAssetReferences', () => {
   it('找出 tex / sfx / music 的字面量路径及行列号', () => {
@@ -25,6 +26,17 @@ describe('findAssetReferences', () => {
 
   it('tileset：检查第一个参数（图集图片路径）', () => {
     expect(findAssetReferences("const T = tileset('tiles/ground.png', { tileSize: 16 })")).toEqual([{ fn: 'tileset', path: 'tiles/ground.png', line: 1, column: 10 }])
+  })
+
+  it('tiledMap：检查关卡文件路径；关卡引用的外部图块集和图片也要存在', () => {
+    expect(findAssetReferences("tiledMap('levels/1-1.json')")).toEqual([{ fn: 'tiledMap', path: 'levels/1-1.json', line: 1, column: 0 }])
+    const fixtures = fileURLToPath(new URL('fixtures/tiled', import.meta.url))
+    // 测试用的关卡引用了 tiles/terrain.png 和 tiles/sky.png，这两张图故意没有放
+    const { problems, files } = checkTiledFiles(join(fixtures, 'levels/1-1.json'), fixtures)
+    expect(problems.map((p) => `${p.ref} ${p.reason}`)).toEqual(['terrain.png does not exist', '../tiles/sky.png does not exist'])
+    expect(files.map((f) => f.slice(fixtures.length + 1))).toEqual(['levels/1-1.json', 'tiles/terrain.json', 'tiles/terrain.png', 'tiles/sky.png'])
+    // 资源目录外的图片
+    expect(checkTiledFiles(join(fixtures, 'levels/1-1.json'), join(fixtures, 'levels')).problems[0]!.reason).toBe('is outside the assets directory')
   })
 
   it('忽略注释里的示例；字符串里的 // 不影响后面的识别', () => {

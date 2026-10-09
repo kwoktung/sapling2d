@@ -118,6 +118,13 @@ export class BrowserPlatform implements Platform {
     return () => document.removeEventListener('visibilitychange', handler)
   }
 
+  async loadText(path: string): Promise<string> {
+    const url = this.assetsBaseUrl + path
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`cannot load ${url}: HTTP ${res.status}`)
+    return res.text()
+  }
+
   loadImage(path: string): Promise<LoadedImage> {
     return new Promise((resolve, reject) => {
       const img = new Image()

@@ -12,6 +12,11 @@ export interface TestGameOptions<S extends Scene> extends GameOptions<S> {
   screen?: ScreenInfo
   /** 预置的存储数据（不含前缀），比如 `{ highScore: 100 }`，用来测试“已有存档”的情况。 */
   storage?: Record<string, unknown>
+  /**
+   * 资源目录，文本资源（`tiledMap()` 的关卡文件等）从这里读真实文件；相对路径相对于当前工作目录。默认 `public/assets`。
+   * 图片和声音在无头模式下不读文件。
+   */
+  assetsDir?: string
 }
 
 export interface TestGame<S extends Scene> {
@@ -64,9 +69,16 @@ export interface TestGame<S extends Scene> {
  * console.log(g.dump())
  * ```
  */
+/** 用 Node 的文件系统读文本（动态导入：引擎核心的类型检查不含 Node 类型）。相对路径相对于当前工作目录。 */
+async function readNodeFile(path: string): Promise<string> {
+  const fs = (await import('node:fs/promises' as string)) as { readFile(path: string, encoding: 'utf8'): Promise<string> }
+  return fs.readFile(path, 'utf8')
+}
+
 export async function createTestGame<S extends Scene>(options: TestGameOptions<S>): Promise<TestGame<S>> {
   const design = options.design ?? { width: 750, height: 1334 }
-  const platform = new HeadlessPlatform(options.screen ?? { width: design.width, height: design.height, pixelRatio: 1 })
+  const assetsDir = (options.assetsDir ?? 'public/assets').replace(/\/+$/, '')
+  const platform = new HeadlessPlatform(options.screen ?? { width: design.width, height: design.height, pixelRatio: 1 }, (path) => readNodeFile(`${assetsDir}/${path}`))
   const prefix = options.storagePrefix ?? 'sapling2d:'
   for (const [k, value] of Object.entries(options.storage ?? {})) platform.storage.setItem(prefix + k, JSON.stringify(value))
   const game = await Game.create({ ...options, seed: options.seed ?? 1, platform })

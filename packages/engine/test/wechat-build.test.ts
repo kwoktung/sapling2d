@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { build } from 'vite'
+import { build, createLogger } from 'vite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { saplingWechat } from 'sapling2d/vite'
 import { _createClock } from '../src/platform/wechat/clock'
@@ -19,10 +19,11 @@ describe('saplingWechat', () => {
     mkdirSync(join(dir, 'public', 'assets'), { recursive: true })
     writeFileSync(join(dir, 'public', 'assets', 'fruit.png'), 'png')
     writeFileSync(join(dir, 'src', 'main.ts'), main)
-    return (opts: { release?: boolean; logUrl?: string | null } = {}) =>
+    return (opts: { release?: boolean; logUrl?: string | null; warnings?: string[] } = {}) =>
       build({
         root: dir,
-        logLevel: 'silent',
+        logLevel: opts.warnings ? 'warn' : 'silent',
+        ...(opts.warnings ? { customLogger: { ...createLogger('silent'), warn: (msg: string) => opts.warnings!.push(msg), warnOnce: (msg: string) => opts.warnings!.push(msg) } } : {}),
         // 临时目录不在工作区里：把 sapling2d 指向源码
         resolve: {
           alias: [
@@ -50,6 +51,15 @@ describe('saplingWechat', () => {
     expect(project.compileType).toBe('game')
     expect(project.setting.urlCheck).toBe(true)
     expect(existsSync(join(dir, 'dist-wechat', 'assets', 'fruit.png'))).toBe(true)
+  })
+
+  it('资源里有 Tiled 自己的扩展名（.tmj / .tsj）时警告：小游戏代码包可能不收', async () => {
+    const run = fixture("import { v } from 'sapling2d'\nconsole.log(v(1, 2).toString())")
+    mkdirSync(join(dir, 'public', 'assets', 'levels'))
+    writeFileSync(join(dir, 'public', 'assets', 'levels', '1-1.tmj'), '{}')
+    const warnings: string[] = []
+    await run({ warnings })
+    expect(warnings.join('\n')).toMatch(/1-1\.tmj: Tiled files with these extensions may be left out of the mini game package; save maps and tilesets as \.json/)
   })
 
   it('运行环境补丁在游戏入口之前执行（虚拟入口：先 wechat-polyfills，再游戏代码）', async () => {

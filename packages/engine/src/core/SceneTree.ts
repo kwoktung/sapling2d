@@ -1,3 +1,4 @@
+import type { Camera2D } from '../nodes/Camera2D'
 import type { TileMapLayer } from '../nodes/TileMapLayer'
 import { RandomNumberGenerator } from '../math/RandomNumberGenerator'
 import { fmt } from '../math/Vector2'
@@ -106,6 +107,9 @@ export class SceneTree {
   _physicsProcessNodes = 0
   /** @internal 正在调用各节点的 physicsProcess（`CharacterBody2D.moveAndSlide` 只能在这时调用）。 */
   _inPhysicsProcess = false
+  /** @internal 树里的相机（进入树时登记、离开时注销）和当前相机。 */
+  readonly _cameras: Camera2D[] = []
+  _currentCamera: Camera2D | null = null
   /** @internal 树里的 TileMapLayer（进入树时登记、离开时注销），CharacterBody2D 按它们做格子碰撞。 */
   readonly _tileLayers: TileMapLayer[] = []
   private _freeQueue: Node[] = []
@@ -368,6 +372,34 @@ export class SceneTree {
     for (let i = 0; i < timers.length; i++) if (i >= timerCount || timers[i]!._advance(frameDt, this._paused)) this._timers.push(timers[i]!)
 
     this._flushFrameEnd()
+    this._updateCamera(frameDt)
+  }
+
+  /** 按当前相机更新画面偏移：所有节点移动完、帧末销毁之后，渲染之前。 */
+  private _updateCamera(dt: number): void {
+    const camera = this._currentCamera
+    const viewport = this.viewport
+    if (!camera) {
+      viewport._canvasX = 0
+      viewport._canvasY = 0
+      return
+    }
+    // 暂停时（相机不能处理）平滑不推进；没有平滑的相机照样对准目标（目标只会被不受暂停影响的节点移动）
+    camera._step(camera.canProcess() ? dt : 0)
+    // 世界坐标 + 偏移 = 设计坐标；画面中心对准设计区域的中心
+    viewport._canvasX = viewport.designWidth / 2 - camera._centerX
+    viewport._canvasY = viewport.designHeight / 2 - camera._centerY
+  }
+
+  /** @internal 当前相机离开树或被关掉后，选树里下一个启用的相机（没有就不偏移）。 */
+  _pickCamera(): void {
+    this._currentCamera = null
+    for (const camera of this._cameras) {
+      if (camera.enabled && camera.isInsideTree) {
+        camera.makeCurrent()
+        return
+      }
+    }
   }
 
   /** @internal 清空物理累加器：从后台回来时调用，避免一次补算很多步。 */

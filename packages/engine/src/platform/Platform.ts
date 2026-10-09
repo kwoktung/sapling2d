@@ -26,6 +26,8 @@ export interface Platform {
   cancelFrame(id: number): void
   /** 加载一张图片。`path` 相对于游戏的资源目录。 */
   loadImage(path: string): Promise<LoadedImage>
+  /** 读取一个文本文件（关卡 JSON 等）。`path` 相对于游戏的资源目录。 */
+  loadText(path: string): Promise<string>
   /** 当前屏幕信息（窗口逻辑像素）。 */
   getScreenInfo(): ScreenInfo
   /** 屏幕尺寸、方向或 DPR 变化时回调。返回取消订阅的函数。 */

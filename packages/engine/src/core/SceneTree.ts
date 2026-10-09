@@ -14,7 +14,7 @@ import { Signal } from './Signal'
 import { Tween } from './Tween'
 import type { GroupName, GroupNodeType } from './groups'
 import { Node, type DumpNode } from './Node'
-import { assetRoot, type AssetMap } from './assets'
+import { assetResources, type AssetMap } from './assets'
 import type { Scene, SceneConstructor } from './Scene'
 import { Viewport } from './Viewport'
 
@@ -238,9 +238,9 @@ export class SceneTree {
 
   private _unloadUnused(oldAssets: AssetMap | undefined, newAssets: AssetMap | undefined): void {
     if (!oldAssets) return
-    // 图集和子区域归结到整张图：新场景用同一张图（哪怕是另一种写法）就保留
-    const keep = new Set(Object.values(newAssets ?? {}).map(assetRoot))
-    for (const asset of new Set(Object.values(oldAssets).map(assetRoot))) if (!keep.has(asset)) asset._unload()
+    // 图集、子区域、Tiled 关卡的图块集都归结到整张图：新场景用同一张图（哪怕是另一种写法）就保留
+    const keep = new Set(Object.values(newAssets ?? {}).flatMap(assetResources))
+    for (const asset of new Set(Object.values(oldAssets).flatMap(assetResources))) if (!keep.has(asset)) asset._unload()
   }
 
   /** @internal 立即替换当前场景并销毁旧场景（不加载资源）。游戏代码请用 changeScene。 */

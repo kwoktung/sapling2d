@@ -119,6 +119,21 @@
 - 渲染只画屏幕内的区块（16 × 16 格），改格子很便宜（顶碎砖块直接 `eraseCell`）。几万格的关卡也只是一个节点，不要用 Sprite2D 一格一格地拼。
 - 图块地图不生成物理刚体：`RigidBody2D` 不会被它挡住。
 
+### Tiled 关卡
+
+<!-- example:tiled -->
+
+- `tiledMap(path)`：Tiled 的 JSON 格式关卡，放在资源目录里，图块集（嵌入的或外部的 JSON 图块集）和图片按 Tiled 里的相对路径放，都要在资源目录里。
+  **扩展名用 `.json`**（Tiled 保存时可以选）：微信小游戏的代码包可能不收 `.tmj` / `.tsj`，构建时会警告。XML 格式（`.tmx` / `.tsx`）不支持。
+  放进 `static assets` 加载；切换场景时图片按张判断是否卸载（两个关卡共用的图不会被卸载）。vite 插件检查关卡文件和它引用的图块集、图片，开发时改了关卡文件也会重新检查。
+- `createLayers()`：每个图块层一个新的 `TileMapLayer`（名字、偏移、可见性、不透明度来自 Tiled），按从下到上的顺序；`createLayer(name)`；`layerNames`；`layerProperties(name)`（图层的自定义属性）。
+- `objects(layerName?)`：对象层的数据 `{ id, name, type, x, y, width, height, rotation, shape, points, gid, tileSet, flipH, flipV, properties, layer }`（`gid` 是在 `tileSet` 里从 1 开始的编号）。矩形、点的 (x, y) 是左上角 / 点本身，**图块对象是左下角**（Tiled 的约定）。`objectLayers`、`properties`（地图属性）。
+- `width` / `height`（格）、`tileSize`、`pixelWidth` / `pixelHeight`（设相机 limit 用）、`tileSets`。
+- 在 Tiled 里设置碰撞：图块集编辑器里选中图块，加**字符串**属性 `collision`，值 `solid`（实心）或 `oneWay`（单向平台）；其他属性进 `getCellTileData(...).data`。
+  Tiled 碰撞编辑器里画的形状**不起作用**（会警告）。图块层加整数属性 `collisionLayer` 设置碰撞层（默认 1）。
+- 限制（加载时报错，指出图层或图块集）：只支持正交、非无限地图；图块是正方形、和地图格子一样大；每个图块集一张图片；一个图块层只用一个图块集；不能翻转、旋转图块；图块层格式用 CSV（Map Properties → Tile Layer Format）；不支持图层组、图片图层。动画图块只画第一帧（会警告）。
+- 无头测试读真实文件：`createTestGame({ ..., assetsDir })`（默认 `public/assets`，相对于当前工作目录）。
+
 ### 平台游戏的角色（CharacterBody2D）
 
 <!-- example:character-body -->
@@ -223,6 +238,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `Camera2D` | 相机（画面跟随） | `enabled` `offset` `limitLeft` `limitTop` `limitRight` `limitBottom` `positionSmoothingEnabled` `positionSmoothingSpeed` `makeCurrent()` `isCurrent` `resetSmoothing()` `screenCenter` |
 | `CanvasLayer`（不是 Node2D） | 界面层（不跟随相机） | `layer` `visible` |
 | `TouchScreenButton` | 屏幕按钮（继承 Sprite2D） | `action` `texturePressed` `passbyPress` `isPressed` `hitArea`；信号 `pressed` `released` |
+| `TiledMap`（资源，不是节点） | Tiled 关卡 | `tiledMap(path)`；`createLayers()` `createLayer(name)` `objects(layer?)` `objectLayers` `layerNames` `width` `height` `tileSize` `pixelWidth` `pixelHeight` `tileSets` `properties` |
 | `HitTester`（不是节点） | 两组对象之间的圆 / 矩形命中判定 | `forEachHit(as, bs, hit)`（`hit` 返回 true 表示 a 用掉了）、`HitTester.compact(list)`；对象需要 `x` `y` `hitShape`，可选 `dead` |
 | `CollisionShape2D` | 碰撞形状（必须是刚体 / 区域的直接子节点） | `shape`：`circle(r)` `rectangle(w, h)` `polygon(points)`；`disabled` |
 | `Timer` | 计时器 | `waitTime` `oneShot` `autostart` `start()` `stop()` `timeLeft`；信号 `timeout` |
@@ -233,7 +249,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 ## 测试：`createTestGame`
 
 ```ts
-const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, autoloads?, actions?, design? })
+const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, autoloads?, actions?, design?, assetsDir? })  // assetsDir：文本资源（Tiled 关卡）从这里读真实文件，默认 public/assets
 ```
 
 | 成员 | 说明 |

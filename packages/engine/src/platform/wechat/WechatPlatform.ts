@@ -50,6 +50,18 @@ export class WechatPlatform implements Platform {
     return () => wx.offWindowResize?.(handler)
   }
 
+  /** 包内文本文件：`assets/<path>`。 */
+  loadText(path: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      wx.getFileSystemManager().readFile({
+        filePath: `assets/${path}`,
+        encoding: 'utf8',
+        success: (res) => resolve(String(res.data)),
+        fail: (err) => reject(new Error(`cannot load assets/${path}: ${err.errMsg}`)),
+      })
+    })
+  }
+
   /** 包内图片：`assets/<path>`（构建时 public/assets 被拷贝到小游戏工程的 assets/）。 */
   loadImage(path: string): Promise<LoadedImage> {
     return new Promise((resolve, reject) => {

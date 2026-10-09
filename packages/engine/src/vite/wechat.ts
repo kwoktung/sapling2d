@@ -1,4 +1,4 @@
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { join, resolve, sep } from 'node:path'
 import type { Plugin } from 'vite'
@@ -131,7 +131,14 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
         setting: { es6: true, enhance: true, minified: false, urlCheck: logUrl === null },
       })
       const assets = resolve(root, options.assetsDir ?? join('public', 'assets'))
-      if (existsSync(assets)) cpSync(assets, join(outDir, 'assets'), { recursive: true })
+      if (existsSync(assets)) {
+        cpSync(assets, join(outDir, 'assets'), { recursive: true })
+        // 小游戏的代码包只收一部分扩展名：Tiled 自己的扩展名可能在上传 / 预览时被丢掉，真机上读不到关卡
+        const tiled = (readdirSync(assets, { recursive: true }) as string[]).filter((f) => /\.(tmj|tsj|tmx|tsx)$/i.test(f))
+        if (tiled.length) {
+          this.warn(`assets ${tiled.slice(0, 5).join(', ')}${tiled.length > 5 ? ' …' : ''}: Tiled files with these extensions may be left out of the mini game package; save maps and tilesets as .json.`)
+        }
+      }
       const kb = (Buffer.byteLength(code) / 1024).toFixed(0)
       this.info?.(`game.js ${kb} KB${release ? '' : ' (dev build with inline sourcemap: simulator only)'}`)
     },

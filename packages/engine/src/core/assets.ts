@@ -3,6 +3,7 @@ import { AudioStream } from '../audio/AudioStream'
 import { Rect2 } from '../math/Rect2'
 import { Vector2 } from '../math/Vector2'
 import type { Platform } from '../platform/Platform'
+import type { TiledMap } from './tiled'
 import type { TileSet } from './tileset'
 
 /**
@@ -288,18 +289,49 @@ function naturalCompare(a: string, b: string): number {
 
 // ---------------------------------------------------------------- 加载
 
-/** 场景的 `static assets` 声明：贴图（tex）、图集（sheet / atlas）、图块集（tileset）、音效（sfx）、音乐（music）。 */
-export type AssetMap = Record<string, Texture | SpriteSheet | Atlas | TileSet | AudioStream>
+/** 场景的 `static assets` 声明：贴图（tex）、图集（sheet / atlas）、图块集（tileset）、Tiled 关卡（tiledMap）、音效（sfx）、音乐（music）。 */
+export type AssetMap = Record<string, Texture | SpriteSheet | Atlas | TileSet | TiledMap | AudioStream>
 
 /** @internal 资源实际要加载 / 卸载的对象：图集和子区域归结到整张图。 */
-export function assetRoot(asset: AssetMap[string]): Texture | AudioStream {
+export function assetRoot(asset: AssetMap[string]): Texture | AudioStream | TiledMap {
+  // Tiled 关卡自己负责加载（关卡文件 + 图块集图片）和卸载
+  if (asset.kind === 'tiledmap') return asset
   // TileSet 用 kind 判断：tileset.ts 在运行时依赖本文件（tex），这里再 import 它会形成循环依赖
   if (asset instanceof SpriteSheet || asset instanceof Atlas || asset.kind === 'tileset') return asset.texture
   if (asset instanceof Texture) return asset._base ?? asset
   return asset
 }
 
+/**
+ * @internal 切换场景时判断“新场景还用不用”的单位：一般就是 assetRoot；Tiled 关卡展开成它自己和它图块集的图片，
+ * 这样两个关卡（或关卡和 tex()）共用同一张图时不会被误卸载。
+ */
+export function assetResources(asset: AssetMap[string]): (Texture | AudioStream | TiledMap)[] {
+  if (asset.kind === 'tiledmap') return [asset, ...asset._textures()]
+  return [assetRoot(asset)]
+}
+
 const pending = new Map<Texture, Promise<void>>()
+
+/** @internal 加载一张整张图（同一张图并发请求只加载一次）。 */
+export function loadTexture(asset: Texture, platform: Platform): Promise<void> {
+  if (asset.isLoaded) return Promise.resolve()
+  let p = pending.get(asset)
+  if (!p) {
+    p = platform.loadImage(asset.path).then(
+      (img) => {
+        asset._setLoaded(img.resource, img.width, img.height)
+        pending.delete(asset)
+      },
+      (err: unknown) => {
+        pending.delete(asset)
+        throw new Error(`Failed to load texture "${asset.path}": ${err instanceof Error ? err.message : String(err)}`)
+      },
+    )
+    pending.set(asset, p)
+  }
+  return p
+}
 
 /** 加载一组资源；已加载的跳过，同一资源并发请求只加载一次。音乐是流式的，不预加载。 */
 export async function loadAssets(assets: AssetMap | undefined, platform: Platform, audio: AudioServer): Promise<void> {
@@ -312,21 +344,8 @@ export async function loadAssets(assets: AssetMap | undefined, platform: Platfor
           throw new Error(`Failed to load sound "${asset.path}": ${err instanceof Error ? err.message : String(err)}`)
         })
       }
-      let p = pending.get(asset)
-      if (!p) {
-        p = platform.loadImage(asset.path).then(
-          (img) => {
-            asset._setLoaded(img.resource, img.width, img.height)
-            pending.delete(asset)
-          },
-          (err: unknown) => {
-            pending.delete(asset)
-            throw new Error(`Failed to load texture "${asset.path}": ${err instanceof Error ? err.message : String(err)}`)
-          },
-        )
-        pending.set(asset, p)
-      }
-      return p
+      if (asset.kind === 'tiledmap') return asset._load(platform)
+      return loadTexture(asset, platform)
     }),
   )
 }

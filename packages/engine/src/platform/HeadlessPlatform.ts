@@ -21,9 +21,20 @@ export class HeadlessPlatform implements Platform {
   private _nextId = 1
   private _pending = new Map<number, (timeMs: number) => void>()
 
-  /** 不传 screen 时，屏幕默认是 750×1334、DPR 为 1。 */
-  constructor(screen: ScreenInfo = { width: 750, height: 1334, pixelRatio: 1 }) {
+  private readonly _readText: ((path: string) => Promise<string>) | null
+
+  /**
+   * 不传 screen 时，屏幕默认是 750×1334、DPR 为 1。
+   * `readText`：读取资源目录里的文本文件（关卡 JSON 等）；`createTestGame` 用 Node 的文件系统提供。不传时读取会失败。
+   */
+  constructor(screen: ScreenInfo = { width: 750, height: 1334, pixelRatio: 1 }, readText?: (path: string) => Promise<string>) {
     this._screen = screen
+    this._readText = readText ?? null
+  }
+
+  loadText(path: string): Promise<string> {
+    if (!this._readText) return Promise.reject(new Error(`cannot load text "${path}": this HeadlessPlatform has no file access (pass readText)`))
+    return this._readText(path)
   }
 
   getScreenInfo(): ScreenInfo {

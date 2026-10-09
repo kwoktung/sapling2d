@@ -30,6 +30,7 @@ Code-first、agent-friendly 的 2D 游戏引擎。基于 PixiJS v8（渲染）+ 
 - **Area2D** — 传感器区域（planck 的 kinematic + sensor），跟随自身及祖先的全局变换，只检测 RigidBody2D（检测不到静态刚体和其他区域）。
 - **HitTester** — 不走 planck 的命中判定：`forEachHit(as, bs, hit)` 比较两组对象（`x`、`y`、`hitShape` 为 `circle` / `rectangle`）的每一对，只回答谁和谁重叠，没有物理反应。形状轴对齐、不随 scale 变化，比较的是局部坐标。和 `Area2D` 的区别：不是节点、不发信号、由游戏在 `process` 里主动调用，用于数量超出刚体预算的子弹和道具。
 - **TileSet / tileset()** — 图块集：一张图集贴图按 `tileSize` 切成格子，图块编号从 1 开始（0 表示空格子），每个图块可以有碰撞类型（`solid` / `oneWay`）和自定义字段。是一种资源，放进 `static assets` 预加载；一个图块集只对应一张图（ADR 0008）。
+- **TiledMap / tiledMap()** — Tiled 关卡资源（导出的 JSON）。加载时读关卡文件和外部图块集（`Platform.loadText`），再加载图块集图片；`createLayers()` 生成 TileMapLayer，`objects()` 返回对象层的数据，由游戏自己创建节点。图块的字符串属性 `collision`（`solid` / `oneWay`）映射到碰撞类型。不支持的 Tiled 特性在加载时报错。
 - **TileMapLayer** — 一层图块地图（`Node2D`）：大小固定的格子数组（`Uint16Array`），多层地图就是多个节点。渲染按 16 × 16 格的区块，每个区块一个 Mesh，只画屏幕内的区块（ADR 0008）。不生成物理刚体；碰撞由 `CharacterBody2D` 直接查格子（ADR 0009）。
 - **CharacterBody2D** — 由代码控制移动的角色（平台游戏的主角、敌人）：在 `physicsProcess` 里设置速度、调用 `moveAndSlide()`，按轴分离的格子扫掠和 TileMapLayer 碰撞（ADR 0009）。和 `RigidBody2D` 的区别：不是 planck 刚体，没有物理反应，`StaticBody2D` 挡不住它、planck 世界感知不到它；和 `HitTester` 的区别：它负责被地形挡住，角色和敌人、道具之间的命中仍用 `HitTester`。
 - **Camera2D** — 相机：当前相机的全局位置是画面中心，场景和 Autoload 随之平移（只平移，不缩放、不旋转）。支持 `offset`、`limit*` 边界、平滑跟随；同一时间一个当前相机。在每帧所有 `process` 之后更新。

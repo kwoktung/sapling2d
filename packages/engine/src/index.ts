@@ -54,7 +54,7 @@ export { AudioServer, Voice, type AudioBus, type PlayOptions } from './audio/Aud
 export type { AudioBackend, SoundHandle } from './audio/backend'
 export type { PlayedSound } from './audio/HeadlessAudio'
 export { AudioStreamPlayer, type AudioStreamPlayerOptions } from './nodes/AudioStreamPlayer'
-export { Game, type GameOptions, type Renderer } from './runtime/Game'
+export { Game, type GameOptions, type Renderer, type FrameStats } from './runtime/Game'
 export type { LoadedImage } from './platform/Platform'
 
 /**

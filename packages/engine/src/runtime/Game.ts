@@ -13,6 +13,57 @@ export interface Renderer {
   destroy(): void
 }
 
+/** `game.frameStats` 的内容（毫秒）。 */
+export interface FrameStats {
+  frames: number
+  intervalAvg: number
+  intervalMax: number
+  logicAvg: number
+  logicMax: number
+  renderAvg: number
+  renderMax: number
+  /** 按平均帧间隔算的帧率。 */
+  fps: number
+}
+
+class FrameStatsAccumulator implements FrameStats {
+  frames = 0
+  intervalMax = 0
+  logicMax = 0
+  renderMax = 0
+  private _interval = 0
+  private _logic = 0
+  private _render = 0
+
+  get intervalAvg(): number {
+    return this.frames ? this._interval / this.frames : 0
+  }
+  get logicAvg(): number {
+    return this.frames ? this._logic / this.frames : 0
+  }
+  get renderAvg(): number {
+    return this.frames ? this._render / this.frames : 0
+  }
+  get fps(): number {
+    return this._interval ? (1000 * this.frames) / this._interval : 0
+  }
+
+  _add(interval: number, logic: number, render: number): void {
+    this.frames++
+    this._interval += interval
+    this._logic += logic
+    this._render += render
+    if (interval > this.intervalMax) this.intervalMax = interval
+    if (logic > this.logicMax) this.logicMax = logic
+    if (render > this.renderMax) this.renderMax = render
+  }
+
+  _reset(): void {
+    this.frames = this._interval = this._logic = this._render = 0
+    this.intervalMax = this.logicMax = this.renderMax = 0
+  }
+}
+
 export interface GameOptions<S extends Scene> {
   /** 入口场景。 */
   main: SceneClass<S>
@@ -45,6 +96,7 @@ export class Game<S extends Scene = Scene> {
   readonly tree: SceneTree
   private _platform: Platform
   private _renderer: Renderer | null
+  private readonly _stats = new FrameStatsAccumulator()
   private _frameId: number | null = null
   private _lastTime = 0
   private _unsubscribeScreen: () => void
@@ -110,8 +162,25 @@ export class Game<S extends Scene = Scene> {
   /** 推进一帧并渲染。`dt` 单位为秒。挂起时什么都不做。 */
   frame(dt: number): void {
     if (this._suspended) return
+    const now = this._platform
+    const t0 = now.now()
     this.tree.advance(dt)
+    const t1 = now.now()
     this._renderer?.render(this.tree)
+    const t2 = now.now()
+    this._stats._add(dt * 1000, t1 - t0, t2 - t1)
+  }
+
+  /**
+   * 帧耗时统计（从上次 `resetFrameStats()` 起）：帧数、平均 / 最大帧间隔、逻辑（`tree.advance`）和渲染（同步 + 提交绘制）的平均 / 最大耗时，单位毫秒。
+   * 只累加数字，不分配内存；用来在真机上看性能（例如每隔几秒 console.log 一次再 reset）。
+   */
+  get frameStats(): Readonly<FrameStats> {
+    return this._stats
+  }
+
+  resetFrameStats(): void {
+    this._stats._reset()
   }
 
   /** 开始由平台驱动的帧循环。 */

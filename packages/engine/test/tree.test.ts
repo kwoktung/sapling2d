@@ -266,3 +266,18 @@ describe('dump', () => {
     }])
   })
 })
+
+describe('Game.frameStats', () => {
+  it('累计帧数、帧间隔、逻辑和渲染耗时；resetFrameStats 清零', async () => {
+    const g = await createTestGame({ main: Scene })
+    g.game.resetFrameStats()
+    g.step(10)
+    const s = g.game.frameStats
+    expect(s.frames).toBe(10)
+    expect(s.intervalAvg).toBeCloseTo(1000 / 60, 6)
+    expect(s.fps).toBeCloseTo(60, 6)
+    expect(s.logicAvg).toBeGreaterThanOrEqual(0)
+    g.game.resetFrameStats()
+    expect([s.frames, s.fps, s.logicMax]).toEqual([0, 0, 0])
+  })
+})

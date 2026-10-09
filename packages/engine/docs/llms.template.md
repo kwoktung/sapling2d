@@ -63,6 +63,8 @@
 
 <!-- example:input#test -->
 
+`isActionJustPressed` / `isActionJustReleased` 在 `process` 里按帧算；在 `physicsProcess`（以及刚体的接触信号）里按物理步算（上一个物理步之后按下的，在下一个物理步里为 true）。屏幕刷新率高于 60Hz 时有的帧没有物理步，所以在 `physicsProcess` 里处理跳跃这类按键不会丢。
+
 ### 物理与碰撞（合成玩法）
 
 <!-- example:physics -->
@@ -105,6 +107,20 @@
 - 一个图块集只能用一张图；图块不能翻转、旋转，没有动画。碰撞只有整格，没有斜坡。图层可以平移，不要旋转、缩放（碰撞按格子查）。
 - 渲染只画屏幕内的区块（16 × 16 格），改格子很便宜（顶碎砖块直接 `eraseCell`）。几万格的关卡也只是一个节点，不要用 Sprite2D 一格一格地拼。
 - 图块地图不生成物理刚体：`RigidBody2D` 不会被它挡住。
+
+### 平台游戏的角色（CharacterBody2D）
+
+<!-- example:character-body -->
+
+- `CharacterBody2D`：代码控制移动的角色。`shape` 是 `rectangle(w, h)`（以节点位置为中心、轴对齐、不随 rotation / scale 变化）。
+  每个物理步设置速度（`velocityX` / `velocityY` / `setVelocity(x, y)`，或 `velocity`），调用 `moveAndSlide()`：先 x 后 y 移动，被实心格挡住时贴着格子停下、那一轴的速度清零。
+- 结果：`isOnFloor` / `isOnWall` / `isOnCeiling`；`slideCollisionCount` / `getSlideCollision(i)`（`tileMap`、`cellX`、`cellY`、`normal`；对象会复用）。
+- 单向平台（`collision: 'oneWay'`）只在下落、且脚底原来在平台顶面以上时挡住。速度再快也不会穿墙。`collisionMask` 和图层的 `collisionLayer` 有交集才碰撞。
+- 重力、加速度、跳跃由游戏自己写；重力每一步都要加（站在地上也加），否则 `isOnFloor` 为 false。
+- `moveAndSlide()` 只能在 `physicsProcess` 里调用。`physicsProcess` 里的 `isActionJustPressed` 按物理步算，一次按下只在一个物理步里为 true。
+- 限制：**只和 TileMapLayer 的格子碰撞**。它不是刚体：`StaticBody2D` 挡不住它（重叠时会打印一次警告），`RigidBody2D` / `Area2D` 感知不到它。墙和地面都画进图块地图。
+  没有斜坡。碰撞盒不随角色自己的 rotation / scale 变化（翻转贴图用子节点 Sprite2D 的 `flipH`）；角色的祖先、图层和图层的祖先只能平移（旋转、缩放会报错）。
+  角色之间不互相阻挡：主角和敌人、金币之间用 `HitTester` 判断。图块集里没有任何碰撞图块的图层（纯装饰）不参与碰撞。
 
 ### 场景切换与存档
 
@@ -168,6 +184,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `StaticBody2D` | 静态刚体（地面、墙） | `friction` `bounce` |
 | `Area2D` | 检测区域 | 信号 `bodyEntered` `bodyExited`；`getOverlappingBodies()` |
 | `TileMapLayer` | 一层图块地图 | `tileSet` `width` `height` `collisionLayer` `setCell` `eraseCell` `getCell` `getCellTileData` `localToMap` `mapToLocal` `getUsedRect` `usedCellCount` |
+| `CharacterBody2D` | 平台游戏的角色（只和图块地图碰撞） | `shape` `velocity` `velocityX` `velocityY` `setVelocity` `moveAndSlide()` `isOnFloor` `isOnWall` `isOnCeiling` `slideCollisionCount` `getSlideCollision(i)` `collisionMask` |
 | `HitTester`（不是节点） | 两组对象之间的圆 / 矩形命中判定 | `forEachHit(as, bs, hit)`（`hit` 返回 true 表示 a 用掉了）、`HitTester.compact(list)`；对象需要 `x` `y` `hitShape`，可选 `dead` |
 | `CollisionShape2D` | 碰撞形状（必须是刚体 / 区域的直接子节点） | `shape`：`circle(r)` `rectangle(w, h)` `polygon(points)`；`disabled` |
 | `Timer` | 计时器 | `waitTime` `oneShot` `autostart` `start()` `stop()` `timeLeft`；信号 `timeout` |

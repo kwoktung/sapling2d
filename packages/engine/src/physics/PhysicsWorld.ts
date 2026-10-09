@@ -1,4 +1,4 @@
-import { BoxShape, CircleShape, PolygonShape, World, type Body, type Contact, type Fixture } from 'planck'
+import { AABB, BoxShape, CircleShape, PolygonShape, World, type Body, type Contact, type Fixture } from 'planck'
 import { Vector2 } from '../math/Vector2'
 import type { Shape2D } from './shapes'
 
@@ -243,6 +243,34 @@ export class PhysicsWorld {
         if (m.size === 0) this._pairs.delete(x)
       }
     }
+  }
+
+  /**
+   * @internal 和矩形（全局像素坐标）的包围盒重叠的第一个静态刚体节点，没有时为 null。
+   * 只比较包围盒，用于 CharacterBody2D 的提示（它不会被静态刚体挡住）；会分配内存，调用方要限制频率。
+   */
+  _firstStaticOverlapping(minX: number, minY: number, maxX: number, maxY: number): CollisionObjectNode | null {
+    const k = 1 / this.pixelsPerMeter
+    const box = this._queryBox
+    box.lowerBound.x = minX * k
+    box.lowerBound.y = minY * k
+    box.upperBound.x = maxX * k
+    box.upperBound.y = maxY * k
+    this._queryFound = null
+    this._world.queryAABB(box, this._onStaticQuery)
+    const found = this._queryFound
+    this._queryFound = null
+    return found
+  }
+
+  /** `_firstStaticOverlapping` 复用的查询框、结果和回调（不在每次查询时分配）。 */
+  private readonly _queryBox = new AABB()
+  private _queryFound: CollisionObjectNode | null = null
+  private readonly _onStaticQuery = (fixture: Fixture): boolean => {
+    const body = fixture.getBody()
+    if (body.getType() !== 'static' || !AABB.testOverlap(this._queryBox, fixture.getAABB(0))) return true
+    this._queryFound = body.getUserData() as CollisionObjectNode
+    return false
   }
 
   // ---------------------------------------------------------------- 同步

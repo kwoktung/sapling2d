@@ -54,6 +54,8 @@ export class TileSet {
   private readonly _tiles = new Map<number, TileData>()
   /** @internal 图块编号 → 碰撞类型（TILE_*）；超出长度的编号没有碰撞。 */
   readonly _collision: Uint8Array
+  /** @internal 有没有任何图块带碰撞：没有的图块集（纯装饰的图层）CharacterBody2D 直接跳过。 */
+  readonly _hasCollision: boolean
 
   /** @internal 请使用 tileset()。 */
   constructor(
@@ -82,6 +84,7 @@ export class TileSet {
     }
     this._collision = new Uint8Array(maxId + 1)
     for (const [id, t] of this._tiles) this._collision[id] = t.collision === 'solid' ? TILE_SOLID : t.collision === 'oneWay' ? TILE_ONE_WAY : TILE_EMPTY
+    this._hasCollision = this._collision.some((k) => k !== TILE_EMPTY)
   }
 
   get isLoaded(): boolean {

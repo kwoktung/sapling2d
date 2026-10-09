@@ -1,6 +1,6 @@
-import { Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
+import { Sprite2D, v, type CircleShape2D, type Tween, type Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
-import { ENEMIES, type EnemyConfig, type EnemyKind } from '../config'
+import { ENEMIES, ENEMY_SHAPES, type EnemyConfig, type EnemyKind } from '../config'
 import { bounds } from './bounds'
 
 /** 敌机需要从战场拿到的东西：玩家位置（瞄准用）和发射子弹。 */
@@ -19,6 +19,7 @@ export class Enemy extends Sprite2D {
   readonly config: EnemyConfig
   readonly maxHp: number
   readonly radius: number
+  readonly hitShape: CircleShape2D
   hp: number
   dead = false
   /** 关掉射击（测试用）。 */
@@ -37,6 +38,7 @@ export class Enemy extends Sprite2D {
     this.config = config
     this.maxHp = this.hp = config.hp
     this.radius = config.radius
+    this.hitShape = ENEMY_SHAPES[kind]
     this._host = host
     this._baseX = position.x
     this._fireIn = config.fire?.firstDelay ?? Infinity

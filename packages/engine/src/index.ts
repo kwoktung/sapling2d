@@ -37,6 +37,7 @@ export { RigidBody2D, type RigidBody2DOptions } from './nodes/physics/RigidBody2
 export { CollisionShape2D, type CollisionShape2DOptions } from './nodes/physics/CollisionShape2D'
 export { CircleShape2D, RectangleShape2D, ConvexPolygonShape2D, circle, rectangle, polygon, MAX_POLYGON_VERTICES, type Shape2D } from './physics/shapes'
 export { PhysicsWorld, type PhysicsSettings } from './physics/PhysicsWorld'
+export { HitTester, type Hittable } from './physics/HitTester'
 export { Label, type LabelOptions, type LabelStroke, type HorizontalAlignment, type VerticalAlignment } from './nodes/Label'
 export { Texture, tex, SpriteSheet, sheet, Atlas, atlas, type AssetMap, type AtlasData, type AtlasFrameData } from './core/assets'
 export { AudioStream, sfx, music } from './audio/AudioStream'

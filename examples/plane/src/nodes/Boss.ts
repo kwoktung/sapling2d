@@ -13,7 +13,7 @@ const ENTER_FROM = -160
  */
 export class Boss extends Sprite2D {
   readonly maxHp: number
-  readonly radius = BOSS.radius
+  readonly hitShape = BOSS.hitShape
   hp: number
   dead = false
   private readonly _host: EnemyHost
@@ -66,7 +66,7 @@ export class Boss extends Sprite2D {
       return
     }
     // 左右摆动，限制在屏幕内
-    const sway = Math.min(BOSS.sway, (bounds.right - bounds.left) / 2 - this.radius)
+    const sway = Math.min(BOSS.sway, (bounds.right - bounds.left) / 2 - BOSS.halfWidth)
     this.x = this._homeX + Math.sin(this._age * BOSS.swayHz * Math.PI * 2) * sway
     this.y = this._homeY + Math.sin(this._age * 0.7) * 20
     this._attack(dt)

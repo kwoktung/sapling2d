@@ -281,6 +281,53 @@ export class Goal extends Scene {
 }
 ```
 
+### 命中判定（不走物理引擎）
+
+子弹、道具这类数量多、只需要知道“碰没碰到”的对象用 `HitTester`：对象有 `x`、`y` 和 `hitShape`（`circle(r)` 或 `rectangle(w, h)`）就能参与，没有物理反应，也不占刚体预算。形状以节点位置为中心，**不随 rotation / scale 变化**；`x` / `y` 是局部坐标，所以互相比较的对象要挂在同一个父节点下（或父节点之间没有相对变换）。`dead` 为 true、已 `queueFree()` 或已销毁的对象自动跳过（只看对象自己：父节点 `queueFree()` 时，子节点到帧末销毁后才跳过）。`as` 和 `bs` 可以传同一个数组做组内判定，对象不和自己比较。
+
+```ts
+import { circle, HitTester, rectangle, Scene, Sprite2D, v } from 'sapling2d'
+
+// 碰撞形状在模块里建一次，所有子弹共用（不要每颗子弹 new 一个）
+const BULLET_SHAPE = circle(8)
+const ENEMY_SHAPE = rectangle(120, 60) // 以节点位置为中心，轴对齐
+
+class Bullet extends Sprite2D {
+  readonly hitShape = BULLET_SHAPE
+  override process(dt: number) {
+    this.y -= 1200 * dt // 用 y -= …，不分配 Vector2
+  }
+}
+
+class Enemy extends Sprite2D {
+  readonly hitShape = ENEMY_SHAPE
+  hp = 3
+}
+
+export class Battle extends Scene {
+  readonly bullets: Bullet[] = []
+  readonly enemies: Enemy[] = []
+  private readonly _hits = new HitTester()
+
+  override ready() {
+    // 互相比较的对象挂在同一个父节点下：HitTester 比较的是局部坐标 x / y
+    this.enemies.push(this.add(new Enemy({ position: v(375, 300) })))
+    for (let i = 0; i < 5; i++) this.bullets.push(this.add(new Bullet({ position: v(375, 1000 + i * 100) })))
+  }
+
+  override process() {
+    // 子弹 × 敌机：返回 true 表示这颗子弹用掉了，不再和别的敌机比较
+    this._hits.forEachHit(this.bullets, this.enemies, (bullet, enemy) => {
+      bullet.queueFree()
+      if (--enemy.hp <= 0) enemy.queueFree() // 已 queueFree 的对象自动不再参与判定
+      return true
+    })
+    HitTester.compact(this.bullets) // 原地去掉已失效的对象
+    HitTester.compact(this.enemies)
+  }
+}
+```
+
 ### 计时器与补间
 
 ```ts
@@ -529,6 +576,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `RigidBody2D` | 动态刚体 | `mass` `friction` `bounce` `gravityScale` `linearVelocity` `angularVelocity` `lockRotation` `ccd` `applyCentralImpulse` `applyForce` `sleeping`；信号 `bodyEntered` `bodyExited` |
 | `StaticBody2D` | 静态刚体（地面、墙） | `friction` `bounce` |
 | `Area2D` | 检测区域 | 信号 `bodyEntered` `bodyExited`；`getOverlappingBodies()` |
+| `HitTester`（不是节点） | 两组对象之间的圆 / 矩形命中判定 | `forEachHit(as, bs, hit)`（`hit` 返回 true 表示 a 用掉了）、`HitTester.compact(list)`；对象需要 `x` `y` `hitShape`，可选 `dead` |
 | `CollisionShape2D` | 碰撞形状（必须是刚体 / 区域的直接子节点） | `shape`：`circle(r)` `rectangle(w, h)` `polygon(points)`；`disabled` |
 | `Timer` | 计时器 | `waitTime` `oneShot` `autostart` `start()` `stop()` `timeLeft`；信号 `timeout` |
 | `AudioStreamPlayer` | 播放声音 | `stream` `volume` `loop` `bus` `autoplay` `play()` `stop()`；信号 `finished` |
@@ -600,7 +648,7 @@ for (let i = 0; i < bullets.length; i++) {
 - 数量再大（几百 × 几百）时按网格分桶，只和同一格及相邻格比较。
 - **移动用 `node.x += …` / `node.y += …`**：不分配对象。`node.position = node.position.add(…)` 每次分配两个 Vector2。
 - 热循环里用下标循环，少用 `for…of`、`map` / `filter`、箭头函数和展开运算符（都会分配）。
-- 子弹等大量对象不要用 `RigidBody2D` / `Area2D`：iOS 上同时活跃的刚体建议在 60–80 个以内。
+- 子弹等大量对象不要用 `RigidBody2D` / `Area2D`（iOS 上同时活跃的刚体建议在 60–80 个以内），用 `HitTester` 做命中判定。
 - 每帧都要跑的类不要用 `#private`（见下面的常见陷阱）。
 
 ## 常见陷阱
@@ -627,4 +675,4 @@ for (let i = 0; i < bullets.length; i++) {
 ## 更多
 
 - 术语表：仓库根目录 `CONTEXT.md`；架构决策：`docs/adr/`；微信环境实测：`spikes/wechat/REPORT.md`。
-- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/plane`（飞机大战：图集、帧动画、不用物理引擎的碰撞、暂停）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。
+- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/plane`（飞机大战：图集、帧动画、用 HitTester 做碰撞、暂停）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。

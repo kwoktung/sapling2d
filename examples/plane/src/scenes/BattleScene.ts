@@ -1,11 +1,10 @@
-import { AnimatedSprite2D, AudioStreamPlayer, Node2D, Scene, v, type Vector2 } from 'sapling2d'
+import { AnimatedSprite2D, AudioStreamPlayer, HitTester, Node2D, Scene, v, type Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
 import { BOSS, ENEMIES, ENEMY_BULLET, PLAYER, WAVES, WEAPON, type EnemyKind, type PowerUpKind } from '../config'
 import { Background } from '../nodes/Background'
 import { Boss } from '../nodes/Boss'
 import { bounds, setBounds } from '../nodes/bounds'
 import { Bullet } from '../nodes/Bullet'
-import { compact, HitTester } from '../nodes/collision'
 import { Enemy, type EnemyHost } from '../nodes/Enemy'
 import { Hud } from '../nodes/Hud'
 import { PauseController } from '../nodes/PauseController'
@@ -38,7 +37,7 @@ type Stage = 'waves' | 'warning' | 'boss' | 'cleared'
 
 /**
  * 战斗场景。所有会动的东西各自在 process 里移动；本场景负责输入、射击、出怪和碰撞。
- * 碰撞不用物理引擎（几百颗子弹会超出 iOS 小游戏的刚体预算），用 HitTester 做圆形判定。
+ * 碰撞不用物理引擎（几百颗子弹会超出 iOS 小游戏的刚体预算），用引擎的 HitTester 做圆 / 矩形判定。
  */
 export class BattleScene extends Scene implements EnemyHost {
   static override assets = ASSETS
@@ -125,10 +124,10 @@ export class BattleScene extends Scene implements EnemyHost {
     this._collide()
     this._updateShake(dt)
     if (this.boss) this.hud.setBossRatio(this.boss.hp / this.boss.maxHp)
-    compact(this.playerBullets)
-    compact(this.enemyBullets)
-    compact(this.enemies)
-    compact(this.powerUps)
+    HitTester.compact(this.playerBullets)
+    HitTester.compact(this.enemyBullets)
+    HitTester.compact(this.enemies)
+    HitTester.compact(this.powerUps)
     this.hud.setScore(this.score)
   }
 
@@ -149,7 +148,7 @@ export class BattleScene extends Scene implements EnemyHost {
         position,
         vx: velocity.x,
         vy: velocity.y,
-        radius: boss ? BOSS.bulletRadius : ENEMY_BULLET.radius,
+        hitShape: boss ? BOSS.bulletShape : ENEMY_BULLET.shape,
       }),
     )
     this.enemyBullets.push(b)
@@ -229,7 +228,7 @@ export class BattleScene extends Scene implements EnemyHost {
         rotation: angle,
         vx: Math.sin(angle) * WEAPON.bulletSpeed,
         vy: -Math.cos(angle) * WEAPON.bulletSpeed,
-        radius: WEAPON.bulletRadius,
+        hitShape: WEAPON.bulletShape,
       })
       this.playerBullets.push(this._playerBulletLayer.add(b))
       this.firedShots++

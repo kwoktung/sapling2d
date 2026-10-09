@@ -76,6 +76,19 @@
 - 从空白处滑进 `passbyPress` 按钮的手指从此不算 `pointerPress()` 的按下；正在拖着节点的手指滑过按钮不会按下它。
 - `action` 应该是已定义的动作（可以是没有绑定的 `[]`）；未定义时打印警告，按钮照常显示但不影响任何动作。
 
+### 摇杆（方向和力度）
+
+<!-- example:touch-joystick -->
+
+<!-- example:touch-joystick#test -->
+
+- 动作有**力度**（0–1）：按键、`pointerPress()`、屏幕按钮按下时是 1；摇杆按推动的程度给出 0–1（已经扣掉死区）；几个来源同时作用时取最大的。力度 ≥ 0.5 时动作算按下（`isActionPressed` / `isActionJustPressed` 照常用）。
+- 读取：`getActionStrength(action)`、`getAxis(neg, pos)`（-1 到 1，不分配内存）、`getVector(negX, posX, negY, posY)`（长度不超过 1；每次分配一个 Vector2，每帧一次没问题，热循环里用 `getAxis`）。
+- `TouchJoystick`（继承 Node2D）：`actions: { left, right, up, down }`、`radius`（推到这么远力度为 1，默认 100）、`deadzone`（默认 0.2）、`texture` / `textureKnob`（不设置就不显示）。`vectorX` / `vectorY`（不分配）和 `vector`、`isPressed`，信号 `pressed` / `released`。
+- `mode: 'dynamic'`（默认）：在 `region`（默认可见区域的左半边，设计坐标）里按下的地方出现，松手后隐藏；`'fixed'`：固定在 `position`，在 `hitArea`（默认半径 1.5 × `radius` 的圆）里按下才算。
+- 只认一个手指：按着摇杆的手指不触发 `pointerPress()`、不点中下面的节点、不会滑进屏幕按钮；另一个手指可以同时按屏幕按钮。抬起、触摸取消、切到后台、隐藏、暂停、移出树时松开，力度归零。
+- 放进 `CanvasLayer`。按绘制顺序参与拾取：`dynamic` 的区域里，画在它上面的按钮先收到指针（摇杆先加、按钮后加）。摇杆自己不要旋转、缩放。
+
 ### 物理与碰撞（合成玩法）
 
 <!-- example:physics -->
@@ -238,6 +251,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `Camera2D` | 相机（画面跟随） | `enabled` `offset` `limitLeft` `limitTop` `limitRight` `limitBottom` `positionSmoothingEnabled` `positionSmoothingSpeed` `makeCurrent()` `isCurrent` `resetSmoothing()` `screenCenter` |
 | `CanvasLayer`（不是 Node2D） | 界面层（不跟随相机） | `layer` `visible` |
 | `TouchScreenButton` | 屏幕按钮（继承 Sprite2D） | `action` `texturePressed` `passbyPress` `isPressed` `hitArea`；信号 `pressed` `released` |
+| `TouchJoystick` | 摇杆（继承 Node2D） | `mode`（`dynamic` / `fixed`）`actions` `radius` `deadzone` `region` `texture` `textureKnob` `vectorX` `vectorY` `vector` `isPressed`；信号 `pressed` `released` |
 | `TiledMap`（资源，不是节点） | Tiled 关卡 | `tiledMap(path)`；`createLayers()` `createLayer(name)` `objects(layer?)` `objectLayers` `layerNames` `width` `height` `tileSize` `pixelWidth` `pixelHeight` `tileSets` `properties` |
 | `HitTester`（不是节点） | 两组对象之间的圆 / 矩形命中判定 | `forEachHit(as, bs, hit)`（`hit` 返回 true 表示 a 用掉了）、`HitTester.compact(list)`；对象需要 `x` `y` `hitShape`，可选 `dead` |
 | `CollisionShape2D` | 碰撞形状（必须是刚体 / 区域的直接子节点） | `shape`：`circle(r)` `rectangle(w, h)` `polygon(points)`；`disabled` |

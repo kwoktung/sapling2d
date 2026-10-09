@@ -81,6 +81,22 @@ fillRect(knife, 0, 44, 14, 4, 0xd4a017)
 fillRect(knife, 4, 48, 6, 16, 0x6b3e1e)
 save('knife.png', knife)
 
+// 摇杆：底座（半透明圆环）和摇杆头
+function ring(size, color, alpha, width) {
+  const c = canvas(size, size)
+  const r = size / 2
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x + 0.5 - r, y + 0.5 - r)
+      if (d > r) continue
+      setPx(c, x, y, color, d > r - width ? 200 : alpha)
+    }
+  }
+  return c
+}
+save('stick-base.png', ring(220, 0xffffff, 50, 6))
+save('stick-knob.png', ring(96, 0xffffff, 150, 4))
+
 // ---------------------------------------------------------------- 图块集（48px：地板 ×2、墙、石头）
 
 const TILE = 48
@@ -146,4 +162,4 @@ const map = {
 }
 writeFileSync(new URL('levels/tiles.json', OUT), JSON.stringify(tilesetFile, null, 1))
 writeFileSync(new URL('levels/arena.json', OUT), JSON.stringify(map))
-console.log('assets generated: player.png enemy.png knife.png tiles.png levels/arena.json levels/tiles.json')
+console.log('assets generated: player.png enemy.png knife.png stick-*.png tiles.png levels/arena.json levels/tiles.json')

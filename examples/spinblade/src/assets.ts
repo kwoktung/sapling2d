@@ -6,4 +6,6 @@ export const ASSETS = {
   player: tex('player.png'),
   enemy: tex('enemy.png'),
   knife: tex('knife.png'),
+  stickBase: tex('stick-base.png'),
+  stickKnob: tex('stick-knob.png'),
 }

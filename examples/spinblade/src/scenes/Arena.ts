@@ -1,4 +1,4 @@
-import { Camera2D, Ease, HitTester, Scene, type TileMapLayer, v } from 'sapling2d'
+import { Camera2D, CanvasLayer, Ease, HitTester, Scene, type TileMapLayer, TouchJoystick, v } from 'sapling2d'
 import { ASSETS } from '../assets'
 import { KNIFE, PLAYER, TILE, Z } from '../config'
 import { KnifeCollider } from '../KnifeCollider'
@@ -20,6 +20,7 @@ export class Arena extends Scene {
   static override assets = ASSETS
   player!: Player
   camera!: Camera2D
+  joystick!: TouchJoystick
   readonly enemies: Enemy[] = []
   /** 玩家和所有敌人。 */
   readonly fighters: Fighter[] = []
@@ -58,6 +59,12 @@ export class Arena extends Scene {
 
     // 相机挂在玩家下面，跟着玩家走；不超出场地
     this.camera = this.player.add(new Camera2D({ limitLeft: 0, limitTop: 0, limitRight: level.pixelWidth, limitBottom: level.pixelHeight }))
+
+    // 摇杆：在屏幕左半边按下的地方出现（浏览器里也可以用 WASD）
+    const hud = this.add(new CanvasLayer({ name: 'Hud' }))
+    this.joystick = hud.add(
+      new TouchJoystick({ actions: { left: 'left', right: 'right', up: 'up', down: 'down' }, radius: 90, texture: ASSETS.stickBase, textureKnob: ASSETS.stickKnob }),
+    )
   }
 
   /** 在地上放一把刀。 */

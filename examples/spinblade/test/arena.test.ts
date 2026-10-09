@@ -46,6 +46,28 @@ describe('场地', () => {
     expect(dist(p, start2)).toBeCloseTo(PLAYER.speed * 0.5, 0)
   })
 
+  it('摇杆：在屏幕左半边拖动，玩家按推动方向移动；推得越远走得越快', async () => {
+    const { g, arena } = await start()
+    isolate(arena)
+    const p = arena.player
+    g.pointerDown(200, 1000)
+    g.pointerMove(200, 910) // 向上推到底（半径 90）
+    g.step()
+    const y0 = p.y
+    g.stepSeconds(0.5)
+    expect(y0 - p.y).toBeCloseTo(PLAYER.speed * 0.5, 0)
+    g.pointerMove(200, 1000 - 18 - 36) // 推到 60%：扣掉 20% 死区，力度 0.5
+    g.step()
+    const y1 = p.y
+    g.stepSeconds(0.5)
+    expect(y1 - p.y).toBeCloseTo(PLAYER.speed * 0.5 * 0.5, 0)
+    g.pointerUp(200, 946)
+    g.step()
+    const y2 = p.y
+    g.step(10)
+    expect(p.y).toBe(y2)
+  })
+
   it('被墙挡住：走进左边的墙，停在墙边', async () => {
     const { g, arena } = await start()
     isolate(arena)

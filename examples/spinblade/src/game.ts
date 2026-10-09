@@ -1,4 +1,4 @@
-import { key } from 'sapling2d'
+import { key, pointerPress } from 'sapling2d'
 import { Arena } from './scenes/Arena'
 
 declare module 'sapling2d' {
@@ -7,6 +7,7 @@ declare module 'sapling2d' {
     right: true
     up: true
     down: true
+    confirm: true
   }
 }
 
@@ -19,5 +20,7 @@ export const gameOptions = {
     right: [key('ArrowRight'), key('KeyD')],
     up: [key('ArrowUp'), key('KeyW')],
     down: [key('ArrowDown'), key('KeyS')],
+    /** 结果画面：点屏幕或按空格再来一局。 */
+    confirm: [pointerPress(), key('Space'), key('Enter')],
   },
 }

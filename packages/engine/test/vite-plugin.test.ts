@@ -23,6 +23,10 @@ describe('findAssetReferences', () => {
     ])
   })
 
+  it('tileset：检查第一个参数（图集图片路径）', () => {
+    expect(findAssetReferences("const T = tileset('tiles/ground.png', { tileSize: 16 })")).toEqual([{ fn: 'tileset', path: 'tiles/ground.png', line: 1, column: 10 }])
+  })
+
   it('忽略注释里的示例；字符串里的 // 不影响后面的识别', () => {
     const code = ["/** 用法：tex('doc.png') */", "// sfx('commented.mp3')", "const u = 'http://cdn/x'; tex('real.png')"].join('\n')
     expect(findAssetReferences(code)).toEqual([{ fn: 'tex', path: 'real.png', line: 3, column: 26 }])

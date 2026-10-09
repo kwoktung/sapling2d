@@ -30,6 +30,8 @@ export type { GroupName, GroupNodeType } from './core/groups'
 export interface GroupRegistry {}
 export { Sprite2D, type Sprite2DOptions } from './nodes/Sprite2D'
 export { AnimatedSprite2D, type AnimatedSprite2DOptions, type SpriteAnimation } from './nodes/AnimatedSprite2D'
+export { TileMapLayer, type TileMapLayerOptions } from './nodes/TileMapLayer'
+export { TileSet, tileset, type TileSetOptions, type TileOptions, type TileData, type TileCollision } from './core/tileset'
 export { CollisionObject2D, type CollisionObject2DOptions } from './nodes/physics/CollisionObject2D'
 export { PhysicsBody2D, StaticBody2D, type PhysicsBody2DOptions } from './nodes/physics/PhysicsBody2D'
 export { Area2D, type Area2DOptions } from './nodes/physics/Area2D'

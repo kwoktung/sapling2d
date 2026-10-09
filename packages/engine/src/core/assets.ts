@@ -3,6 +3,7 @@ import { AudioStream } from '../audio/AudioStream'
 import { Rect2 } from '../math/Rect2'
 import { Vector2 } from '../math/Vector2'
 import type { Platform } from '../platform/Platform'
+import type { TileSet } from './tileset'
 
 /**
  * 贴图资源句柄。用 `tex(path)` 创建，路径相对于游戏的资源目录（默认 `assets/`）。
@@ -287,12 +288,13 @@ function naturalCompare(a: string, b: string): number {
 
 // ---------------------------------------------------------------- 加载
 
-/** 场景的 `static assets` 声明：贴图（tex）、图集（sheet / atlas）、音效（sfx）、音乐（music）。 */
-export type AssetMap = Record<string, Texture | SpriteSheet | Atlas | AudioStream>
+/** 场景的 `static assets` 声明：贴图（tex）、图集（sheet / atlas）、图块集（tileset）、音效（sfx）、音乐（music）。 */
+export type AssetMap = Record<string, Texture | SpriteSheet | Atlas | TileSet | AudioStream>
 
 /** @internal 资源实际要加载 / 卸载的对象：图集和子区域归结到整张图。 */
 export function assetRoot(asset: AssetMap[string]): Texture | AudioStream {
-  if (asset instanceof SpriteSheet || asset instanceof Atlas) return asset.texture
+  // TileSet 用 kind 判断：tileset.ts 在运行时依赖本文件（tex），这里再 import 它会形成循环依赖
+  if (asset instanceof SpriteSheet || asset instanceof Atlas || asset.kind === 'tileset') return asset.texture
   if (asset instanceof Texture) return asset._base ?? asset
   return asset
 }

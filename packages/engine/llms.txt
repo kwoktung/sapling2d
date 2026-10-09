@@ -436,6 +436,64 @@ it('sprite animation', async () => {
 - 图集的帧就是 `Texture`，可以给任何 `Sprite2D`；同一张图的帧共用一份显存，绘制时能合批。`static assets` 里放 `sheet` / `atlas`，切换场景时按整张图判断是否卸载。
 - `AnimatedSprite2D`：`frames` + `fps`（默认 10）+ `loop`（默认 true），或 `animations: { 名字: { frames, fps, loop } }`。`play(name?)` / `pause()` / `stop()`（回到第 0 帧）、`frame`（可赋值）、`frameCount`、`speedScale`、`isPlaying`、`animation`；信号 `frameChanged`、`animationFinished`（不循环的动画播完，参数是动画名）。`texture` 由动画控制，不要直接赋值。
 
+### 图块地图（TileMap）
+
+```ts
+import { Scene, TileMapLayer, tileset, v } from 'sapling2d'
+
+// 图块集：图集里每格 16px，编号从 1 开始（左上角是 1，从左到右、从上到下）
+const TILES = tileset('tiles.png', {
+  tileSize: 16,
+  tiles: {
+    1: { collision: 'solid' }, // 地面
+    2: { collision: 'solid', data: { breakable: true } }, // 砖块
+    3: { collision: 'oneWay' }, // 单向平台
+  },
+})
+
+// 关卡用字符画写在代码里；以后可以从 Tiled 导入
+const LEVEL = [
+  '................',
+  '.....222........',
+  '..........333...',
+  '................',
+  '1111111111111111',
+]
+const IDS: Record<string, number> = { '.': 0, '1': 1, '2': 2, '3': 3 }
+
+export class Level extends Scene {
+  static override assets = { tiles: TILES }
+  ground!: TileMapLayer
+
+  override ready() {
+    this.ground = this.add(
+      new TileMapLayer({
+        name: 'Ground',
+        tileSet: TILES,
+        width: LEVEL[0]!.length,
+        height: LEVEL.length,
+        cells: LEVEL.join('').split('').map((c) => IDS[c]!),
+        position: v(0, 200), // 格子 (0, 0) 的左上角在这里
+      }),
+    )
+  }
+
+  /** 顶砖块：point 是图层的局部坐标（像素）。 */
+  bump(point: { x: number; y: number }) {
+    const cell = this.ground.localToMap(v(point.x, point.y))
+    if (this.ground.getCellTileData(cell.x, cell.y)?.data.breakable) this.ground.eraseCell(cell.x, cell.y)
+  }
+}
+```
+
+- `tileset(path, { tileSize, tiles, columns?, margin?, spacing? })`：图块集，放进 `static assets` 预加载。图块编号从 1 开始（图集左上角是 1，从左到右、从上到下），0 表示空格子。
+  `tiles` 给图块定义属性：`collision`（`'solid'` 整格实心 / `'oneWay'` 单向平台）和 `data`（游戏自己的字段）；`tileSet.tile(id)` 读取。
+- `TileMapLayer`：一层格子，大小（`width × height` 格）创建后固定，格子左上角在节点原点；多层地图就是多个节点，叠放顺序看场景树。
+  `setCell(cx, cy, id)` / `eraseCell` / `getCell`（地图外返回 0）/ `getCellTileData`（图块属性，空格子为 null）/ `localToMap`（像素 → 格子）/ `mapToLocal`（格子 → 格子中心的像素）/ `getUsedRect`（单位是格）/ `usedCellCount`。
+- 一个图块集只能用一张图；图块不能翻转、旋转，没有动画。碰撞只有整格，没有斜坡。图层可以平移，不要旋转、缩放（碰撞按格子查）。
+- 渲染只画屏幕内的区块（16 × 16 格），改格子很便宜（顶碎砖块直接 `eraseCell`）。几万格的关卡也只是一个节点，不要用 Sprite2D 一格一格地拼。
+- 图块地图不生成物理刚体：`RigidBody2D` 不会被它挡住。
+
 ### 场景切换与存档
 
 ```ts
@@ -583,6 +641,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `RigidBody2D` | 动态刚体 | `mass` `friction` `bounce` `gravityScale` `linearVelocity` `angularVelocity` `lockRotation` `ccd` `applyCentralImpulse` `applyForce` `sleeping`；信号 `bodyEntered` `bodyExited` |
 | `StaticBody2D` | 静态刚体（地面、墙） | `friction` `bounce` |
 | `Area2D` | 检测区域 | 信号 `bodyEntered` `bodyExited`；`getOverlappingBodies()` |
+| `TileMapLayer` | 一层图块地图 | `tileSet` `width` `height` `collisionLayer` `setCell` `eraseCell` `getCell` `getCellTileData` `localToMap` `mapToLocal` `getUsedRect` `usedCellCount` |
 | `HitTester`（不是节点） | 两组对象之间的圆 / 矩形命中判定 | `forEachHit(as, bs, hit)`（`hit` 返回 true 表示 a 用掉了）、`HitTester.compact(list)`；对象需要 `x` `y` `hitShape`，可选 `dead` |
 | `CollisionShape2D` | 碰撞形状（必须是刚体 / 区域的直接子节点） | `shape`：`circle(r)` `rectangle(w, h)` `polygon(points)`；`disabled` |
 | `Timer` | 计时器 | `waitTime` `oneShot` `autostart` `start()` `stop()` `timeLeft`；信号 `timeout` |

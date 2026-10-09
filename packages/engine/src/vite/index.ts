@@ -14,13 +14,13 @@ export interface SaplingPluginOptions {
 
 /**
  * 匹配 tex('...') / sfx("...") / music(`...`) 的字面量路径（模板字符串里有 ${} 的跳过），
- * 以及 sheet('...', {...}) / atlas('...', data) 的第一个参数（图片路径）。
+ * 以及 sheet('...', {...}) / atlas('...', data) / tileset('...', {...}) 的第一个参数（图片路径）。
  */
-const ASSET_CALL = /\b(tex|sfx|music|sheet|atlas)\(\s*(['"`])((?:(?!\2)[^\\\n$]|\\.)+)\2\s*[,)]/g
+const ASSET_CALL = /\b(tex|sfx|music|sheet|atlas|tileset)\(\s*(['"`])((?:(?!\2)[^\\\n$]|\\.)+)\2\s*[,)]/g
 const SOURCE_FILE = /\.(?:[cm]?[jt]sx?)$/
 
 export interface AssetReference {
-  fn: 'tex' | 'sfx' | 'music' | 'sheet' | 'atlas'
+  fn: 'tex' | 'sfx' | 'music' | 'sheet' | 'atlas' | 'tileset'
   path: string
   /** 1 起始的行号和 0 起始的列号（与 Rollup 的 loc 一致）。 */
   line: number
@@ -43,7 +43,7 @@ export function findAssetReferences(code: string): AssetReference[] {
 }
 
 /**
- * sapling2d 的 Vite 插件：在构建和开发时检查 `tex()` / `sfx()` / `music()` / `sheet()` / `atlas()` 引用的资源文件是否存在。
+ * sapling2d 的 Vite 插件：在构建和开发时检查 `tex()` / `sfx()` / `music()` / `sheet()` / `atlas()` / `tileset()` 引用的资源文件是否存在。
  * 文件缺失时构建失败、开发服务器显示错误浮层，并指出文件、行列和最相近的现有文件名。
  *
  * ```ts
@@ -87,7 +87,7 @@ export function sapling(options: SaplingPluginOptions = {}): Plugin {
     transform(code, id) {
       const file = id.split('?')[0]!
       if (!SOURCE_FILE.test(file) || file.includes(`${sep}node_modules${sep}`) || file.startsWith(ENGINE_ROOT + sep)) return null
-      if (!/\b(?:tex|sfx|music|sheet|atlas)\(/.test(code)) return null
+      if (!/\b(?:tex|sfx|music|sheet|atlas|tileset)\(/.test(code)) return null
       for (const ref of findAssetReferences(code)) {
         const loc = { line: ref.line, column: ref.column }
         const abs = resolve(assetsRoot, ref.path)

@@ -62,12 +62,15 @@ export class Input {
   _inPhysics = false
 
   private _keysDown = new Set<string>()
-  /** 当前按下的指针（设计坐标）。 */
+  /** 当前按下的指针（世界坐标）。 */
   private _pointers = new Map<number, Vector2>()
+  /** 同一批指针在屏幕上的位置（设计坐标）：相机移动后，按它重新算出世界坐标。 */
+  private _pointersDesign = new Map<number, Vector2>()
   /** 当前按下、且没有被任何节点处理的指针；只有它们会触发 pointer 绑定。 */
   private _unhandledPointers = new Set<number>()
   private _captures = new Map<number, Capture>()
   private _pointerPosition: Vector2 | null = null
+  private _pointerPositionDesign: Vector2 | null = null
   private _pointerJustPressed = false
   private _pointerJustReleased = false
 
@@ -128,7 +131,7 @@ export class Input {
     return this._keysDown.has(code)
   }
 
-  /** 最近一次指针事件的位置（设计坐标）；还没有任何指针事件时为 null。 */
+  /** 最近一次指针事件的位置（世界坐标，没有相机时就是设计坐标）；还没有任何指针事件时为 null。 */
   get pointerPosition(): Vector2 | null {
     return this._pointerPosition
   }
@@ -148,7 +151,7 @@ export class Input {
     return this._pointerJustReleased
   }
 
-  /** 当前按下的所有指针：id → 位置（设计坐标）。 */
+  /** 当前按下的所有指针：id → 位置（世界坐标，没有相机时就是设计坐标）。 */
   get pressedPointers(): ReadonlyMap<number, Vector2> {
     return this._pointers
   }
@@ -166,6 +169,8 @@ export class Input {
     this._actionJustReleased.clear()
     this._pointerJustPressed = false
     this._pointerJustReleased = false
+    // 相机在上一帧末尾可能移动了：手指没动，它下面的世界坐标也变了
+    this._refreshPointerWorld()
     const queue = this._queue
     this._queue = []
     for (const e of queue) {
@@ -181,12 +186,16 @@ export class Input {
       return
     }
 
-    const position = this._viewport.screenToDesign(new Vector2(e.x, e.y))
+    // 世界坐标：和节点的全局坐标相同（有相机时随相机平移）
+    const design = this._viewport.screenToDesign(new Vector2(e.x, e.y))
+    const position = this._viewport.designToWorld(design)
     this._pointerPosition = position
+    this._pointerPositionDesign = design
     const id = e.pointerId
 
     if (e.type === 'pointerdown') {
       this._pointers.set(id, position)
+      this._pointersDesign.set(id, design)
       this._pointerJustPressed = true
       const node = this._pick(position)
       if (node) {
@@ -203,13 +212,17 @@ export class Input {
     const target = capture && capture.node.isInsideTree && !capture.node.isFreed ? capture.node : null
 
     if (e.type === 'pointermove') {
-      if (this._pointers.has(id)) this._pointers.set(id, position)
+      if (this._pointers.has(id)) {
+        this._pointers.set(id, position)
+        this._pointersDesign.set(id, design)
+      }
       target?.pointerMove.emit(event(id, position, target))
       return
     }
 
     // pointerup / pointercancel
     this._pointers.delete(id)
+    this._pointersDesign.delete(id)
     this._unhandledPointers.delete(id)
     this._captures.delete(id)
     this._pointerJustReleased = true
@@ -218,6 +231,13 @@ export class Input {
       target.pointerUp.emit(ev)
       if (e.type === 'pointerup' && target.hitTest(ev.localPosition)) target.clicked.emit(ev)
     }
+  }
+
+  /** 按屏幕位置重新算按下的指针和最近指针位置的世界坐标（相机没动时不变）。 */
+  private _refreshPointerWorld(): void {
+    const vp = this._viewport
+    for (const [id, design] of this._pointersDesign) this._pointers.set(id, vp.designToWorld(design))
+    if (this._pointerPositionDesign) this._pointerPosition = vp.designToWorld(this._pointerPositionDesign)
   }
 
   private _updateActions(): void {

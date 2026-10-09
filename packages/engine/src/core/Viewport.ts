@@ -49,6 +49,12 @@ export class Viewport {
   private _safeRect!: Rect2
   /** @internal 每次 update 递增，渲染层据此判断是否需要调整画布。 */
   _version = 0
+  /**
+   * @internal 相机造成的画面偏移（设计像素）：世界坐标 + 偏移 = 设计坐标。没有相机时为 0。
+   * 由 SceneTree 在每帧 process 之后按当前相机更新。
+   */
+  _canvasX = 0
+  _canvasY = 0
 
   constructor(design: DesignResolution, screen: ScreenInfo) {
     this.designWidth = design.width
@@ -93,6 +99,35 @@ export class Viewport {
   /** 渲染分辨率：min(DPR, 2)。 */
   get renderResolution(): number {
     return Math.min(this._screen.pixelRatio, MAX_RENDER_RESOLUTION)
+  }
+
+  /**
+   * 屏幕上可见的区域（世界坐标）：`visibleRect` 按相机平移后的结果。没有相机时等于 `visibleRect`。
+   * 每次读取都会创建 Rect2。
+   */
+  get visibleWorldRect(): Rect2 {
+    const r = this._visibleRect
+    return new Rect2(r.x - this._canvasX, r.y - this._canvasY, r.width, r.height)
+  }
+
+  /** 窗口坐标 → 世界坐标（考虑相机）。指针事件的坐标就是世界坐标。 */
+  screenToWorld(p: Vector2): Vector2 {
+    return this.designToWorld(this.screenToDesign(p))
+  }
+
+  /** 世界坐标 → 窗口坐标（考虑相机）。 */
+  worldToScreen(p: Vector2): Vector2 {
+    return this.designToScreen(this.worldToDesign(p))
+  }
+
+  /** 设计坐标（屏幕上的位置）→ 世界坐标：减去相机偏移。没有相机时不变。 */
+  designToWorld(p: Vector2): Vector2 {
+    return new Vector2(p.x - this._canvasX, p.y - this._canvasY)
+  }
+
+  /** 世界坐标 → 设计坐标（屏幕上的位置）。 */
+  worldToDesign(p: Vector2): Vector2 {
+    return new Vector2(p.x + this._canvasX, p.y + this._canvasY)
   }
 
   /** 窗口坐标 → 设计坐标。 */

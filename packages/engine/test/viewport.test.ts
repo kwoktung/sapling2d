@@ -87,12 +87,13 @@ describe('屏幕变化', () => {
     const r = PixiRenderer._createForSyncTests()
     r.sync(g.tree)
     const vp = g.tree.viewport
-    expect(r._stage.scale.x).toBeCloseTo(vp.scale)
-    expect(r._stage.position.y).toBeCloseTo(vp.offset.y)
+    const scene = r._stage.parent! // _stage 是相机平移的世界容器，视口变换在它的父容器上
+    expect(scene.scale.x).toBeCloseTo(vp.scale)
+    expect(scene.position.y).toBeCloseTo(vp.offset.y)
 
     g.setScreen({ width: 1000, height: 1334, pixelRatio: 1 })
     r.sync(g.tree)
-    expect(r._stage.scale.x).toBeCloseTo(1)
-    expect(r._stage.position.x).toBeCloseTo(125)
+    expect(scene.scale.x).toBeCloseTo(1)
+    expect(scene.position.x).toBeCloseTo(125)
   })
 })

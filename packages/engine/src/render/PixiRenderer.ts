@@ -101,8 +101,10 @@ export class PixiRenderer implements Renderer {
   private readonly _renderer: WebGLRenderer
   /** 渲染根：包含场景容器和（keep 模式的）裁剪遮罩。 */
   private readonly _root = new Container()
-  /** 场景容器：施加视口变换，Autoload 和当前场景的显示对象挂在这里。 */
+  /** 场景容器：施加视口变换（设计坐标 → 屏幕）。 */
   private readonly _sceneContainer = new Container()
+  /** 世界容器：在场景容器里，施加相机的平移（世界坐标 → 设计坐标）。Autoload 和当前场景的显示对象挂在这里。 */
+  private readonly _worldContainer = new Container()
   private readonly _mask = new Graphics()
   private _viewportVersion = -1
   /** 文字的栅格化分辨率：渲染分辨率 × 视口缩放，保证文字在任何屏幕上都按实际像素清晰绘制。 */
@@ -124,6 +126,9 @@ export class PixiRenderer implements Renderer {
   private readonly _tileShaders = new Map<Texture, { resource: unknown; shader: Shader }>()
   /** 本次同步时屏幕上可见的区域（设计坐标），用来裁剪 TileMapLayer 的区块。 */
   private _visibleRect: Rect2 = new Rect2(0, 0, 0, 0)
+  /** 本次同步时相机的画面偏移（世界坐标 + 偏移 = 设计坐标）。 */
+  private _canvasX = 0
+  private _canvasY = 0
   /** `_chunkRange` 的结果：屏幕内的区块范围（含两端）。 */
   private _cx0 = 0
   private _cy0 = 0
@@ -137,9 +142,9 @@ export class PixiRenderer implements Renderer {
     return new PixiRenderer(null as unknown as WebGLRenderer, options.pixelArt ?? false)
   }
 
-  /** @internal 测试用：根容器。 */
+  /** @internal 测试用：节点显示对象的根容器（相机平移的世界容器；视口变换在它的父容器上）。 */
   get _stage(): Container {
-    return this._sceneContainer
+    return this._worldContainer
   }
 
   /**
@@ -151,7 +156,8 @@ export class PixiRenderer implements Renderer {
   private constructor(renderer: WebGLRenderer, pixelArt: boolean) {
     this._renderer = renderer
     this._pixelArt = pixelArt
-    this._sceneContainer.sortableChildren = true
+    this._worldContainer.sortableChildren = true
+    this._sceneContainer.addChild(this._worldContainer)
     this._root.addChild(this._sceneContainer)
   }
 
@@ -190,15 +196,30 @@ export class PixiRenderer implements Renderer {
   sync(tree: SceneTree): void {
     this._releaseUnloadedTextures()
     this._syncViewport(tree.viewport)
-    this._visibleRect = tree.viewport.visibleRect
+    this._syncCamera(tree.viewport)
     const frame = ++this._frame
     this._seen = 0
-    this._syncChildren(tree._topLevel(), this._sceneContainer, 0)
+    this._syncChildren(tree._topLevel(), this._worldContainer, 0)
     if (this._seen === this._views.size) return
     // 有节点离开了树：销毁它们的显示对象（Map 的 forEach 里删除当前项是安全的）
     this._views.forEach((view, node) => {
       if (view.frame !== frame) this._destroyView(node, view)
     })
+  }
+
+  /** 相机的平移写到世界容器上。像素风时对齐到物理像素：相机慢慢移动时，静止的东西不会在相邻两个像素之间跳。 */
+  private _syncCamera(viewport: Viewport): void {
+    this._visibleRect = viewport.visibleRect
+    let x = viewport._canvasX
+    let y = viewport._canvasY
+    if (this._pixelArt) {
+      const k = viewport.scale * viewport.renderResolution // 1 个设计像素 = k 个物理像素
+      x = Math.round(x * k) / k
+      y = Math.round(y * k) / k
+    }
+    this._canvasX = x
+    this._canvasY = y
+    this._worldContainer.position.set(x, y)
   }
 
   private _syncViewport(viewport: Viewport): void {
@@ -457,8 +478,9 @@ export class PixiRenderer implements Renderer {
     let maxX = -Infinity
     let maxY = -Infinity
     for (let k = 0; k < 4; k++) {
-      const gx = k & 1 ? r.right : r.left
-      const gy = k & 2 ? r.bottom : r.top
+      // 可见区域换到世界坐标（减去相机偏移）
+      const gx = (k & 1 ? r.right : r.left) - this._canvasX
+      const gy = (k & 2 ? r.bottom : r.top) - this._canvasY
       const lx = ia * gx + ic * gy + itx
       const ly = ib * gx + id * gy + ity
       if (lx < minX) minX = lx

@@ -4,7 +4,7 @@ import { PLAYER, WEAPON } from '../config'
 
 /** 玩家战机：命数、火力等级、受伤后的无敌时间（期间闪烁）。移动和射击由战斗场景驱动。 */
 export class Player extends Sprite2D {
-  readonly radius = PLAYER.radius
+  readonly hitShape = PLAYER.hitShape
   lives = PLAYER.lives
   private _power = 1
   private _invincibleLeft = 0
@@ -32,7 +32,7 @@ export class Player extends Sprite2D {
     return this.lives > 0
   }
 
-  /** 碰撞接口（Circle）要求的字段。 */
+  /** 命中判定（HitTester）用：没命了就不再参与碰撞。 */
   get dead(): boolean {
     return this.lives <= 0
   }

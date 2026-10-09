@@ -10,7 +10,7 @@ const SCALE_B = v(1.12, 1.12)
 /** 道具：慢慢往下飘，左右轻轻摆；碰到玩家时生效。 */
 export class PowerUp extends Sprite2D {
   readonly kind: PowerUpKind
-  readonly radius = POWERUP.radius
+  readonly hitShape = POWERUP.hitShape
   dead = false
   private readonly _baseX: number
   private _age = 0

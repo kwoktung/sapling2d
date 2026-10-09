@@ -35,3 +35,7 @@
 - 碰撞层：32 位可用（planck 用 `(a & b) !== 0` 判断，第 32 层的符号位不影响）。
 - 碰撞层规则改为 Godot 语义（任一方 mask 包含对方 layer 即碰撞），通过覆写每个 fixture 的 `shouldCollide` 实现；Box2D 原生的 category/mask 不再使用。
 - Area2D 用 kinematic 刚体 + sensor fixture 实现，因此检测不到静态刚体和其他 Area2D（Box2D 只为至少含一个 dynamic 的刚体对生成接触）。
+
+## Update (2026-10-09, ADR 0009)
+
+- `CharacterBody2D` 不基于 kinematic 刚体：它直接和 TileMap 的格子做碰撞，不经过 planck（ADR 0009）。上面“Character controller 以后需要基于 kinematic 刚体加 rayCast 自行实现”不再成立。

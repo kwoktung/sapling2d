@@ -1,4 +1,4 @@
-import { AnimatedSprite2D, AudioStreamPlayer, HitTester, Node2D, Scene, v, type Vector2 } from 'sapling2d'
+import { AnimatedSprite2D, AudioStreamPlayer, HitTester, Node2D, Particles2D, Scene, v, type Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
 import { BOSS, ENEMIES, ENEMY_BULLET, PLAYER, WAVES, WEAPON, type EnemyKind, type PowerUpKind } from '../config'
 import { Background } from '../nodes/Background'
@@ -407,9 +407,30 @@ export class BattleScene extends Scene implements EnemyHost {
     this.tree.createTimer(GAME_OVER_DELAY).timeout.connect(() => this._finish(), this)
   }
 
+  /** 爆炸：火球帧动画 + 向四周飞散的碎片（粒子，数量和速度按爆炸大小）。都在播完后自己删掉。 */
   private _explode(at: Vector2, scale: number) {
     const fx = this._fxLayer.add(new AnimatedSprite2D({ name: 'Explosion', frames: ASSETS.explosion.frames(), fps: 20, loop: false, autoplay: true, position: at, scale: v(scale, scale) }))
     fx.animationFinished.connect(() => fx.queueFree(), fx)
+    const debris = this._fxLayer.add(
+      new Particles2D({
+        name: 'Debris',
+        texture: ASSETS.sprites.get('white'),
+        selfModulate: 0xffb040,
+        position: at,
+        emitting: false,
+        amount: Math.round(6 + 8 * scale),
+        lifetime: 0.55,
+        lifetimeRandomness: 0.4,
+        speedMin: 120 * scale,
+        speedMax: 320 * scale,
+        damping: 3,
+        scaleStart: 1.2,
+        scaleEnd: 0.2,
+        alphaEnd: 0,
+      }),
+    )
+    debris.emit()
+    debris.finished.connect(() => debris.queueFree(), debris)
   }
 
   private _finish() {

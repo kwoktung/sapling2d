@@ -85,6 +85,8 @@
     "bench:physics:jitless": "SAPLING_BENCH=1 SAPLING_JITLESS=1 vitest run bench/physics",
     "bench:bullets": "SAPLING_BENCH=1 vitest run bench/bullets.bench",
     "bench:bullets:jitless": "SAPLING_BENCH=1 SAPLING_JITLESS=1 vitest run bench/bullets.bench",
+    "bench:particles": "SAPLING_BENCH=1 vitest run bench/particles.bench",
+    "bench:particles:jitless": "SAPLING_BENCH=1 SAPLING_JITLESS=1 vitest run bench/particles.bench",
     "bench:bullets:profile": "SAPLING_BENCH=1 vitest run bench/bullets-profile",
     "bench:bullets:profile:jitless": "SAPLING_BENCH=1 SAPLING_JITLESS=1 vitest run bench/bullets-profile",
     "llms": "node scripts/build-llms.ts",

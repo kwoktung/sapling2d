@@ -47,6 +47,7 @@ export { CircleShape2D, RectangleShape2D, ConvexPolygonShape2D, circle, rectangl
 export { PhysicsWorld, type PhysicsSettings } from './physics/PhysicsWorld'
 export { HitTester, type Hittable } from './physics/HitTester'
 export { ColorRect, type ColorRectOptions } from './nodes/ColorRect'
+export { Particles2D, type Particles2DOptions } from './nodes/Particles2D'
 export { Label, type LabelOptions, type LabelStroke, type HorizontalAlignment, type VerticalAlignment } from './nodes/Label'
 export { Texture, tex, SpriteSheet, sheet, Atlas, atlas, type AssetMap, type AtlasData, type AtlasFrameData } from './core/assets'
 export { AudioStream, sfx, music } from './audio/AudioStream'

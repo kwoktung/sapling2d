@@ -66,8 +66,10 @@ describe('战斗', () => {
     expect(scene.enemies).toHaveLength(0)
     expect(scene.score).toBe(100)
     expect(g.dump()).toContain('Explosion (AnimatedSprite2D)')
+    expect(g.dump()).toMatch(/Debris \(Particles2D\).* particles=1[0-9]/) // 碎片粒子
     g.stepSeconds(1)
     expect(g.dump()).not.toContain('Explosion') // 播完自动销毁
+    expect(g.dump()).not.toContain('Debris')
     expect(g.audio.log.some((s) => s.path === 'sfx/explode.mp3')).toBe(true)
   })
 

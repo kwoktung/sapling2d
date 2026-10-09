@@ -221,6 +221,18 @@
 - 停顿时普通计时器也停了：恢复时间用 `createTimer(秒, { ignoreTimeScale: true })`（按真实时间）。
 - 和 `paused` 互相独立；界面（CanvasLayer）也一起变慢，停顿很短时看不出来。大于 1 时受每帧物理步数上限（默认 2）限制。
 
+### 粒子（Particles2D）
+
+<!-- example:particles -->
+
+<!-- example:particles#test -->
+
+- 粒子不是节点：数据存在发射器里，一个发射器一次绘制调用（Pixi 的 ParticleContainer）。每帧不分配内存；`amount` 是同时存活的上限，到了上限不再发射。
+- 发射：`emitting`（默认 true，持续发射，每秒 `rate` 个，默认 `amount / lifetime`）；`emit(n)` 马上爆发 n 个（默认 `amount`）；`oneShot: true` 时 `emitting` 一变成 true 就爆发 `amount` 个，然后自动关掉。全部消失、且不再发射时发出 `finished`（用来 `queueFree`）。
+- 运动：`direction`（弧度，跟着节点的全局旋转）± `spread`（默认 π：所有方向）、`speedMin` / `speedMax`、`gravity`、`damping`（每秒损失速度的比例）；`lifetime` 和 `lifetimeRandomness`；`scaleStart → scaleEnd`、`alphaStart → alphaEnd` 随寿命线性变化。粒子不旋转。
+- 坐标：默认粒子发射后留在原地，不随节点移动（火花、拖尾）；`localCoords: true` 时跟着节点走。颜色用 `selfModulate`（只染粒子）或 `modulate`。
+- 随机数用 `tree.rng`（测试可复现）；时间受 `timeScale` 和暂停影响。`aliveCount` 是存活的粒子数，`dump` 里显示为 `particles=`。
+
 ## 补间的控制
 
 - `createTween()` 返回的 Tween 可以 `kill()`（立即停止，不触发 `finished`），`isRunning` 表示是否还在播放；链式方法有 `to`、`parallel`、`wait(秒)`、`call(fn)`。
@@ -264,6 +276,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `AnimatedSprite2D` | 帧动画（继承 Sprite2D） | `frames` / `animations` `fps` `loop` `autoplay` `play()` `pause()` `stop()` `frame` `speedScale` `isPlaying` `animation`；信号 `frameChanged` `animationFinished` |
 | `Label` | 文字 | `text` `fontSize` `color` `fontWeight` `align` `verticalAlign` `stroke` `wrapWidth` `lineHeight` |
 | `ColorRect` | 纯色矩形（原点在左上角） | `size` `color` `rect` |
+| `Particles2D` | 粒子发射器（粒子不是节点） | `texture` `amount` `lifetime` `lifetimeRandomness` `emitting` `oneShot` `rate` `direction` `spread` `speedMin` `speedMax` `gravity` `damping` `scaleStart` `scaleEnd` `alphaStart` `alphaEnd` `localCoords` `emit()` `restart()` `aliveCount`；信号 `finished` |
 | `RigidBody2D` | 动态刚体 | `mass` `friction` `bounce` `gravityScale` `linearVelocity` `angularVelocity` `lockRotation` `ccd` `applyCentralImpulse` `applyForce` `sleeping`；信号 `bodyEntered` `bodyExited` |
 | `StaticBody2D` | 静态刚体（地面、墙） | `friction` `bounce` |
 | `Area2D` | 检测区域 | 信号 `bodyEntered` `bodyExited`；`getOverlappingBodies()` |
@@ -308,6 +321,7 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 | `AnimatedSprite2D` | 同 Sprite2D，加 `animation`（有多套时）、`frame`（总是显示）、`playing` |
 | `Label` | `text`（总是显示，含空格时加引号）、`fontSize`、`align` |
 | `ColorRect` | `size`、`color`（总是显示） |
+| `Particles2D` | `texture`、`emitting`、`particles`（存活数，总是显示） |
 | `RigidBody2D` | `mass`、`friction`、`bounce`、`linearVelocity`（运动时）、`sleeping`、`collisionLayer`、`collisionMask` |
 | `StaticBody2D` / `Area2D` | `friction`、`bounce`（静态刚体）、`collisionLayer`、`collisionMask` |
 | `CollisionShape2D` | `shape`（如 `circle(30)`）、`disabled` |
@@ -374,4 +388,4 @@ for (let i = 0; i < bullets.length; i++) {
 ## 更多
 
 - 术语表：仓库根目录 `CONTEXT.md`；架构决策：`docs/adr/`；微信环境实测：`spikes/wechat/REPORT.md`。
-- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/plane`（飞机大战：图集、帧动画、用 HitTester 做碰撞、暂停）、`examples/platformer`（横版跳跃：Tiled 关卡、CharacterBody2D、Camera2D、CanvasLayer 的 HUD、屏幕按钮、像素风、横屏）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。
+- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/plane`（飞机大战：图集、帧动画、粒子、用 HitTester 做碰撞、暂停）、`examples/platformer`（横版跳跃：Tiled 关卡、CharacterBody2D、Camera2D、CanvasLayer 的 HUD、屏幕按钮、像素风、横屏）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。

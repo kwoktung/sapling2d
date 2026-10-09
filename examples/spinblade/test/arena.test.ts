@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
-import { FIGHTER, PLAYER, RING, TILE } from '../src/config'
+import { FIGHTER, KNIFE, PLAYER, RING, TILE } from '../src/config'
+import { Knife } from '../src/nodes/Knife'
 import { gameOptions } from '../src/game'
 import type { Arena } from '../src/scenes/Arena'
 
@@ -12,7 +13,7 @@ async function start() {
 
 /** 把场地清空成只剩玩家：其他角色和地上的刀都不在附近，不干扰测试。 */
 function isolate(arena: Arena) {
-  for (const e of arena.enemies) e.position = v(-1000, -1000)
+  arena.enemies.forEach((e, i) => (e.position = v(-2000 * (i + 1), -1000))) // 彼此离开，刀圈不会互相碰到
   for (const k of arena.groundKnives) k.position = v(-5000, -5000) // 和敌人分开放，否则会被敌人捡走
 }
 
@@ -139,5 +140,81 @@ describe('场地', () => {
     g.stepSeconds(1)
     expect(e.x).toBeGreaterThanOrEqual(wallX - 1e-6)
     expect(p.x).toBeGreaterThan(e.x)
+  })
+})
+
+/** 场上所有的刀：刀圈里的、地上的、飞着的。 */
+function allKnives(arena: Arena) {
+  return arena.children.filter((n) => n instanceof Knife)
+}
+
+describe('刀的碰撞', () => {
+  it('刀碰刀：两把刀都被打飞，落地后在地上；刀的总数不变', async () => {
+    const { g, arena } = await start()
+    isolate(arena)
+    const p = arena.player
+    const e = arena.enemies[0]!
+    const total = allKnives(arena).length
+    // 刀圈有交叉、身体不重叠：两个刀圈反向转，刀一定会碰到
+    e.position = v(p.x + p.ringRadius + e.ringRadius - 10, p.y)
+    const before = p.knives.length + e.knives.length + arena.groundKnives.length
+    g.step(10)
+    const flying = allKnives(arena).filter((k) => k.flying)
+    expect(flying.length).toBeGreaterThanOrEqual(2)
+    expect(p.knives.length + e.knives.length + flying.length + arena.groundKnives.length).toBe(before)
+    expect(p.knives.length).toBeLessThan(PLAYER.startKnives)
+    expect(e.knives.length).toBeLessThan(4)
+    g.stepSeconds(KNIFE.flyTime + 0.1)
+    for (const k of flying) {
+      expect(k.flying).toBe(false)
+      expect(arena.isSolid(k.x, k.y)).toBe(false)
+    }
+    expect(allKnives(arena)).toHaveLength(total)
+  })
+
+  it('打飞的刀落地后可以被别人捡起', async () => {
+    const { g, arena } = await start()
+    isolate(arena)
+    const p = arena.player
+    const e = arena.enemies[0]!
+    e.position = v(p.x + p.ringRadius + e.ringRadius - 10, p.y)
+    g.step(10)
+    g.stepSeconds(KNIFE.flyTime + 0.1)
+    const landed = arena.groundKnives.find((k) => dist(k, p) < 400)!
+    expect(landed).toBeDefined()
+    const other = arena.enemies[1]!
+    other.position = landed.position
+    const n = other.knives.length
+    g.step(2)
+    expect(other.knives).toContain(landed)
+    expect(other.knives).toHaveLength(n + 1)
+  })
+
+  it('刀砍身体扣血；同一把刀在冷却时间内不重复扣血', async () => {
+    const { g, arena } = await start()
+    isolate(arena)
+    const p = arena.player
+    const e = arena.enemies[0]!
+    // 敌人没有刀，身体放在玩家的刀圈上
+    for (const k of [...e.knives]) e.removeKnife(k)
+    e.position = v(p.x + p.ringRadius, p.y)
+    const steps = 60
+    g.step(steps)
+    const lost = FIGHTER.hp - e.hp
+    expect(lost).toBeGreaterThan(0)
+    // 每把刀每 hitCooldown 秒最多砍一次
+    expect(lost).toBeLessThanOrEqual(p.knives.length * (Math.floor(steps / 60 / KNIFE.hitCooldown) + 1))
+  })
+
+  it('靠墙时刀被打飞，不会落进墙里', async () => {
+    const { g, arena } = await start()
+    isolate(arena)
+    const p = arena.player
+    const e = arena.enemies[0]!
+    // 两个角色贴着左边的墙上下排列，刀圈有交叉：有的刀会朝墙飞
+    p.position = v(TILE + FIGHTER.box / 2, 20 * TILE)
+    e.position = v(TILE + FIGHTER.box / 2, 20 * TILE + p.ringRadius + e.ringRadius - 10)
+    g.stepSeconds(1)
+    for (const k of allKnives(arena)) if (k.owner === null && dist(k, p) < 600) expect(arena.isSolid(k.x, k.y)).toBe(false)
   })
 })

@@ -65,6 +65,17 @@
 
 `isActionJustPressed` / `isActionJustReleased` 在 `process` 里按帧算；在 `physicsProcess`（以及刚体的接触信号）里按物理步算（上一个物理步之后按下的，在下一个物理步里为 true）。屏幕刷新率高于 60Hz 时有的帧没有物理步，所以在 `physicsProcess` 里处理跳跃这类按键不会丢。
 
+### 屏幕按钮（虚拟按键）
+
+<!-- example:touch-buttons -->
+
+- `TouchScreenButton`（继承 Sprite2D）：手指按住时 `action` 处于按下状态，和键盘绑定共用动作名（`isActionPressed` / `isActionJustPressed` 照常用）。信号 `pressed` / `released`，`isPressed`，`texturePressed` 按下时换图。
+- 触摸区域：`hitArea`（可以比贴图大，推荐），否则用贴图范围。每个手指独立；滑出按钮、抬起、触摸取消、切到后台都会松开。`passbyPress: true` 时手指滑进来也算按下（方向键）。
+- 和 `pointerPress()` 的区别：`pointerPress()` 是“屏幕上任意一处没被节点处理的按下”（点屏幕开始游戏）；屏幕按钮只认自己的区域，按在按钮上的手指**不会**触发 `pointerPress()`，也不会点中下面的节点。
+- 放进 `CanvasLayer` 固定在屏幕上；隐藏、暂停（不能处理）时按不下，按着的会在下一帧松开。按绘制顺序参与拾取：画在它上面的可点击节点（例如更高层的对话框）先收到指针。
+- 从空白处滑进 `passbyPress` 按钮的手指从此不算 `pointerPress()` 的按下；正在拖着节点的手指滑过按钮不会按下它。
+- `action` 应该是已定义的动作（可以是没有绑定的 `[]`）；未定义时打印警告，按钮照常显示但不影响任何动作。
+
 ### 物理与碰撞（合成玩法）
 
 <!-- example:physics -->
@@ -211,6 +222,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `CharacterBody2D` | 平台游戏的角色（只和图块地图碰撞） | `shape` `velocity` `velocityX` `velocityY` `setVelocity` `moveAndSlide()` `isOnFloor` `isOnWall` `isOnCeiling` `slideCollisionCount` `getSlideCollision(i)` `collisionMask` |
 | `Camera2D` | 相机（画面跟随） | `enabled` `offset` `limitLeft` `limitTop` `limitRight` `limitBottom` `positionSmoothingEnabled` `positionSmoothingSpeed` `makeCurrent()` `isCurrent` `resetSmoothing()` `screenCenter` |
 | `CanvasLayer`（不是 Node2D） | 界面层（不跟随相机） | `layer` `visible` |
+| `TouchScreenButton` | 屏幕按钮（继承 Sprite2D） | `action` `texturePressed` `passbyPress` `isPressed` `hitArea`；信号 `pressed` `released` |
 | `HitTester`（不是节点） | 两组对象之间的圆 / 矩形命中判定 | `forEachHit(as, bs, hit)`（`hit` 返回 true 表示 a 用掉了）、`HitTester.compact(list)`；对象需要 `x` `y` `hitShape`，可选 `dead` |
 | `CollisionShape2D` | 碰撞形状（必须是刚体 / 区域的直接子节点） | `shape`：`circle(r)` `rectangle(w, h)` `polygon(points)`；`disabled` |
 | `Timer` | 计时器 | `waitTime` `oneShot` `autostart` `start()` `stop()` `timeLeft`；信号 `timeout` |

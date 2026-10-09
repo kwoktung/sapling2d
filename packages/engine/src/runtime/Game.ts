@@ -67,6 +67,7 @@ export class Game<S extends Scene = Scene> {
           this._lastTime = platform.now()
         }
       }
+      if (!focused) tree.input._releaseAll() // 切到后台时手指和按键的抬起收不到：当作全部松开
       tree.audio._setFocused(focused) // 后台时总是挂起声音
       tree.focusChanged.emit(focused)
     })

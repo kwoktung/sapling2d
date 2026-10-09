@@ -71,6 +71,13 @@ export class Input {
   private _captures = new Map<number, Capture>()
   private _pointerPosition: Vector2 | null = null
   private _pointerPositionDesign: Vector2 | null = null
+  /** 树里的屏幕按钮（TouchScreenButton 进入树时登记）。 */
+  private readonly _buttons: VirtualButton[] = []
+  private readonly _buttonSet = new Set<Node2D>()
+  /** 遍历按钮时用的副本（复用）：按钮的信号回调可能增删按钮。 */
+  private readonly _buttonScratch: VirtualButton[] = []
+  /** 动作名 → 正按着的屏幕按钮数：大于 0 时动作处于按下状态。 */
+  private readonly _buttonCounts = new Map<string, number>()
   private _pointerJustPressed = false
   private _pointerJustReleased = false
 
@@ -171,6 +178,9 @@ export class Input {
     this._pointerJustReleased = false
     // 相机在上一帧末尾可能移动了：手指没动，它下面的世界坐标也变了
     this._refreshPointerWorld()
+    // 按着的按钮变得不能按（隐藏、暂停、被移除）时松开；动作状态在这里统一更新，所有节点在同一帧看到变化
+    this._releaseUnusableButtons()
+    this._updateActions()
     const queue = this._queue
     this._queue = []
     for (const e of queue) {
@@ -197,7 +207,12 @@ export class Input {
       this._pointers.set(id, position)
       this._pointersDesign.set(id, design)
       this._pointerJustPressed = true
+      // 按绘制顺序找最上面的：是屏幕按钮就交给按钮（不点中下面的节点，也不触发 pointerPress() 绑定）
       const node = this._pick(position, design)
+      if (node && this._buttonSet.has(node)) {
+        this._pressButtonsAt(id, position, design, false)
+        return
+      }
       if (node) {
         this._captures.set(id, { node })
         node.pointerDown.emit(event(id, position, design, node))
@@ -215,12 +230,14 @@ export class Input {
       if (this._pointers.has(id)) {
         this._pointers.set(id, position)
         this._pointersDesign.set(id, design)
+        this._moveOnButtons(id, position, design)
       }
       target?.pointerMove.emit(event(id, position, design, target))
       return
     }
 
     // pointerup / pointercancel
+    this._releaseButtons(id)
     this._pointers.delete(id)
     this._pointersDesign.delete(id)
     this._unhandledPointers.delete(id)
@@ -233,6 +250,107 @@ export class Input {
     }
   }
 
+  // ---------------------------------------------------------------- 屏幕按钮
+
+  /** @internal TouchScreenButton 进入树时调用。 */
+  _addButton(button: VirtualButton): void {
+    this._buttons.push(button)
+    this._buttonSet.add(button)
+  }
+
+  /** @internal TouchScreenButton 离开树时调用：按着的话松开（动作状态在下一帧开始时更新）。 */
+  _removeButton(button: VirtualButton): void {
+    const i = this._buttons.indexOf(button)
+    if (i >= 0) this._buttons.splice(i, 1)
+    this._buttonSet.delete(button)
+    if (button._pointerIds.size > 0) {
+      button._pointerIds.clear()
+      this._buttonReleased(button)
+    }
+  }
+
+  /**
+   * @internal 游戏切到后台：松开所有按下的指针和按键（排队成取消 / 松开事件，下一帧开始时按顺序处理）。
+   * 还在队列里、没处理的按下也算：它们的抬起在后台收不到。
+   */
+  _releaseAll(): void {
+    const pointers = new Map<number, { x: number; y: number }>()
+    for (const [id, design] of this._pointersDesign) pointers.set(id, this._viewport.designToScreen(design))
+    const keys = new Set(this._keysDown)
+    for (const e of this._queue) {
+      if (e.type === 'pointerdown') pointers.set(e.pointerId, { x: e.x, y: e.y })
+      else if (e.type === 'keydown') keys.add(e.code)
+    }
+    for (const [id, p] of pointers) this._queue.push({ type: 'pointercancel', pointerId: id, x: p.x, y: p.y })
+    for (const code of keys) this._queue.push({ type: 'keyup', code })
+  }
+
+  /** 当前按钮的副本（复用的数组）：遍历时信号回调增删按钮也不会漏掉或多算。 */
+  private _snapshotButtons(): VirtualButton[] {
+    const out = this._buttonScratch
+    out.length = 0
+    for (let i = 0; i < this._buttons.length; i++) out.push(this._buttons[i]!)
+    return out
+  }
+
+  /** 指针 `id` 下面能按的按钮都按下（`passbyOnly`：只按允许滑入的）。返回是否按到了按钮。 */
+  private _pressButtonsAt(id: number, world: Vector2, design: Vector2, passbyOnly: boolean): boolean {
+    let hit = false
+    const buttons = this._snapshotButtons()
+    for (let i = 0; i < buttons.length; i++) {
+      const button = buttons[i]!
+      if (!this._buttonSet.has(button) || button._pointerIds.has(id) || (passbyOnly && !button.passbyPress) || !hitsAt(button, world, design)) continue
+      hit = true
+      button._pointerIds.add(id)
+      if (button._pointerIds.size === 1) this._buttonPressed(button)
+    }
+    return hit
+  }
+
+  /** 手指移动：滑出的按钮松开；没有拖着节点的手指滑进允许滑入的按钮时按下（之后它不再算 pointerPress() 的按下）。 */
+  private _moveOnButtons(id: number, world: Vector2, design: Vector2): void {
+    const buttons = this._snapshotButtons()
+    let passby = false
+    for (let i = 0; i < buttons.length; i++) {
+      const button = buttons[i]!
+      if (button.passbyPress) passby = true
+      if (!button._pointerIds.has(id) || !this._buttonSet.has(button) || hitsAt(button, world, design)) continue
+      button._pointerIds.delete(id)
+      if (button._pointerIds.size === 0) this._buttonReleased(button)
+    }
+    if (passby && !this._captures.has(id) && this._pressButtonsAt(id, world, design, true)) this._unhandledPointers.delete(id)
+  }
+
+  private _releaseButtons(id: number): void {
+    const buttons = this._snapshotButtons()
+    for (let i = 0; i < buttons.length; i++) {
+      const button = buttons[i]!
+      if (!button._pointerIds.delete(id)) continue
+      if (button._pointerIds.size === 0) this._buttonReleased(button)
+    }
+  }
+
+  /** 按着的按钮变得不能按（隐藏、暂停、等待销毁）时松开。每帧开始时调用，平时只是一个遍历。 */
+  private _releaseUnusableButtons(): void {
+    for (let i = 0; i < this._buttons.length; i++) {
+      const button = this._buttons[i]!
+      if (button._pointerIds.size === 0 || canHit(button)) continue
+      button._pointerIds.clear()
+      this._buttonReleased(button)
+      i = -1 // 信号回调可能增删了按钮：从头再看一遍（已经松开的会被跳过）
+    }
+  }
+
+  private _buttonPressed(button: VirtualButton): void {
+    if (button.action !== null) this._buttonCounts.set(button.action, (this._buttonCounts.get(button.action) ?? 0) + 1)
+    button._setPressed(true)
+  }
+
+  private _buttonReleased(button: VirtualButton): void {
+    if (button.action !== null) this._buttonCounts.set(button.action, (this._buttonCounts.get(button.action) ?? 1) - 1)
+    button._setPressed(false)
+  }
+
   /** 按屏幕位置重新算按下的指针和最近指针位置的世界坐标（相机没动时不变）。 */
   private _refreshPointerWorld(): void {
     const vp = this._viewport
@@ -242,7 +360,8 @@ export class Input {
 
   private _updateActions(): void {
     for (const [name, bindings] of this._actions) {
-      const pressed = bindings.some((b) => (b.type === 'key' ? this._keysDown.has(b.code) : this._unhandledPointers.size > 0))
+      const pressed =
+        (this._buttonCounts.get(name) ?? 0) > 0 || bindings.some((b) => (b.type === 'key' ? this._keysDown.has(b.code) : this._unhandledPointers.size > 0))
       const was = this._actionPressed.has(name)
       if (pressed && !was) {
         this._actionPressed.add(name)
@@ -256,17 +375,18 @@ export class Input {
     }
   }
 
-  /** 绘制顺序最上层、可点击且命中的节点。CanvasLayer 里的节点按设计坐标（`design`）判断，场景里的按世界坐标。 */
+  /**
+   * 绘制顺序最上层、命中的节点：可点击的节点（`inputPickable`）或屏幕按钮。
+   * CanvasLayer 里的节点按设计坐标（`design`）判断，场景里的按世界坐标。
+   */
   private _pick(world: Vector2, design: Vector2): Node2D | null {
     const order: Node2D[] = []
     const inLayer: boolean[] = []
     collectDrawOrder(this._topLevel(), order, inLayer)
     for (let i = order.length - 1; i >= 0; i--) {
       const n = order[i]!
-      if (!n.inputPickable || n.isQueuedForDeletion || !n.isVisibleInTree || !n.canProcess()) continue
-      // 缩放为 0 时变换不可逆：节点在屏幕上没有面积，不可能被点中（toLocal 会退化成原点，导致全屏误判）
-      const inverse = n.globalTransform.inverse()
-      if (inverse && n.hitTest(inverse.apply(inLayer[i] ? design : world))) return n
+      if (!n.inputPickable && !this._buttonSet.has(n)) continue
+      if (hitsAt(n, world, design, inLayer[i])) return n
     }
     return null
   }
@@ -277,6 +397,31 @@ export class Input {
       throw new Error(`Unknown input action "${name}". Define it in the game options (actions: { ${name}: [...] }) or with tree.input.addAction(). Known actions: ${known.length ? known.join(', ') : '(none)'}.`)
     }
   }
+}
+
+/** Input 用到的 TouchScreenButton 字段（core 不依赖 nodes/）。 */
+interface VirtualButton extends Node2D {
+  readonly action: string | null
+  readonly passbyPress: boolean
+  readonly _pointerIds: Set<number>
+  _setPressed(pressed: boolean): void
+}
+
+/** 节点现在能不能接收指针（没有等待销毁、在树里可见、能处理）。 */
+function canHit(n: Node2D): boolean {
+  return !n.isQueuedForDeletion && n.isVisibleInTree && n.canProcess()
+}
+
+/**
+ * 节点能不能被点中、指针在不在它的点击区域里：节点拾取和屏幕按钮共用。
+ * CanvasLayer 里的节点按设计坐标判断（`inLayer` 不传时自己找）。
+ */
+function hitsAt(n: Node2D, world: Vector2, design: Vector2, inLayer?: boolean): boolean {
+  if (!canHit(n)) return false
+  // 缩放为 0 时变换不可逆：节点在屏幕上没有面积，不可能被点中（toLocal 会退化成原点，导致全屏误判）
+  const inverse = n.globalTransform.inverse()
+  if (!inverse) return false
+  return n.hitTest(inverse.apply((inLayer ?? n._canvasLayer !== null) ? design : world))
 }
 
 /** 节点收到的事件：CanvasLayer 里的节点拿到设计坐标，场景里的拿到世界坐标。 */

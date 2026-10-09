@@ -1,0 +1,117 @@
+{
+ "type": "tileset",
+ "version": "1.10",
+ "tiledversion": "1.10.2",
+ "name": "tiles",
+ "image": "../tiles.png",
+ "imagewidth": 128,
+ "imageheight": 32,
+ "tilewidth": 16,
+ "tileheight": 16,
+ "margin": 0,
+ "spacing": 0,
+ "columns": 8,
+ "tilecount": 16,
+ "tiles": [
+  {
+   "id": 0,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 1,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    },
+    {
+     "name": "breakable",
+     "type": "bool",
+     "value": true
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    },
+    {
+     "name": "question",
+     "type": "string",
+     "value": "coin"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  }
+ ]
+}

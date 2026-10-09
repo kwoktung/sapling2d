@@ -56,7 +56,7 @@ const MAX_DEFERRED_ROUNDS = 100
 /**
  * 场景树：持有 Autoload 和当前场景，驱动主循环。
  *
- * 每帧（`advance(dt)`）的顺序：
+ * 每帧（`advance(dt)`）的顺序（下面的时间都是乘过 `timeScale` 的游戏时间）：
  * 1. 处理输入队列（节点的指针信号在这里触发）
  * 2. 按固定步长跑若干次物理步：每步先调用所有节点的 `physicsProcess`，再推进物理世界并写回刚体位置
  * 3. 跑一次 `process`，然后推进补间动画（Tween）和一次性计时器（createTimer）
@@ -92,6 +92,7 @@ export class SceneTree {
   private _processFrames = 0
   private _deferred: (() => void)[] = []
   private _paused = false
+  private _timeScale = 1
   /** 当前场景被替换后触发（参数是新场景）。 */
   readonly sceneChanged = new Signal<[scene: Scene]>()
   private _loadAssets: (assets: AssetMap | undefined) => Promise<void> = async () => {}
@@ -139,7 +140,7 @@ export class SceneTree {
     return this._processFrames
   }
 
-  /** 游戏内经过的时间（秒），按物理步累计，与真实时间无关。 */
+  /** 游戏内经过的时间（秒），按物理步累计，与真实时间无关（`timeScale` 为 0.5 时走得慢一半）。 */
   get time(): number {
     return this._physicsFrames * this.physicsDelta
   }
@@ -159,6 +160,29 @@ export class SceneTree {
 
   set paused(value: boolean) {
     this._paused = value
+  }
+
+  /**
+   * 时间缩放，默认 1：所有游戏时间都乘上它，包括 `process` 的 dt、物理步的个数（步长仍然固定 1/60 秒，只是步数变少）、
+   * Tween、Timer、`createTimer`、帧动画、相机平滑和 `time`。为 0 时游戏时间完全停止（打击停顿），输入和渲染照常；
+   * 0.2 这样的值是慢动作。和 `paused` 互相独立。
+   *
+   * 大于 1 时受每帧物理步数上限（`maxPhysicsStepsPerFrame`，默认 2）限制：60Hz 屏幕上超过 2 倍，物理步会被丢掉。
+   * 停顿时要按真实时间恢复，用 `createTimer(秒, { ignoreTimeScale: true })`。
+   *
+   * ```ts
+   * this.tree.timeScale = 0
+   * await this.tree.createTimer(0.08, { ignoreTimeScale: true }).timeout
+   * this.tree.timeScale = 1
+   * ```
+   */
+  get timeScale(): number {
+    return this._timeScale
+  }
+
+  set timeScale(value: number) {
+    if (!(value >= 0) || !Number.isFinite(value)) throw new Error(`tree.timeScale must be a finite number >= 0, got ${value}.`)
+    this._timeScale = value
   }
 
   /** 物理世界：重力、像素/米换算。第一次访问（通常是第一个刚体进入树）时创建。 */
@@ -267,9 +291,10 @@ export class SceneTree {
   /**
    * 一次性计时器：`await this.tree.createTimer(1).timeout`。
    * 由帧循环驱动（无头测试里随 step 推进）。默认暂停时也继续计时（与 Godot 相同），`processAlways: false` 时随暂停停止。
+   * 默认按游戏时间计时（受 `timeScale` 影响），`ignoreTimeScale: true` 时按真实时间。
    */
-  createTimer(seconds: number, options: { processAlways?: boolean } = {}): SceneTreeTimer {
-    const t = new SceneTreeTimer(seconds, options.processAlways ?? true)
+  createTimer(seconds: number, options: { processAlways?: boolean; ignoreTimeScale?: boolean } = {}): SceneTreeTimer {
+    const t = new SceneTreeTimer(seconds, options.processAlways ?? true, options.ignoreTimeScale ?? false)
     this._timers.push(t)
     return t
   }
@@ -330,7 +355,9 @@ export class SceneTree {
     const timerCount = this._timers.length
     this.input._flush()
     // 输入回调里的 queueFree / callDeferred 也在本帧末尾生效
-    const frameDt = Math.min(Math.max(dt, 0), MAX_FRAME_DELTA)
+    const realDt = Math.min(Math.max(dt, 0), MAX_FRAME_DELTA)
+    // 游戏时间：乘上 timeScale；之后的物理、process、Tween、Timer、相机都用它
+    const frameDt = realDt * this._timeScale
     this._accumulator += frameDt
     let steps = 0
     while (this._accumulator >= this.physicsDelta - EPSILON && steps < this.maxPhysicsStepsPerFrame) {
@@ -369,7 +396,10 @@ export class SceneTree {
     for (let i = 0; i < tweens.length; i++) if (i >= tweenCount || tweens[i]!._advance(frameDt, this._paused)) this._tweens.push(tweens[i]!)
     const timers = this._timers
     this._timers = []
-    for (let i = 0; i < timers.length; i++) if (i >= timerCount || timers[i]!._advance(frameDt, this._paused)) this._timers.push(timers[i]!)
+    for (let i = 0; i < timers.length; i++) {
+      const timer = timers[i]!
+      if (i >= timerCount || timer._advance(timer.ignoreTimeScale ? realDt : frameDt, this._paused)) this._timers.push(timer)
+    }
 
     this._flushFrameEnd()
     this._updateCamera(frameDt)

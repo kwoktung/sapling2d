@@ -100,12 +100,15 @@ export class SceneTreeTimer {
   readonly timeout = new Signal()
   /** 暂停时是否继续计时。 */
   readonly processAlways: boolean
+  /** 按真实时间计时，不受 `tree.timeScale` 影响（打击停顿时用它来恢复时间）。 */
+  readonly ignoreTimeScale: boolean
   private _timeLeft: number
 
   /** @internal */
-  constructor(seconds: number, processAlways: boolean) {
+  constructor(seconds: number, processAlways: boolean, ignoreTimeScale = false) {
     this._timeLeft = seconds
     this.processAlways = processAlways
+    this.ignoreTimeScale = ignoreTimeScale
   }
 
   get timeLeft(): number {

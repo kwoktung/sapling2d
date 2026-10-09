@@ -21,6 +21,7 @@ Code-first、agent-friendly 的 2D 游戏引擎。基于 PixiJS v8（渲染）+ 
 - **Render sync** — 渲染层每帧把脏节点状态同步到懒创建的 Pixi 显示对象。用户代码不接触 Pixi 对象（逃生口：`unsafePixi`）。非 Node2D 节点不产生显示对象，其子节点挂到最近的 Node2D 祖先下。
 - **Texture / tex()** — 贴图资源句柄，`tex('fruit.png')` 按路径去重；路径相对于资源目录。
 - **SpriteSheet / Atlas** — 图集：一张大图切成多帧。`sheet(path, { columns, rows })` 按网格切；`atlas(path, data)` 读打包工具导出的 JSON、按名字取帧。每一帧都是 `Texture`（子区域），共用整张图的显存；加载、卸载以整张图为单位。
+- **timeScale** — `tree.timeScale`：游戏时间的缩放（默认 1）。process 的 dt、物理步数、Tween、Timer、帧动画、相机平滑、`tree.time` 都乘上它；0 是打击停顿，小于 1 是慢动作。输入和渲染不受影响；`createTimer(秒, { ignoreTimeScale: true })` 按真实时间计时。和 `paused` 互相独立。
 - **AnimatedSprite2D** — 帧动画精灵（继承 Sprite2D）：一套或多套命名动画（frames + fps + loop），按帧时间推进，暂停时停止。
 - **Assets directory** — 游戏项目的资源放在 `<root>/public/assets/`（Vite 原样发布，页面地址 `assets/<path>`，即 `startGame` 默认的 `assetsBaseUrl`）。`tex` / `sfx` / `music` 里的路径与平台无关；微信构建时拷贝进小游戏包（工单 16/17）。`sapling2d/vite` 插件在构建和开发时检查字面量路径是否存在，缺失时报错并给出最相近的文件名；动态拼接的路径不检查。
 - **Entry points** — `sapling2d`（核心，无 Pixi、无 DOM）、`sapling2d/browser`（`startGame`）、`sapling2d/wechat`（`startGame`）、`sapling2d/testing`（`createTestGame`）、`sapling2d/vite`（`sapling()` 资源校验、`saplingWechat()` 小游戏构建、`startLogServer()`）。`sapling2d/vite` 由 Node 原生加载，其内部相对导入必须带 `.ts` 扩展名。

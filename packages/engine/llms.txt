@@ -21,7 +21,7 @@
 - **节点树**：游戏对象都继承节点类（`Node`、`Node2D`、`Sprite2D`、`RigidBody2D`……），用 `this.add(child)` 组成树；`add` 返回带类型的子节点。节点之间用类型化字段、Groups 和 Autoload 互相引用，**不支持按路径查找**。
 - **生命周期**：`enterTree()`（父先于子）→ `ready()`（子先于父，一生一次）→ 每帧 `process(dt)` / 固定 60Hz 的 `physicsProcess(dt)` → `exitTree()`（子先于父）。覆写时不需要调用 `super`。
 - **场景**：`Scene` 是树的根，同一时间一个。`static assets` 声明的资源在 `ready()` 之前加载完成；场景参数通过构造函数声明，用 `this.tree.changeScene(Cls, params)` 切换。
-- **场景树**：`this.tree` 提供 `input`、`audio`、`storage`、`physics`、`viewport`、`rng`、`paused`、`createTween()`、`createTimer()`、`getNodesInGroup()`、`autoload()`、`changeScene()`、`dump()`；时间：`time`（游戏时间，秒，按物理步累计，暂停时不走）、`physicsFrames`、`processFrames`。节点不在树里时访问 `this.tree` 会抛错（构造函数里不要用）。
+- **场景树**：`this.tree` 提供 `input`、`audio`、`storage`、`physics`、`viewport`、`rng`、`paused`、`timeScale`、`createTween()`、`createTimer()`、`getNodesInGroup()`、`autoload()`、`changeScene()`、`dump()`；时间：`time`（游戏时间，秒，按物理步累计，暂停时不走）、`physicsFrames`、`processFrames`。节点不在树里时访问 `this.tree` 会抛错（构造函数里不要用）。
 - **构造参数**：每个节点的构造函数接受一个选项对象，键就是它可写的属性：通用的 `name`、`groups`、`processMode`；`Node2D` 的 `position`、`rotation`、`scale`、`visible`、`zIndex`、`alpha`、`modulate`、`selfModulate`、`inputPickable`、`hitArea`；再加各节点自己的属性（如 `Label` 的 `text`（默认 `''`）、`fontSize`，`RigidBody2D` 的 `mass`、`bounce`）。
 - **单位与坐标**：像素、y 轴向下、弧度（另有 `rotationDegrees`）、重力 px/s²。游戏坐标是设计分辨率（默认 750×1334）；`expand` 模式下屏幕多出来的部分向两侧对称扩展，贴边的 UI 用 `this.tree.viewport.visibleRect` / `safeRect`。
 - **每帧顺序**：处理输入队列（指针信号在这里触发）→ 若干次物理步（每步：所有节点的 `physicsProcess`，再推进物理世界、写回刚体位置、派发接触信号）→ `process` → Tween / Timer → `callDeferred` → `queueFree`。每帧最多补 2 个物理步。
@@ -919,6 +919,59 @@ export class World extends Scene {
 }
 // 切到后台：tree.focusChanged(false)，默认挂起整个主循环
 ```
+
+### 时间缩放（打击停顿、慢动作）
+
+```ts
+import { Node2D, Scene, v } from 'sapling2d'
+
+class Blade extends Node2D {
+  override process(dt: number) {
+    this.rotation += 6 * dt // dt 是乘过 timeScale 的游戏时间：停顿时为 0
+  }
+}
+
+export class Duel extends Scene {
+  blade!: Blade
+
+  override ready() {
+    this.blade = this.add(new Blade({ position: v(375, 667) }))
+  }
+
+  /** 打击停顿：游戏时间停住一小会儿，再按真实时间恢复（停顿时普通计时器也停了，所以用 ignoreTimeScale）。 */
+  async hitStop(seconds: number) {
+    this.tree.timeScale = 0
+    await this.tree.createTimer(seconds, { ignoreTimeScale: true }).timeout
+    this.tree.timeScale = 1
+  }
+
+  /** 慢动作：击杀 Boss 时放慢到 0.25 倍，半秒（真实时间）后恢复。 */
+  async slowMotion() {
+    this.tree.timeScale = 0.25
+    await this.tree.createTimer(0.5, { ignoreTimeScale: true }).timeout
+    this.tree.timeScale = 1
+  }
+}
+```
+
+```ts
+const settle = () => new Promise((r) => setTimeout(r, 0)) // 像真实的帧之间一样，让 await 跑一轮
+const blade = g.scene.blade
+void g.scene.hitStop(0.1)
+await settle()
+const r0 = blade.rotation
+g.step(3)
+expect(blade.rotation).toBe(r0) // 停顿中
+g.step(3) // 真实时间 0.1 秒
+await settle()
+expect(g.tree.timeScale).toBe(1)
+g.step(60)
+expect(blade.rotation - r0).toBeCloseTo(6, 0) // 恢复后照常转
+```
+
+- `tree.timeScale`（默认 1，≥ 0）：所有游戏时间都乘上它，包括 `process` 的 dt、物理步数（步长仍是 1/60 秒，只是步数变少）、Tween、Timer、`createTimer`、帧动画、相机平滑和 `tree.time`。为 0 时游戏时间完全停止，输入和渲染照常（停顿中按下的键在恢复后的第一个物理步里仍然是 just pressed）。
+- 停顿时普通计时器也停了：恢复时间用 `createTimer(秒, { ignoreTimeScale: true })`（按真实时间）。
+- 和 `paused` 互相独立；界面（CanvasLayer）也一起变慢，停顿很短时看不出来。大于 1 时受每帧物理步数上限（默认 2）限制。
 
 ## 补间的控制
 

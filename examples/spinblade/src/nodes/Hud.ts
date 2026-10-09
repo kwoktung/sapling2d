@@ -1,10 +1,14 @@
-import { CanvasLayer, ColorRect, Label, TouchJoystick, v } from 'sapling2d'
+import { CanvasLayer, ColorRect, Label, Rect2, TouchJoystick, v } from 'sapling2d'
 import { ASSETS } from '../assets'
 
 const BAR_W = 260
 const BAR_H = 22
 
-/** 界面层：左上角玩家血条和刀数，右上角剩余敌人，中间的提示文字；摇杆在屏幕左半边按下的地方出现。 */
+/**
+ * 界面层：左上角玩家血条和刀数，右上角剩余敌人，中间的提示文字。
+ * 摇杆在屏幕上任何地方按下都会出现：这个游戏没有别的按钮，竖屏单手玩时拇指常落在屏幕中间偏右
+ * （真机日志：按在 x ≈ 440–480 的都没接住），所以不用引擎默认的“左半边”。
+ */
 export class Hud extends CanvasLayer {
   readonly hpBack = new ColorRect({ name: 'HpBack', size: v(BAR_W, BAR_H), color: 0x2a1c1c })
   readonly hpFill = new ColorRect({ name: 'HpFill', size: v(BAR_W, BAR_H), color: 0x48d060 })
@@ -45,6 +49,8 @@ export class Hud extends CanvasLayer {
   }
 
   private _layout() {
+    const visible = this.tree.viewport.visibleRect
+    this.joystick.region = new Rect2(visible.x, visible.y, visible.width, visible.height)
     const r = this.tree.viewport.safeRect
     this.hpBack.position = v(r.left + 24, r.top + 24)
     this.knives.position = v(r.left + 24, r.top + 60)

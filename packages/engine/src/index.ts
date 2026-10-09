@@ -35,6 +35,7 @@ export { CharacterBody2D, type CharacterBody2DOptions, type SlideCollision } fro
 export { Camera2D, type Camera2DOptions } from './nodes/Camera2D'
 export { CanvasLayer, type CanvasLayerOptions } from './nodes/CanvasLayer'
 export { TouchScreenButton, type TouchScreenButtonOptions } from './nodes/TouchScreenButton'
+export { TouchJoystick, type TouchJoystickOptions, type JoystickActions } from './nodes/TouchJoystick'
 export { TileSet, tileset, type TileSetOptions, type TileOptions, type TileData, type TileCollision } from './core/tileset'
 export { TiledMap, tiledMap, type TiledObject, type TiledObjectLayer } from './core/tiled'
 export { CollisionObject2D, type CollisionObject2DOptions } from './nodes/physics/CollisionObject2D'

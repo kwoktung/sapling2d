@@ -30,6 +30,9 @@ interface Capture {
   node: Node2D
 }
 
+/** 力度达到这个值时动作算按下（和 Godot 动作的默认死区一样）。 */
+const PRESS_THRESHOLD = 0.5
+
 /**
  * 输入系统，通过 `this.tree.input` 访问。
  *
@@ -78,6 +81,13 @@ export class Input {
   private readonly _buttonScratch: VirtualButton[] = []
   /** 动作名 → 正按着的屏幕按钮数：大于 0 时动作处于按下状态。 */
   private readonly _buttonCounts = new Map<string, number>()
+  /** 树里的摇杆（TouchJoystick 进入树时登记）。 */
+  private readonly _sticks: VirtualStick[] = []
+  private readonly _stickSet = new Set<Node2D>()
+  /** 按着摇杆的指针 → 摇杆：这个手指的移动和抬起只交给摇杆。 */
+  private readonly _stickPointers = new Map<number, VirtualStick>()
+  /** 动作名 → 力度（0–1），每次更新动作状态时算好。 */
+  private readonly _strength = new Map<string, number>()
   private _pointerJustPressed = false
   private _pointerJustReleased = false
 
@@ -101,13 +111,14 @@ export class Input {
     this._actionJustReleased.delete(name)
     this._physicsJustPressed.delete(name)
     this._physicsJustReleased.delete(name)
+    this._strength.delete(name)
   }
 
   hasAction(name: ActionName): boolean {
     return this._actions.has(name)
   }
 
-  /** 动作当前是否处于按下状态（任意一个绑定按下即可）。 */
+  /** 动作当前是否处于按下状态：任意一个绑定按下，或者力度 ≥ 0.5（摇杆推过一半）。 */
   isActionPressed(name: ActionName): boolean {
     this._assertAction(name)
     return this._actionPressed.has(name)
@@ -123,6 +134,41 @@ export class Input {
   isActionJustReleased(name: ActionName): boolean {
     this._assertAction(name)
     return (this._inPhysics ? this._physicsJustReleased : this._actionJustReleased).has(name)
+  }
+
+  /**
+   * 动作的力度，0–1：按键、`pointerPress()`、屏幕按钮按下时是 1；摇杆按推动的程度给出 0–1（已经扣掉死区）。
+   * 几个来源同时作用时取最大的。力度 ≥ 0.5 时动作算按下（`isActionPressed`）。
+   */
+  getActionStrength(name: ActionName): number {
+    this._assertAction(name)
+    return this._strength.get(name) ?? 0
+  }
+
+  /** 一条轴：`positive` 的力度减去 `negative` 的力度，-1 到 1。不分配内存。 */
+  getAxis(negative: ActionName, positive: ActionName): number {
+    return this.getActionStrength(positive) - this.getActionStrength(negative)
+  }
+
+  /**
+   * 方向向量：x 是 `getAxis(negX, posX)`，y 是 `getAxis(negY, posY)`（y 向下为正），长度超过 1 时缩到 1
+   * （键盘斜着按不会更快）。摇杆和键盘都走这里，游戏不用区分。
+   * 每次调用分配一个 Vector2：每帧调用一次没有问题，热循环里用 `getAxis`。
+   *
+   * ```ts
+   * const dir = this.tree.input.getVector('left', 'right', 'up', 'down')
+   * this.setVelocity(dir.x * SPEED, dir.y * SPEED)
+   * ```
+   */
+  getVector(negX: ActionName, posX: ActionName, negY: ActionName, posY: ActionName): Vector2 {
+    let x = this.getAxis(negX, posX)
+    let y = this.getAxis(negY, posY)
+    const len = Math.sqrt(x * x + y * y)
+    if (len > 1) {
+      x /= len
+      y /= len
+    }
+    return new Vector2(x, y)
   }
 
   /** @internal 每个物理步结束时由 SceneTree 调用。 */
@@ -213,6 +259,12 @@ export class Input {
         this._pressButtonsAt(id, position, design, false)
         return
       }
+      if (node && this._stickSet.has(node)) {
+        const stick = node as VirtualStick
+        this._stickPointers.set(id, stick)
+        stick._press(id, stick._canvasLayer ? design : position)
+        return
+      }
       if (node) {
         this._captures.set(id, { node })
         node.pointerDown.emit(event(id, position, design, node))
@@ -226,7 +278,15 @@ export class Input {
     const capture = this._captures.get(id)
     const target = capture && capture.node.isInsideTree && !capture.node.isFreed ? capture.node : null
 
+    const stick = this._stickPointers.get(id)
     if (e.type === 'pointermove') {
+      if (stick) {
+        // 按着摇杆的手指只拖摇杆：不滑进别的按钮
+        this._pointers.set(id, position)
+        this._pointersDesign.set(id, design)
+        stick._drag(stick._canvasLayer ? design : position)
+        return
+      }
       if (this._pointers.has(id)) {
         this._pointers.set(id, position)
         this._pointersDesign.set(id, design)
@@ -237,6 +297,10 @@ export class Input {
     }
 
     // pointerup / pointercancel
+    if (stick) {
+      this._stickPointers.delete(id)
+      if (stick._pointerId === id) stick._release()
+    }
     this._releaseButtons(id)
     this._pointers.delete(id)
     this._pointersDesign.delete(id)
@@ -267,6 +331,28 @@ export class Input {
       button._pointerIds.clear()
       this._buttonReleased(button)
     }
+  }
+
+  /** @internal TouchJoystick 进入树时调用。 */
+  _addStick(stick: VirtualStick): void {
+    this._sticks.push(stick)
+    this._stickSet.add(stick)
+  }
+
+  /** @internal TouchJoystick 离开树时调用：按着的话松开（动作状态在下一帧开始时更新）。 */
+  _removeStick(stick: VirtualStick): void {
+    const i = this._sticks.indexOf(stick)
+    if (i >= 0) this._sticks.splice(i, 1)
+    this._stickSet.delete(stick)
+    this._releaseStick(stick)
+  }
+
+  /** 松开摇杆（之后这个手指就是一个普通的、没被处理的按着的手指，但不再触发 pointerPress()）。 */
+  private _releaseStick(stick: VirtualStick): void {
+    const id = stick._pointerId
+    if (id === null) return
+    this._stickPointers.delete(id)
+    stick._release()
   }
 
   /**
@@ -330,8 +416,12 @@ export class Input {
     }
   }
 
-  /** 按着的按钮变得不能按（隐藏、暂停、等待销毁）时松开。每帧开始时调用，平时只是一个遍历。 */
+  /** 按着的按钮、摇杆变得不能按（隐藏、暂停、等待销毁）时松开。每帧开始时调用，平时只是一个遍历。 */
   private _releaseUnusableButtons(): void {
+    for (let i = 0; i < this._sticks.length; i++) {
+      const stick = this._sticks[i]!
+      if (stick._pointerId !== null && !canHit(stick)) this._releaseStick(stick)
+    }
     for (let i = 0; i < this._buttons.length; i++) {
       const button = this._buttons[i]!
       if (button._pointerIds.size === 0 || canHit(button)) continue
@@ -359,9 +449,19 @@ export class Input {
   }
 
   private _updateActions(): void {
+    const sticks = this._sticks
     for (const [name, bindings] of this._actions) {
-      const pressed =
-        (this._buttonCounts.get(name) ?? 0) > 0 || bindings.some((b) => (b.type === 'key' ? this._keysDown.has(b.code) : this._unhandledPointers.size > 0))
+      let strength = (this._buttonCounts.get(name) ?? 0) > 0 ? 1 : 0
+      for (let i = 0; strength < 1 && i < bindings.length; i++) {
+        const b = bindings[i]!
+        if (b.type === 'key' ? this._keysDown.has(b.code) : this._unhandledPointers.size > 0) strength = 1
+      }
+      for (let i = 0; strength < 1 && i < sticks.length; i++) {
+        const s = sticks[i]!._strengthOf(name)
+        if (s > strength) strength = s
+      }
+      this._strength.set(name, strength)
+      const pressed = strength >= PRESS_THRESHOLD
       const was = this._actionPressed.has(name)
       if (pressed && !was) {
         this._actionPressed.add(name)
@@ -385,6 +485,10 @@ export class Input {
     collectDrawOrder(this._topLevel(), order, inLayer)
     for (let i = order.length - 1; i >= 0; i--) {
       const n = order[i]!
+      if (this._stickSet.has(n)) {
+        if (canHit(n) && (n as VirtualStick)._accepts(inLayer[i] ? design : world)) return n
+        continue
+      }
       if (!n.inputPickable && !this._buttonSet.has(n)) continue
       if (hitsAt(n, world, design, inLayer[i])) return n
     }
@@ -405,6 +509,19 @@ interface VirtualButton extends Node2D {
   readonly passbyPress: boolean
   readonly _pointerIds: Set<number>
   _setPressed(pressed: boolean): void
+}
+
+/** Input 用到的 TouchJoystick 成员（core 不依赖 nodes/）。坐标：在 CanvasLayer 里是设计坐标，否则是世界坐标。 */
+interface VirtualStick extends Node2D {
+  /** 按着它的指针，没有按着时为 null。 */
+  readonly _pointerId: number | null
+  /** 这个位置的按下归不归它（没按着、在触摸区域里）。 */
+  _accepts(point: Vector2): boolean
+  _press(pointerId: number, point: Vector2): void
+  _drag(point: Vector2): void
+  _release(): void
+  /** 它给动作 `action` 的力度（0–1），和它无关的动作是 0。 */
+  _strengthOf(action: string): number
 }
 
 /** 节点现在能不能接收指针（没有等待销毁、在树里可见、能处理）。 */

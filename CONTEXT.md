@@ -42,6 +42,8 @@ Code-first、agent-friendly 的 2D 游戏引擎。基于 PixiJS v8（渲染）+ 
 - **Design resolution / Viewport** — 设计分辨率（默认 750×1334），游戏坐标都以它为准。`this.tree.viewport` 提供 `visibleRect`、`safeRect`、`screenToDesign` 和 `resized` 信号。`expand`（默认）等比缩放、多出的空间向两侧**对称**扩展（与 Godot 向右下扩展不同）；`keep` 裁剪到设计区域。渲染分辨率 = min(DPR, 2)。
 - **Input** — `this.tree.input`。平台原始事件在每帧开始时统一处理（确定性）。`isActionJustPressed` 在 `process` 里按帧、在 `physicsProcess` 里按物理步算（和 Godot 一样，高刷新率下不丢按键）。动作在启动参数 `actions` 中定义（`key('Space')`、`pointerPress()`），动作名可通过声明合并 `ActionRegistry` 加强类型。
 - **TouchScreenButton** — 屏幕按钮（虚拟按键，继承 Sprite2D）：手指按住时让一个输入动作处于按下状态，和键盘绑定共用动作名；每个手指独立，滑出、抬起、取消、切到后台都会松开。按在按钮上的手指不参与节点拾取，也不触发 `pointerPress()`。
+- **TouchJoystick** — 虚拟摇杆（继承 Node2D）：手指拖动时按方向和力度（0–1）驱动四个方向的输入动作，游戏用 `input.getVector(...)` 读取，和键盘共用动作名。`dynamic`（在区域里按下的地方出现）或 `fixed`；只认一个手指。
+- **Action strength** — 输入动作的力度（0–1）：数字输入（按键、`pointerPress()`、屏幕按钮）是 1，摇杆是推动的程度；力度 ≥ 0.5 时动作算按下。
 - **Pointer picking** — `inputPickable` 加 `hitArea`（Sprite2D 默认用贴图范围）的节点会收到 `pointerDown` / `pointerMove` / `pointerUp` / `clicked`；只有绘制顺序最上层的节点收到；按下后该指针被节点捕获。被节点处理掉的按下不触发 `pointerPress()` 动作。
 - **Audio** — `this.tree.audio`。资源用 `sfx(path)`（预解码，可叠加）和 `music(path)`（流式）声明。一次性音效 `tree.audio.play(stream, { volume, loop, bus })` 返回 Voice；节点用 `AudioStreamPlayer`（同一时间一个声音，离开树时停止）。平台只实现很薄的 `AudioBackend`。浏览器在第一次手势时自动解锁：之前请求的音乐排队，音效丢弃。后台时挂起。
 - **Audio bus** — `Master` / `Music` / `SFX` 三条音量总线，音量是 0–1 线性值（不是 Godot 的 dB）；实际音量 = 声音 × 总线 × Master，静音为 0。

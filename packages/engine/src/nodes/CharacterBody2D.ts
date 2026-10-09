@@ -155,9 +155,11 @@ export class CharacterBody2D extends Node2D {
     const py = translationY(parent)
     // 参与碰撞的图层的全局平移：每次 moveAndSlide 算一次，x、y 两轴共用
     const layers = tree._tileLayers
+    const canvas = this._canvasLayer
     for (let i = 0; i < layers.length; i++) {
       const layer = layers[i]!
-      const active = (layer.collisionLayer & this.collisionMask) !== 0 && layer.tileSet._hasCollision
+      // 只和同一画布里的图层碰撞（都在场景里，或在同一个 CanvasLayer 里）：坐标系不同的图层不参与
+      const active = (layer.collisionLayer & this.collisionMask) !== 0 && layer.tileSet._hasCollision && layer._canvasLayer === canvas
       this._layerX[i] = active ? translationX(layer, layer.name) : NaN
       this._layerY[i] = active ? translationY(layer) : NaN
     }
@@ -332,7 +334,7 @@ export class CharacterBody2D extends Node2D {
 /** 节点（含）及其 Node2D 祖先的全局平移 x。遇到旋转或缩放时报错：格子碰撞只支持平移。 */
 function translationX(node: Node | null, name: string): number {
   let x = 0
-  for (let n = node; n; n = n.parent) {
+  for (let n = node; n; n = n._canvasParent) {
     if (!(n instanceof Node2D)) continue
     if (n.rotation !== 0 || n.scale.x !== 1 || n.scale.y !== 1) {
       throw new Error(`CharacterBody2D / TileMapLayer "${name}": "${n.name}" is rotated or scaled; tile collision only supports translation.`)
@@ -345,6 +347,6 @@ function translationX(node: Node | null, name: string): number {
 /** 同 translationX 的 y（旋转、缩放已经在 translationX 里检查过）。 */
 function translationY(node: Node | null): number {
   let y = 0
-  for (let n = node; n; n = n.parent) if (n instanceof Node2D) y += n.y
+  for (let n = node; n; n = n._canvasParent) if (n instanceof Node2D) y += n.y
   return y
 }

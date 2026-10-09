@@ -19,7 +19,7 @@ import {
   type TextStyleOptions,
 } from 'pixi.js'
 import type { Texture } from '../core/assets'
-import type { Node } from '../core/Node'
+import type { CanvasLayerLike, Node } from '../core/Node'
 import { Node2D } from '../core/Node2D'
 import type { SceneTree } from '../core/SceneTree'
 import type { Viewport } from '../core/Viewport'
@@ -129,6 +129,16 @@ export class PixiRenderer implements Renderer {
   /** 本次同步时相机的画面偏移（世界坐标 + 偏移 = 设计坐标）。 */
   private _canvasX = 0
   private _canvasY = 0
+  /** CanvasLayer → 它的容器（挂在场景容器上，和世界容器并列，不受相机影响）。 */
+  private readonly _layers = new Map<Node, { container: Container; frame: number }>()
+  /** 本次同步遇到的 CanvasLayer，按遍历顺序（复用）。 */
+  private readonly _layerOrder: CanvasLayerLike[] = []
+  /** 场景容器子对象的期望顺序（复用）。 */
+  private readonly _sceneOrder: Container[] = []
+  /** 正在同步的节点在几层 CanvasLayer 里面：大于 0 时没有相机偏移。 */
+  private _inLayer = 0
+  /** 外层有几个隐藏的 CanvasLayer：大于 0 时里面嵌套的层也隐藏。 */
+  private _hiddenLayers = 0
   /** `_chunkRange` 的结果：屏幕内的区块范围（含两端）。 */
   private _cx0 = 0
   private _cy0 = 0
@@ -157,6 +167,7 @@ export class PixiRenderer implements Renderer {
     this._renderer = renderer
     this._pixelArt = pixelArt
     this._worldContainer.sortableChildren = true
+    this._worldContainer.label = '__world'
     this._sceneContainer.addChild(this._worldContainer)
     this._root.addChild(this._sceneContainer)
   }
@@ -199,7 +210,9 @@ export class PixiRenderer implements Renderer {
     this._syncCamera(tree.viewport)
     const frame = ++this._frame
     this._seen = 0
+    this._layerOrder.length = 0
     this._syncChildren(tree._topLevel(), this._worldContainer, 0)
+    this._syncLayers(frame)
     if (this._seen === this._views.size) return
     // 有节点离开了树：销毁它们的显示对象（Map 的 forEach 里删除当前项是安全的）
     this._views.forEach((view, node) => {
@@ -240,6 +253,8 @@ export class PixiRenderer implements Renderer {
 
   destroy(): void {
     for (const [node, view] of this._views) this._destroyView(node, view)
+    for (const entry of this._layers.values()) entry.container.destroy({ children: false })
+    this._layers.clear()
     for (const cached of this._tileShaders.values()) cached.shader.destroy()
     this._tileShaders.clear()
     for (const cached of this._textures.values()) cached.texture.destroy(false)
@@ -272,6 +287,11 @@ export class PixiRenderer implements Renderer {
 
   private _visit(node: Node, ordered: Container[], depth: number): void {
     const children = node.children
+    if (node._isCanvasLayer) {
+      // 自成一层：不挂到当前容器，挂到场景容器上（_syncLayers 排顺序）
+      this._visitLayer(node as CanvasLayerLike, depth)
+      return
+    }
     if (!(node instanceof Node2D)) {
       // 非 Node2D：自己不显示，子节点按顺序挂到当前容器
       for (let i = 0; i < children.length; i++) this._visit(children[i]!, ordered, depth)
@@ -282,6 +302,70 @@ export class PixiRenderer implements Renderer {
     // 叶子节点（大多数子弹、精灵）不用递归：除非它的容器里还留着已经移走的子节点
     const contentCount = view.sprite || view.text || view.tiles ? 1 : 0
     if (children.length > 0 || view.container.children.length > contentCount) this._syncChildren(children, view.container, depth + 1)
+  }
+
+  private _visitLayer(node: CanvasLayerLike, depth: number): void {
+    let entry = this._layers.get(node)
+    if (!entry) {
+      const container = new Container({ label: node.name })
+      container.sortableChildren = true
+      entry = { container, frame: 0 }
+      this._layers.set(node, entry)
+    }
+    entry.frame = this._frame
+    // 嵌套的层挂在场景容器上而不是外层下面，外层隐藏时要自己跟着隐藏
+    entry.container.visible = node.visible && this._hiddenLayers === 0
+    this._layerOrder.push(node)
+    this._inLayer++
+    if (!node.visible) this._hiddenLayers++
+    this._syncChildren(node.children, entry.container, depth + 1)
+    if (!node.visible) this._hiddenLayers--
+    this._inLayer--
+  }
+
+  /**
+   * 场景容器的子对象排成：layer < 0 的层、世界容器、layer >= 0 的层（同一 layer 按场景树里的顺序）。
+   * 本次没遇到的层（节点离开了树）销毁容器；里面节点的显示对象由节点自己的清理销毁。
+   */
+  private _syncLayers(frame: number): void {
+    const layers = this._layerOrder
+    if (layers.length === 0 && this._layers.size === 0) return
+    // 按 layer 稳定排序（插入排序：层通常只有几个）
+    for (let i = 1; i < layers.length; i++) {
+      const cur = layers[i]!
+      let j = i - 1
+      while (j >= 0 && layers[j]!.layer > cur.layer) {
+        layers[j + 1] = layers[j]!
+        j--
+      }
+      layers[j + 1] = cur
+    }
+    const order = this._sceneOrder
+    order.length = 0
+    let worldAdded = false
+    for (let i = 0; i < layers.length; i++) {
+      const layer = layers[i]!
+      if (!worldAdded && layer.layer >= 0) {
+        order.push(this._worldContainer)
+        worldAdded = true
+      }
+      order.push(this._layers.get(layer)!.container)
+    }
+    if (!worldAdded) order.push(this._worldContainer)
+    const scene = this._sceneContainer
+    let inOrder = scene.children.length === order.length
+    for (let i = 0; inOrder && i < order.length; i++) inOrder = scene.children[i] === order[i]
+    if (!inOrder) {
+      scene.removeChildren()
+      for (let i = 0; i < order.length; i++) scene.addChild(order[i]!)
+    }
+    if (this._layers.size === layers.length) return
+    this._layers.forEach((entry, node) => {
+      if (entry.frame === frame) return
+      entry.container.removeFromParent()
+      entry.container.destroy({ children: false })
+      this._layers.delete(node)
+    })
   }
 
   private _syncNode(node: Node2D): View {
@@ -439,7 +523,7 @@ export class PixiRenderer implements Renderer {
     let d = 1
     let tx = 0
     let ty = 0
-    for (let n: Node | null = node; n; n = n.parent) {
+    for (let n: Node | null = node; n; n = n._canvasParent) {
       if (!(n instanceof Node2D)) continue
       // 局部变换 L = 平移 · 旋转 · 缩放；累乘 M = L · M
       const rotation = n.rotation
@@ -473,14 +557,16 @@ export class PixiRenderer implements Renderer {
     const itx = (c * ty - d * tx) / det
     const ity = (b * tx - a * ty) / det
     const r = this._visibleRect
+    // 可见区域换到世界坐标（减去相机偏移）；CanvasLayer 里没有相机偏移
+    const ox = this._inLayer > 0 ? 0 : this._canvasX
+    const oy = this._inLayer > 0 ? 0 : this._canvasY
     let minX = Infinity
     let minY = Infinity
     let maxX = -Infinity
     let maxY = -Infinity
     for (let k = 0; k < 4; k++) {
-      // 可见区域换到世界坐标（减去相机偏移）
-      const gx = (k & 1 ? r.right : r.left) - this._canvasX
-      const gy = (k & 2 ? r.bottom : r.top) - this._canvasY
+      const gx = (k & 1 ? r.right : r.left) - ox
+      const gy = (k & 2 ? r.bottom : r.top) - oy
       const lx = ia * gx + ic * gy + itx
       const ly = ib * gx + id * gy + ity
       if (lx < minX) minX = lx

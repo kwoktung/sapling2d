@@ -214,10 +214,13 @@ export class Node2D extends Node {
     return Transform2D.fromParts(this.position, this._rotation, this._scale)
   }
 
-  /** 相对于场景（设计坐标）的变换。非 Node2D 的祖先不参与变换。 */
+  /**
+   * 全局变换：世界坐标（没有相机时就是设计坐标）。非 Node2D 的祖先不参与变换；
+   * 在 CanvasLayer 下面时只算到 CanvasLayer 为止，结果是设计坐标（屏幕上的位置）。
+   */
   get globalTransform(): Transform2D {
     let t = this.transform
-    for (let p = this.parent; p; p = p.parent) {
+    for (let p = this._canvasParent; p; p = p._canvasParent) {
       if (p instanceof Node2D) t = p.transform.multiply(t)
     }
     return t
@@ -244,11 +247,15 @@ export class Node2D extends Node {
     return this.globalTransform.apply(localPoint)
   }
 
-  /** 自己和所有 Node2D 祖先都可见。 */
+  /**
+   * 自己和所有 Node2D 祖先都可见。在 CanvasLayer 下面时：Node2D 祖先只看到 CanvasLayer 为止，
+   * 并且这个 CanvasLayer 和包含它的 CanvasLayer 都要可见（CanvasLayer 外面的 Node2D 隐藏不影响它，和 Godot 一样）。
+   */
   get isVisibleInTree(): boolean {
-    for (let n: Node | null = this; n; n = n.parent) {
+    for (let n: Node | null = this; n; n = n._canvasParent) {
       if (n instanceof Node2D && !n.visible) return false
     }
+    for (let l = this._canvasLayer; l; l = l._canvasLayer) if (!l.visible) return false
     return true
   }
 

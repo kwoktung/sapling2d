@@ -81,8 +81,9 @@ export abstract class PhysicsBody2D extends CollisionObject2D {
     if (!this._writingBack && this.isInsideTree) this.tree.physics._teleport(this)
   }
 
+  /** 最近的 Node2D 祖先（同一画布里，不越过 CanvasLayer：和 globalTransform 一致）。 */
   private _parent2D(): Node2D | null {
-    for (let p = this.parent; p; p = p.parent) if (p instanceof Node2D) return p
+    for (let p = this._canvasParent; p; p = p._canvasParent) if (p instanceof Node2D) return p
     return null
   }
 

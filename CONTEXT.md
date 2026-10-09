@@ -33,7 +33,8 @@ Code-first、agent-friendly 的 2D 游戏引擎。基于 PixiJS v8（渲染）+ 
 - **TileMapLayer** — 一层图块地图（`Node2D`）：大小固定的格子数组（`Uint16Array`），多层地图就是多个节点。渲染按 16 × 16 格的区块，每个区块一个 Mesh，只画屏幕内的区块（ADR 0008）。不生成物理刚体；碰撞由 `CharacterBody2D` 直接查格子（ADR 0009）。
 - **CharacterBody2D** — 由代码控制移动的角色（平台游戏的主角、敌人）：在 `physicsProcess` 里设置速度、调用 `moveAndSlide()`，按轴分离的格子扫掠和 TileMapLayer 碰撞（ADR 0009）。和 `RigidBody2D` 的区别：不是 planck 刚体，没有物理反应，`StaticBody2D` 挡不住它、planck 世界感知不到它；和 `HitTester` 的区别：它负责被地形挡住，角色和敌人、道具之间的命中仍用 `HitTester`。
 - **Camera2D** — 相机：当前相机的全局位置是画面中心，场景和 Autoload 随之平移（只平移，不缩放、不旋转）。支持 `offset`、`limit*` 边界、平滑跟随；同一时间一个当前相机。在每帧所有 `process` 之后更新。
-- **World coordinates** — 节点的全局坐标。没有相机时等于设计坐标；有相机时 世界坐标 + 相机偏移 = 设计坐标。指针事件的坐标是世界坐标；`viewport.screenToWorld` / `worldToScreen` / `visibleWorldRect`。
+- **CanvasLayer** — 界面层（`Node`，不是 Node2D）：下面的节点不跟随相机、用设计坐标，全局变换和可见性在这里断开。`layer` < 0 画在场景下面、>= 0 画在上面，拾取顺序相同。用于 HUD、按钮、暂停菜单、远景。
+- **World coordinates** — 节点的全局坐标。没有相机时等于设计坐标；有相机时 世界坐标 + 相机偏移 = 设计坐标。指针事件的坐标是世界坐标（CanvasLayer 里的节点收到设计坐标）；`viewport.screenToWorld` / `worldToScreen` / `visibleWorldRect`。
 - **Timer / SceneTreeTimer** — `Timer` 节点（`waitTime`、`oneShot`、`autostart`、`timeout` 信号），每帧最多触发一次、循环不漂移；一次性等待用 `await this.tree.createTimer(1).timeout`。
 - **Tween** — `this.createTween().to(target, props, duration, ease).parallel().wait(s).call(fn)`，绑定节点销毁时自动停止（不触发 `finished`）。从下一帧开始播放；每一步的起始值在该步开始时读取；同一个 `to()` 里的多个属性同时进行。`to(this, ...)` 在类方法里按 Node2D 的属性做类型检查。
 - **Engine-internal hooks** — 引擎节点通过 `_onEnterTree` / `_onExitTree` / `_internalProcess` 实现自身行为，用户覆写 `enterTree` / `exitTree` / `process` 时不需要调用 super。

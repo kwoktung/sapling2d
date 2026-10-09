@@ -249,6 +249,29 @@ export class Node implements ConnectionOwner {
     this._onFreed()
   }
 
+  /**
+   * @internal CanvasLayer 覆写为 true：它下面的节点自成一层，全局变换、可见性和相机都在这里断开
+   * （Node2D 的全局变换不再往上乘，坐标是设计坐标）。
+   */
+  get _isCanvasLayer(): boolean {
+    return false
+  }
+
+  /**
+   * @internal 同一画布里的父节点：父节点是 CanvasLayer（或没有父节点）时为 null。
+   * 全局坐标、可见性、相机等按祖先往上算的东西都沿它走，这样不会越过 CanvasLayer。
+   */
+  get _canvasParent(): Node | null {
+    const p = this.parent
+    return p && !p._isCanvasLayer ? p : null
+  }
+
+  /** @internal 所在的 CanvasLayer（最近的那个）；不在任何 CanvasLayer 下面时为 null。 */
+  get _canvasLayer(): CanvasLayerLike | null {
+    for (let p = this.parent; p; p = p.parent) if (p._isCanvasLayer) return p as CanvasLayerLike
+    return null
+  }
+
   /** @internal 销毁时对每个节点（含后代）调用一次，供引擎内的子类清理私有资源。 */
   _onFreed(): void {}
 
@@ -380,4 +403,10 @@ export class Node implements ConnectionOwner {
     if (this.processMode !== 'inherit') props.processMode = this.processMode
     return { type: this.constructor.name, name: this._name, props, children: this._children.map((c) => c._dump()) }
   }
+}
+
+/** @internal CanvasLayer 在 core 里用到的字段（core 不依赖 nodes/CanvasLayer）。 */
+export interface CanvasLayerLike extends Node {
+  readonly layer: number
+  readonly visible: boolean
 }

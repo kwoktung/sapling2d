@@ -33,6 +33,7 @@ export { AnimatedSprite2D, type AnimatedSprite2DOptions, type SpriteAnimation } 
 export { TileMapLayer, type TileMapLayerOptions } from './nodes/TileMapLayer'
 export { CharacterBody2D, type CharacterBody2DOptions, type SlideCollision } from './nodes/CharacterBody2D'
 export { Camera2D, type Camera2DOptions } from './nodes/Camera2D'
+export { CanvasLayer, type CanvasLayerOptions } from './nodes/CanvasLayer'
 export { TileSet, tileset, type TileSetOptions, type TileOptions, type TileData, type TileCollision } from './core/tileset'
 export { CollisionObject2D, type CollisionObject2DOptions } from './nodes/physics/CollisionObject2D'
 export { PhysicsBody2D, StaticBody2D, type PhysicsBody2DOptions } from './nodes/physics/PhysicsBody2D'

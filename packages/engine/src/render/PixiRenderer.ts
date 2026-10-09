@@ -1,11 +1,9 @@
 import {
   Container,
   Graphics,
-  ImageSource,
   Matrix,
   Particle,
   ParticleContainer,
-  Rectangle,
   Sprite,
   Text,
   Texture as PixiTexture,
@@ -27,6 +25,7 @@ import { ColorRect } from '../nodes/ColorRect'
 import { Particles2D } from '../nodes/Particles2D'
 import { TileMapLayer } from '../nodes/TileMapLayer'
 import type { Renderer } from '../runtime/Game'
+import { TextureCache } from './TextureCache'
 import { TileMapRenderer, type TileView } from './TileMapRenderer'
 
 export interface PixiRendererOptions {
@@ -104,10 +103,8 @@ export class PixiRenderer implements Renderer {
   private _seen = 0
   /** `_syncChildren` 每层递归复用的数组。 */
   private readonly _orderedByDepth: Container[][] = []
-  /** 整张图 → GPU 上的图片源，记下创建时用的资源：资源被卸载或替换后释放。图集的各帧共用整张图的源。 */
-  private readonly _sources = new Map<Texture, { resource: unknown; source: ImageSource }>()
-  /** 贴图句柄（整张图或子区域）→ Pixi 贴图；与图片源同时失效。 */
-  private readonly _textures = new Map<Texture, { resource: unknown; texture: PixiTexture }>()
+  /** 贴图句柄 → Pixi 贴图和图片源。 */
+  private readonly _textures: TextureCache
   /** 本次同步时屏幕上可见的区域（设计坐标），用来裁剪 TileMapLayer 的区块。 */
   private _visibleRect: Rect2 = new Rect2(0, 0, 0, 0)
   /** 本次同步时相机的画面偏移（世界坐标 + 偏移 = 设计坐标）。 */
@@ -148,7 +145,8 @@ export class PixiRenderer implements Renderer {
   private constructor(renderer: WebGLRenderer, pixelArt: boolean) {
     this._renderer = renderer
     this._pixelArt = pixelArt
-    this._tileMaps = new TileMapRenderer({ pixelArt, compileShaders: !!renderer, pixiTexture: (texture) => this._pixiTexture(texture) })
+    this._textures = new TextureCache(pixelArt)
+    this._tileMaps = new TileMapRenderer({ pixelArt, compileShaders: !!renderer, textures: this._textures })
     this._worldContainer.sortableChildren = true
     this._worldContainer.label = '__world'
     this._sceneContainer.addChild(this._worldContainer)
@@ -238,11 +236,9 @@ export class PixiRenderer implements Renderer {
     for (const [node, view] of this._views) this._destroyView(node, view)
     for (const entry of this._layers.values()) entry.container.destroy({ children: false })
     this._layers.clear()
+    // 先销毁绑着图片的区块着色器，再销毁图片源
     this._tileMaps.destroy()
-    for (const cached of this._textures.values()) cached.texture.destroy(false)
-    for (const cached of this._sources.values()) cached.source.destroy()
-    this._textures.clear()
-    this._sources.clear()
+    this._textures.destroy()
     this._renderer?.destroy()
   }
 
@@ -417,7 +413,7 @@ export class PixiRenderer implements Renderer {
     if (node instanceof Sprite2D && view.sprite) {
       view.textureResource = textureResource
       const s = view.sprite
-      s.texture = node.texture ? this._pixiTexture(node.texture) : PixiTexture.EMPTY
+      s.texture = node.texture ? this._textures.get(node.texture) : PixiTexture.EMPTY
       s.anchor.set(node.centered ? 0.5 : 0)
       s.position.set(node.offset.x, node.offset.y)
       s.scale.set(node.flipH ? -1 : 1, node.flipV ? -1 : 1)
@@ -472,7 +468,7 @@ export class PixiRenderer implements Renderer {
     if (texture !== pv.texture || resource !== pv.resource) {
       pv.texture = texture
       pv.resource = resource
-      const t = texture ? this._pixiTexture(texture) : PixiTexture.EMPTY
+      const t = texture ? this._textures.get(texture) : PixiTexture.EMPTY
       pc.texture = t
       for (let i = 0; i < pool.length; i++) pool[i]!.texture = t
       pc.update()
@@ -532,23 +528,12 @@ export class PixiRenderer implements Renderer {
   private _releaseUnloadedTextures(): void {
     // 先销毁绑着这张图的区块着色器，再销毁图片源（否则 Pixi 会警告）
     this._tileMaps.releaseUnloaded()
-    for (const [texture, cached] of this._textures) {
-      if (cached.resource !== texture._resource) {
-        cached.texture.destroy(false)
-        this._textures.delete(texture)
-      }
-    }
-    for (const [texture, cached] of this._sources) {
-      if (cached.resource !== texture._resource) {
-        cached.source.destroy()
-        this._sources.delete(texture)
-      }
-    }
+    this._textures.releaseUnloaded()
   }
 
   /** @internal 测试用：当前缓存的 Pixi 贴图数量（整张图和子区域各算一个）。 */
   get _textureCount(): number {
-    return this._textures.size
+    return this._textures.textureCount
   }
 
   /** @internal 测试用：区块着色器的数量（每张图块集图片一个）。 */
@@ -558,40 +543,7 @@ export class PixiRenderer implements Renderer {
 
   /** @internal 测试用：当前 GPU 上的图片源数量（每张图一个，图集的帧共用）。 */
   get _sourceCount(): number {
-    return this._sources.size
-  }
-
-  private _pixiTexture(texture: Texture): PixiTexture {
-    const resource = texture._resource
-    const cached = this._textures.get(texture)
-    if (cached && cached.resource === resource) return cached.texture
-    if (cached) {
-      cached.texture.destroy(false) // 资源已卸载或换了
-      this._textures.delete(texture)
-    }
-    if (!resource) return PixiTexture.EMPTY
-    const source = this._imageSource(texture._base ?? texture, resource)
-    const f = texture._frame
-    const created = f
-      ? new PixiTexture({
-          source,
-          frame: new Rectangle(f.region.x, f.region.y, f.region.width, f.region.height),
-          orig: new Rectangle(0, 0, f.width, f.height),
-          ...(f.trim ? { trim: new Rectangle(f.trim.x, f.trim.y, f.region.width, f.region.height) } : {}),
-        })
-      : new PixiTexture({ source })
-    this._textures.set(texture, { resource, texture: created })
-    return created
-  }
-
-  private _imageSource(base: Texture, resource: unknown): ImageSource {
-    const cached = this._sources.get(base)
-    if (cached && cached.resource === resource) return cached.source
-    cached?.source.destroy()
-    // 显式构造 ImageSource：小游戏的 Image 过不了 Pixi 的自动类型识别（见 spikes/wechat/REPORT.md）
-    const source = new ImageSource({ resource: resource as never, ...(this._pixelArt ? { scaleMode: 'nearest' as const } : {}) })
-    this._sources.set(base, { resource, source })
-    return source
+    return this._textures.sourceCount
   }
 
   private _destroyView(node: Node2D, view: View): void {

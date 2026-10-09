@@ -1,7 +1,7 @@
 import type { Texture } from '../core/assets'
-import type { Node } from '../core/Node'
 import { Node2D, type Node2DOptions } from '../core/Node2D'
 import { Signal } from '../core/Signal'
+import { identityAffine } from '../math/Affine'
 import { Vector2 } from '../math/Vector2'
 
 export interface Particles2DOptions extends Node2DOptions {
@@ -92,13 +92,8 @@ export class Particles2D extends Node2D {
   private _acc = 0
   /** 发射过粒子、还没有发出 finished。 */
   private _running = false
-  /** @internal `_computeGlobal()` 的结果：节点的全局变换（x' = a·x + c·y + tx，y' = b·x + d·y + ty）。 */
-  _ga = 1
-  _gb = 0
-  _gc = 0
-  _gd = 1
-  _gtx = 0
-  _gty = 0
+  /** @internal `_computeGlobal()` 的结果：节点的全局变换。 */
+  readonly _global = identityAffine()
 
   constructor(options: Particles2DOptions = {}) {
     super(options)
@@ -239,9 +234,10 @@ export class Particles2D extends Node2D {
       this._px[i] = 0
       this._py[i] = 0
     } else {
-      this._px[i] = this._gtx
-      this._py[i] = this._gty
-      angle += Math.atan2(this._gb, this._ga) // 方向跟着节点的全局旋转
+      const g = this._global
+      this._px[i] = g.tx
+      this._py[i] = g.ty
+      angle += Math.atan2(g.b, g.a) // 方向跟着节点的全局旋转
     }
     const speed = this.speedMin + (this.speedMax - this.speedMin) * rng.randf()
     this._vx[i] = Math.cos(angle) * speed
@@ -252,46 +248,11 @@ export class Particles2D extends Node2D {
   }
 
   /**
-   * @internal 算出节点的全局变换（只算到 CanvasLayer 为止，和 globalTransform 一致），写进 `_ga`…`_gty`。不分配内存。
+   * @internal 算出节点的全局变换（只算到 CanvasLayer 为止，和 globalTransform 一致），写进 `_global`。不分配内存。
    * 渲染层也用它把全局坐标的粒子画回原处。
    */
   _computeGlobal(): void {
-    let a = 1
-    let b = 0
-    let c = 0
-    let d = 1
-    let tx = 0
-    let ty = 0
-    for (let n: Node | null = this; n; n = n._canvasParent) {
-      if (!(n instanceof Node2D)) continue
-      // 这一级的局部变换 L = 平移 · 旋转 · 缩放；全局 = L · 已经算好的部分
-      const s = n.scale
-      const r = n.rotation
-      const cos = r === 0 ? 1 : Math.cos(r)
-      const sin = r === 0 ? 0 : Math.sin(r)
-      const la = cos * s.x
-      const lb = sin * s.x
-      const lc = -sin * s.y
-      const ld = cos * s.y
-      const na = la * a + lc * b
-      const nb = lb * a + ld * b
-      const nc = la * c + lc * d
-      const nd = lb * c + ld * d
-      const ntx = la * tx + lc * ty + n.x
-      const nty = lb * tx + ld * ty + n.y
-      a = na
-      b = nb
-      c = nc
-      d = nd
-      tx = ntx
-      ty = nty
-    }
-    this._ga = a
-    this._gb = b
-    this._gc = c
-    this._gd = d
-    this._gtx = tx
-    this._gty = ty
+    this._computeGlobalInto(this._global)
   }
 
   protected override dumpProps(): Record<string, unknown> {

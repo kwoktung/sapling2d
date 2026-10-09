@@ -1,23 +1,15 @@
 import {
-  compileHighShaderGlProgram,
   Container,
   Graphics,
   ImageSource,
-  localUniformBitGl,
   Matrix,
-  Mesh,
-  MeshGeometry,
   Particle,
   ParticleContainer,
   Rectangle,
-  roundPixelsBitGl,
-  Shader,
   Sprite,
   Text,
   Texture as PixiTexture,
-  textureBitGl,
   WebGLRenderer,
-  type GlProgram,
   type TextStyleOptions,
 } from 'pixi.js'
 // ParticleContainer 的渲染管线是可选扩展（skipExtensionImports 不会自动加载）
@@ -27,13 +19,15 @@ import type { CanvasLayerLike, Node } from '../core/Node'
 import { Node2D } from '../core/Node2D'
 import type { SceneTree } from '../core/SceneTree'
 import type { Viewport } from '../core/Viewport'
+import { invertAffine } from '../math/Affine'
 import { Rect2 } from '../math/Rect2'
 import { Label } from '../nodes/Label'
 import { Sprite2D } from '../nodes/Sprite2D'
 import { ColorRect } from '../nodes/ColorRect'
 import { Particles2D } from '../nodes/Particles2D'
-import { TILE_CHUNK, TileMapLayer } from '../nodes/TileMapLayer'
+import { TileMapLayer } from '../nodes/TileMapLayer'
 import type { Renderer } from '../runtime/Game'
+import { TileMapRenderer, type TileView } from './TileMapRenderer'
 
 export interface PixiRendererOptions {
   /** 平台提供的画布（浏览器是 HTMLCanvasElement，小游戏是 wx 的上屏 canvas）。尺寸由视口决定。 */
@@ -83,29 +77,6 @@ interface ParticleView {
   tint: number
 }
 
-/** TileMapLayer 的显示对象：内容层里每个区块一个 Mesh（ADR 0008），区块进入屏幕时才创建。 */
-interface TileView {
-  content: Container
-  /** 按区块编号；还没进入过屏幕的区块为 null。 */
-  chunks: (TileChunk | null)[]
-  /** 区块顶点所基于的图片资源；图片重新加载后要重建全部区块。 */
-  resource: unknown
-  /** 上一帧显示的区块范围（含两端；x1 < x0 表示没有）。 */
-  x0: number
-  y0: number
-  x1: number
-  y1: number
-}
-
-interface TileChunk {
-  mesh: Mesh<MeshGeometry, Shader>
-  geometry: MeshGeometry
-  /** 上次重建时节点的区块版本号（-1 表示还没建过）。 */
-  version: number
-  /** 区块里没有图块：不显示。 */
-  empty: boolean
-}
-
 /**
  * 把场景树同步到 Pixi（见 ADR 0002）：
  * - 节点首次被渲染时才创建显示对象
@@ -137,11 +108,6 @@ export class PixiRenderer implements Renderer {
   private readonly _sources = new Map<Texture, { resource: unknown; source: ImageSource }>()
   /** 贴图句柄（整张图或子区域）→ Pixi 贴图；与图片源同时失效。 */
   private readonly _textures = new Map<Texture, { resource: unknown; texture: PixiTexture }>()
-  /**
-   * 图块集的整张图 → 区块 Mesh 用的着色器。每张图一个，而不用 Pixi 共用的 Mesh 着色器：
-   * 共用的着色器会一直绑着最后画过的图，释放那张图时 Pixi 会警告“贴图还绑在着色器上”。这里先销毁着色器，再释放图。
-   */
-  private readonly _tileShaders = new Map<Texture, { resource: unknown; shader: Shader }>()
   /** 本次同步时屏幕上可见的区域（设计坐标），用来裁剪 TileMapLayer 的区块。 */
   private _visibleRect: Rect2 = new Rect2(0, 0, 0, 0)
   /** 本次同步时相机的画面偏移（世界坐标 + 偏移 = 设计坐标）。 */
@@ -157,11 +123,15 @@ export class PixiRenderer implements Renderer {
   private _inLayer = 0
   /** 外层有几个隐藏的 CanvasLayer：大于 0 时里面嵌套的层也隐藏。 */
   private _hiddenLayers = 0
-  /** `_chunkRange` 的结果：屏幕内的区块范围（含两端）。 */
-  private _cx0 = 0
-  private _cy0 = 0
-  private _cx1 = -1
-  private _cy1 = -1
+  /** TileMapLayer 的区块渲染（共用一个，持有图块集的着色器）。 */
+  private readonly _tileMaps: TileMapRenderer
+  /**
+   * 像素风：图片源用最近邻采样；Sprite2D 的贴图层打开 Pixi 的 `roundPixels`（在顶点着色器里把顶点对齐到物理像素）。
+   * 只对贴图层打开，不对整个渲染器：文字、Graphics 和视口遮罩不受影响。
+   */
+  private readonly _pixelArt: boolean
+  /** 粒子内容层的变换（复用）。 */
+  private readonly _particleMatrix = new Matrix()
 
   /**
    * @internal 测试用：不初始化 WebGL，只做场景树到显示对象的同步（`sync()`），不能调用 `render()`。
@@ -175,17 +145,10 @@ export class PixiRenderer implements Renderer {
     return this._worldContainer
   }
 
-  /**
-   * 像素风：图片源用最近邻采样；Sprite2D 的贴图层打开 Pixi 的 `roundPixels`（在顶点着色器里把顶点对齐到物理像素）。
-   * 只对贴图层打开，不对整个渲染器：文字、Graphics 和视口遮罩不受影响。
-   */
-  private readonly _pixelArt: boolean
-  /** 粒子内容层的变换（复用）。 */
-  private readonly _particleMatrix = new Matrix()
-
   private constructor(renderer: WebGLRenderer, pixelArt: boolean) {
     this._renderer = renderer
     this._pixelArt = pixelArt
+    this._tileMaps = new TileMapRenderer({ pixelArt, compileShaders: !!renderer, pixiTexture: (texture) => this._pixiTexture(texture) })
     this._worldContainer.sortableChildren = true
     this._worldContainer.label = '__world'
     this._sceneContainer.addChild(this._worldContainer)
@@ -201,16 +164,16 @@ export class PixiRenderer implements Renderer {
     }
     try {
       await renderer.init({
-      canvas: options.canvas as never,
-      width: 1,
-      height: 1,
-      // 浏览器里同步设置画布的 CSS 尺寸；小游戏的 canvas 没有 style，Pixi 会跳过
-      autoDensity: true,
-      background: options.background ?? 0x000000,
-      preferWebGLVersion: options.webglVersion ?? 2,
-      // 不加载 Pixi 的事件系统等 DOM 相关扩展：输入由引擎自己处理（见 ADR 0001）
-      skipExtensionImports: true,
-      antialias: false,
+        canvas: options.canvas as never,
+        width: 1,
+        height: 1,
+        // 浏览器里同步设置画布的 CSS 尺寸；小游戏的 canvas 没有 style，Pixi 会跳过
+        autoDensity: true,
+        background: options.background ?? 0x000000,
+        preferWebGLVersion: options.webglVersion ?? 2,
+        // 不加载 Pixi 的事件系统等 DOM 相关扩展：输入由引擎自己处理（见 ADR 0001）
+        skipExtensionImports: true,
+        antialias: false,
       })
     } finally {
       console.warn = warn
@@ -275,8 +238,7 @@ export class PixiRenderer implements Renderer {
     for (const [node, view] of this._views) this._destroyView(node, view)
     for (const entry of this._layers.values()) entry.container.destroy({ children: false })
     this._layers.clear()
-    for (const cached of this._tileShaders.values()) cached.shader.destroy()
-    this._tileShaders.clear()
+    this._tileMaps.destroy()
     for (const cached of this._textures.values()) cached.texture.destroy(false)
     for (const cached of this._sources.values()) cached.source.destroy()
     this._textures.clear()
@@ -413,7 +375,7 @@ export class PixiRenderer implements Renderer {
         view.particles = { container, pool: [], texture: null, resource: null, tint: -1 }
         view.container.addChild(container)
       } else if (node instanceof TileMapLayer) {
-        view.tiles = { content: new Container({ label: CONTENT_LABEL }), chunks: new Array<TileChunk | null>(node._chunksX * node._chunksY).fill(null), resource: null, x0: 0, y0: 0, x1: -1, y1: -1 }
+        view.tiles = this._tileMaps.createView(node, CONTENT_LABEL)
         view.container.addChild(view.tiles.content)
       }
       this._views.set(node, view)
@@ -433,7 +395,11 @@ export class PixiRenderer implements Renderer {
 
     // 区块的显示和重建每帧都要检查：镜头或视口变化时不会改节点的版本号
     // 隐藏的图层不建区块；重新显示后再同步
-    if (view.tiles && node.visible) this._syncTiles(node as TileMapLayer, view.tiles)
+    if (view.tiles && node.visible) {
+      // CanvasLayer 里没有相机偏移
+      const inLayer = this._inLayer > 0
+      this._tileMaps.sync(node as TileMapLayer, view.tiles, this._visibleRect, inLayer ? 0 : this._canvasX, inLayer ? 0 : this._canvasY)
+    }
     // 粒子每帧都在动：每帧同步（隐藏时跳过）
     if (view.particles && node.visible) this._syncParticles(node as Particles2D, view.particles)
 
@@ -524,23 +490,12 @@ export class PixiRenderer implements Renderer {
       }
     } else {
       node._computeGlobal()
-      const a = node._ga
-      const b = node._gb
-      const c = node._gc
-      const d = node._gd
-      const det = a * d - b * c
-      if (det === 0) {
+      const m = this._particleMatrix
+      if (!invertAffine(node._global, m)) {
         pc.visible = false
         return
       }
       pc.visible = true
-      const m = this._particleMatrix
-      m.a = d / det
-      m.b = -b / det
-      m.c = -c / det
-      m.d = a / det
-      m.tx = (c * node._gty - d * node._gtx) / det
-      m.ty = (b * node._gtx - a * node._gty) / det
       pc.setFromMatrix(m)
     }
 
@@ -571,180 +526,12 @@ export class PixiRenderer implements Renderer {
   }
 
   /**
-   * 同步 TileMapLayer 的区块：屏幕内的区块显示（第一次进入屏幕时创建），格子改过的区块重建顶点，刚离开屏幕的隐藏。
-   * 每帧都会调用，只遍历屏幕内和上一帧屏幕内的区块，不分配内存。
-   */
-  private _syncTiles(node: TileMapLayer, tv: TileView): void {
-    const texture = node.tileSet.texture
-    const resource = texture._resource
-    const columns = node.tileSet.columns
-    if (!resource || columns === 0) {
-      tv.content.visible = false
-      return
-    }
-    tv.content.visible = true
-    if (tv.resource !== resource) {
-      // 图片重新加载过：旧区块用的是旧的图片源和着色器
-      for (let i = 0; i < tv.chunks.length; i++) {
-        const chunk = tv.chunks[i]
-        if (chunk) destroyChunk(chunk)
-        tv.chunks[i] = null
-      }
-      tv.resource = resource
-      tv.x0 = 0
-      tv.x1 = -1
-    }
-    const inView = this._chunkRange(node)
-    const x0 = inView ? this._cx0 : 0
-    const y0 = inView ? this._cy0 : 0
-    const x1 = inView ? this._cx1 : -1
-    const y1 = inView ? this._cy1 : -1
-    const chunksX = node._chunksX
-    // 上一帧可见、这一帧不可见的区块隐藏
-    for (let y = tv.y0; y <= tv.y1; y++) {
-      for (let x = tv.x0; x <= tv.x1; x++) {
-        if (x >= x0 && x <= x1 && y >= y0 && y <= y1) continue
-        const chunk = tv.chunks[y * chunksX + x]
-        if (chunk) chunk.mesh.visible = false
-      }
-    }
-    tv.x0 = x0
-    tv.y0 = y0
-    tv.x1 = x1
-    tv.y1 = y1
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        const i = y * chunksX + x
-        let chunk = tv.chunks[i]
-        if (!chunk) {
-          chunk = this._createChunk(node, tv, x, y)
-          tv.chunks[i] = chunk
-        }
-        const version = node._chunkVersions[i]!
-        if (chunk.version !== version) {
-          chunk.version = version
-          chunk.empty = writeChunk(node, chunk.geometry, x, y, columns, this._pixelArt ? 0 : 0.5)
-        }
-        chunk.mesh.visible = !chunk.empty
-      }
-    }
-  }
-
-  /**
-   * 屏幕可见区域换算到图层的局部坐标，得到要显示的区块范围（写到 `_cx0` 等字段）。整个图层都不可见时返回 false。
-   * 全局变换按祖先逐级用数字累乘（和 `Node2D.globalTransform` 相同，但不创建 Transform2D 对象）。
-   */
-  private _chunkRange(node: TileMapLayer): boolean {
-    let a = 1
-    let b = 0
-    let c = 0
-    let d = 1
-    let tx = 0
-    let ty = 0
-    for (let n: Node | null = node; n; n = n._canvasParent) {
-      if (!(n instanceof Node2D)) continue
-      // 局部变换 L = 平移 · 旋转 · 缩放；累乘 M = L · M
-      const rotation = n.rotation
-      const scale = n.scale
-      const cos = rotation === 0 ? 1 : Math.cos(rotation)
-      const sin = rotation === 0 ? 0 : Math.sin(rotation)
-      const la = cos * scale.x
-      const lb = sin * scale.x
-      const lc = -sin * scale.y
-      const ld = cos * scale.y
-      const na = la * a + lc * b
-      const nb = lb * a + ld * b
-      const nc = la * c + lc * d
-      const nd = lb * c + ld * d
-      const ntx = la * tx + lc * ty + n.x
-      const nty = lb * tx + ld * ty + n.y
-      a = na
-      b = nb
-      c = nc
-      d = nd
-      tx = ntx
-      ty = nty
-    }
-    const det = a * d - b * c
-    if (det === 0) return false
-    // 逆变换
-    const ia = d / det
-    const ib = -b / det
-    const ic = -c / det
-    const id = a / det
-    const itx = (c * ty - d * tx) / det
-    const ity = (b * tx - a * ty) / det
-    const r = this._visibleRect
-    // 可见区域换到世界坐标（减去相机偏移）；CanvasLayer 里没有相机偏移
-    const ox = this._inLayer > 0 ? 0 : this._canvasX
-    const oy = this._inLayer > 0 ? 0 : this._canvasY
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    for (let k = 0; k < 4; k++) {
-      const gx = (k & 1 ? r.right : r.left) - ox
-      const gy = (k & 2 ? r.bottom : r.top) - oy
-      const lx = ia * gx + ic * gy + itx
-      const ly = ib * gx + id * gy + ity
-      if (lx < minX) minX = lx
-      if (lx > maxX) maxX = lx
-      if (ly < minY) minY = ly
-      if (ly > maxY) maxY = ly
-    }
-    const size = TILE_CHUNK * node.tileSet.tileSize
-    this._cx0 = Math.max(0, Math.floor(minX / size))
-    this._cy0 = Math.max(0, Math.floor(minY / size))
-    this._cx1 = Math.min(node._chunksX - 1, Math.floor(maxX / size))
-    this._cy1 = Math.min(node._chunksY - 1, Math.floor(maxY / size))
-    return this._cx0 <= this._cx1 && this._cy0 <= this._cy1
-  }
-
-  private _createChunk(node: TileMapLayer, tv: TileView, x: number, y: number): TileChunk {
-    const texture = this._pixiTexture(node.tileSet.texture)
-    const quads = TILE_CHUNK * TILE_CHUNK
-    const geometry = new MeshGeometry({
-      positions: new Float32Array(quads * 8),
-      uvs: new Float32Array(quads * 8),
-      // iOS 小游戏的 WebGL1 没有 32 位索引：每个区块 1024 个顶点，16 位索引够用
-      indices: TILE_INDICES as unknown as Uint32Array,
-    })
-    const mesh = new Mesh({ geometry, texture, shader: this._tileShader(node.tileSet.texture, texture), roundPixels: this._pixelArt })
-    const size = TILE_CHUNK * node.tileSet.tileSize
-    mesh.position.set(x * size, y * size)
-    tv.content.addChild(mesh)
-    return { mesh, geometry, version: -1, empty: true }
-  }
-
-  private _tileShader(texture: Texture, pixi: PixiTexture): Shader {
-    const cached = this._tileShaders.get(texture)
-    if (cached && cached.resource === texture._resource) return cached.shader
-    cached?.shader.destroy()
-    const shader = new Shader({
-      // 编译程序要探测 WebGL 的精度，同步测试（没有 WebGL）里不编译
-      glProgram: this._renderer ? tileProgram() : (undefined as unknown as GlProgram),
-      resources: {
-        uTexture: pixi.source,
-        uSampler: pixi.source.style,
-        textureUniforms: { uTextureMatrix: { type: 'mat3x3<f32>', value: new Matrix() } },
-      },
-    })
-    this._tileShaders.set(texture, { resource: texture._resource, shader })
-    return shader
-  }
-
-  /**
    * 资源被卸载（切换场景时）或替换后，立即销毁对应的 Pixi 贴图和图片源、释放显存——不等有精灵再次用到它。
    * 先于节点同步执行：此时引用它的精灵都已随旧场景销毁。
    */
   private _releaseUnloadedTextures(): void {
     // 先销毁绑着这张图的区块着色器，再销毁图片源（否则 Pixi 会警告）
-    for (const [texture, cached] of this._tileShaders) {
-      if (cached.resource !== texture._resource) {
-        cached.shader.destroy()
-        this._tileShaders.delete(texture)
-      }
-    }
+    this._tileMaps.releaseUnloaded()
     for (const [texture, cached] of this._textures) {
       if (cached.resource !== texture._resource) {
         cached.texture.destroy(false)
@@ -766,7 +553,7 @@ export class PixiRenderer implements Renderer {
 
   /** @internal 测试用：区块着色器的数量（每张图块集图片一个）。 */
   get _tileShaderCount(): number {
-    return this._tileShaders.size
+    return this._tileMaps.shaderCount
   }
 
   /** @internal 测试用：当前 GPU 上的图片源数量（每张图一个，图集的帧共用）。 */
@@ -811,10 +598,7 @@ export class PixiRenderer implements Renderer {
     view.container.removeFromParent()
     view.sprite?.destroy()
     view.text?.destroy()
-    if (view.tiles) {
-      for (const chunk of view.tiles.chunks) if (chunk) destroyChunk(chunk)
-      view.tiles.content.destroy()
-    }
+    if (view.tiles) this._tileMaps.destroyView(view.tiles)
     view.particles?.container.destroy()
     view.container.destroy({ children: false })
     this._views.delete(node)
@@ -822,93 +606,12 @@ export class PixiRenderer implements Renderer {
   }
 }
 
-/** 所有区块共用的索引：每个四边形两个三角形。 */
-const TILE_INDICES = (() => {
-  const quads = TILE_CHUNK * TILE_CHUNK
-  const out = new Uint16Array(quads * 6)
-  for (let q = 0; q < quads; q++) out.set([q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3], q * 6)
-  return out
-})()
-
-let _tileProgram: GlProgram | null = null
-/** 区块 Mesh 的着色器程序：和 Pixi 默认的 Mesh 着色器相同（局部变换 + 贴图 + 顶点对齐）。 */
-function tileProgram(): GlProgram {
-  return (_tileProgram ??= compileHighShaderGlProgram({ name: 'tile-chunk', bits: [localUniformBitGl, textureBitGl, roundPixelsBitGl] }))
-}
-
-/**
- * 按格子重写一个区块的顶点和 uv（顶点在区块的局部坐标里），空格子和地图外写成面积为 0 的四边形。
- * `inset`：uv 向图块内缩的像素数。线性采样时缩半个像素，否则图块边缘会混进图集里相邻图块的颜色；
- * 最近邻采样（像素风）不缩，否则放大后边缘那一列像素会变窄。返回区块是否为空。
- */
-function writeChunk(node: TileMapLayer, geometry: MeshGeometry, chunkX: number, chunkY: number, columns: number, inset: number): boolean {
-  const set = node.tileSet
-  const ts = set.tileSize
-  const step = ts + set.spacing
-  const texW = set.texture.width
-  const texH = set.texture.height
-  const pos = geometry.positions
-  const uv = geometry.uvs
-  const cells = node._cells
-  const w = node.width
-  let empty = true
-  for (let ly = 0; ly < TILE_CHUNK; ly++) {
-    const cy = chunkY * TILE_CHUNK + ly
-    for (let lx = 0; lx < TILE_CHUNK; lx++) {
-      const cx = chunkX * TILE_CHUNK + lx
-      const o = (ly * TILE_CHUNK + lx) * 8
-      const id = cx < w && cy < node.height ? cells[cy * w + cx]! : 0
-      if (!id) {
-        pos.fill(0, o, o + 8)
-        continue
-      }
-      empty = false
-      const x0 = lx * ts
-      const y0 = ly * ts
-      const x1 = x0 + ts
-      const y1 = y0 + ts
-      pos[o] = x0
-      pos[o + 1] = y0
-      pos[o + 2] = x1
-      pos[o + 3] = y0
-      pos[o + 4] = x1
-      pos[o + 5] = y1
-      pos[o + 6] = x0
-      pos[o + 7] = y1
-      const i = id - 1
-      const tx = set.margin + (i % columns) * step
-      const ty = set.margin + Math.floor(i / columns) * step
-      const u0 = (tx + inset) / texW
-      const v0 = (ty + inset) / texH
-      const u1 = (tx + ts - inset) / texW
-      const v1 = (ty + ts - inset) / texH
-      uv[o] = u0
-      uv[o + 1] = v0
-      uv[o + 2] = u1
-      uv[o + 3] = v0
-      uv[o + 4] = u1
-      uv[o + 5] = v1
-      uv[o + 6] = u0
-      uv[o + 7] = v1
-    }
-  }
-  geometry.getBuffer('aPosition').update()
-  geometry.getBuffer('aUV').update()
-  return empty
-}
-
-/** 先销毁 Mesh 再销毁几何体（显存里的顶点缓冲区）。着色器和贴图是共用的，不在这里销毁。 */
 /** 两个 0xRRGGBB 按通道相乘（和 GPU 里染色的效果一样）。 */
 function multiplyColor(a: number, b: number): number {
   if (b === 0xffffff) return a
   let out = 0
   for (let shift = 16; shift >= 0; shift -= 8) out |= Math.round((((a >> shift) & 0xff) * ((b >> shift) & 0xff)) / 255) << shift
   return out
-}
-
-function destroyChunk(chunk: TileChunk): void {
-  chunk.mesh.destroy()
-  chunk.geometry.destroy()
 }
 
 /** Sprite2D 贴图层、Label 文字层的 label，用来和子节点的容器区分。 */

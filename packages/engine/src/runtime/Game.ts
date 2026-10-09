@@ -30,6 +30,11 @@ export interface GameOptions<S extends Scene> {
   pauseOnBackground?: boolean
   /** 存储 key 的前缀，默认 'sapling2d:'。同一域名下有多个游戏时应各自设置。 */
   storagePrefix?: string
+  /**
+   * 像素风，默认 false。打开后所有贴图用最近邻采样（放大后不模糊），精灵的顶点对齐到物理像素（缩放倍数不是整数时也没有半像素的边缘）。
+   * 文字不受影响。只影响画面：节点的 `position` 不取整，游戏逻辑和无头测试不受影响。
+   */
+  pixelArt?: boolean
 }
 
 /**

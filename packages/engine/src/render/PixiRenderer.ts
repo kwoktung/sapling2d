@@ -26,6 +26,7 @@ import type { Viewport } from '../core/Viewport'
 import { Rect2 } from '../math/Rect2'
 import { Label } from '../nodes/Label'
 import { Sprite2D } from '../nodes/Sprite2D'
+import { ColorRect } from '../nodes/ColorRect'
 import { TILE_CHUNK, TileMapLayer } from '../nodes/TileMapLayer'
 import type { Renderer } from '../runtime/Game'
 
@@ -376,6 +377,10 @@ export class PixiRenderer implements Renderer {
       if (node instanceof Sprite2D) {
         view.sprite = new Sprite({ label: CONTENT_LABEL, roundPixels: this._pixelArt })
         view.container.addChild(view.sprite)
+      } else if (node instanceof ColorRect) {
+        // 白色贴图染色：和普通贴图一起合批，不用 Graphics
+        view.sprite = new Sprite({ label: CONTENT_LABEL, texture: PixiTexture.WHITE, roundPixels: this._pixelArt })
+        view.container.addChild(view.sprite)
       } else if (node instanceof Label) {
         view.text = new Text({ label: CONTENT_LABEL })
         view.container.addChild(view.text)
@@ -421,6 +426,12 @@ export class PixiRenderer implements Renderer {
       s.position.set(node.offset.x, node.offset.y)
       s.scale.set(node.flipH ? -1 : 1, node.flipV ? -1 : 1)
       s.tint = node.selfModulate
+    } else if (node instanceof ColorRect && view.sprite) {
+      const s = view.sprite
+      const size = node.size
+      s.width = size.x
+      s.height = size.y
+      s.tint = multiplyColor(node.color, node.selfModulate)
     } else if (node instanceof Label && view.text) {
       this._syncText(node, view, view.text)
       view.text.tint = node.selfModulate
@@ -779,6 +790,14 @@ function writeChunk(node: TileMapLayer, geometry: MeshGeometry, chunkX: number, 
 }
 
 /** 先销毁 Mesh 再销毁几何体（显存里的顶点缓冲区）。着色器和贴图是共用的，不在这里销毁。 */
+/** 两个 0xRRGGBB 按通道相乘（和 GPU 里染色的效果一样）。 */
+function multiplyColor(a: number, b: number): number {
+  if (b === 0xffffff) return a
+  let out = 0
+  for (let shift = 16; shift >= 0; shift -= 8) out |= Math.round((((a >> shift) & 0xff) * ((b >> shift) & 0xff)) / 255) << shift
+  return out
+}
+
 function destroyChunk(chunk: TileChunk): void {
   chunk.mesh.destroy()
   chunk.geometry.destroy()

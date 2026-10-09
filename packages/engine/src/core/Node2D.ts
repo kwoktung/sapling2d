@@ -323,10 +323,12 @@ function clampAlpha(value: number): number {
   return Math.min(1, Math.max(0, value))
 }
 
-function clampColor(value: number): number {
+/** @internal 颜色截断到 0x000000–0xffffff 的整数。 */
+export function clampColor(value: number): number {
   return Math.min(WHITE, Math.max(0, Math.round(value)))
 }
 
-function hex(color: number): string {
+/** @internal dump 用的颜色格式：`#rrggbb`。 */
+export function hex(color: number): string {
   return '#' + color.toString(16).padStart(6, '0')
 }

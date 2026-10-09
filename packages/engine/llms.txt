@@ -818,6 +818,61 @@ export class Level extends Scene {
 - 属于场景的 CanvasLayer 随场景销毁；需要跨场景的界面（例如全局 HUD）让 Autoload 继承 CanvasLayer。
 - 刚体、`CharacterBody2D`、`TileMapLayer` 也可以放进 CanvasLayer，坐标同样是设计坐标；`CharacterBody2D` 只和同一画布（同一个 CanvasLayer，或都在场景里）的图块地图碰撞。
 
+### 纯色矩形（ColorRect）
+
+```ts
+import { CanvasLayer, ColorRect, Scene, v } from 'sapling2d'
+
+const BAR_WIDTH = 300
+
+/** 血条：底色 + 填充，都是 ColorRect（原点在左上角，改 scale.x 就从左往右缩）。 */
+class HealthBar extends ColorRect {
+  readonly fill: ColorRect
+
+  constructor() {
+    super({ position: v(40, 60), size: v(BAR_WIDTH, 24), color: 0x302020 })
+    this.fill = this.add(new ColorRect({ size: v(BAR_WIDTH, 24), color: 0x40d040 }))
+  }
+
+  set ratio(value: number) {
+    this.fill.scale = v(Math.max(0, Math.min(1, value)), 1)
+    this.fill.color = value > 0.3 ? 0x40d040 : 0xe04040 // 血少了变红
+  }
+}
+
+export class Battle extends Scene {
+  hp = 10
+  bar!: HealthBar
+  fade!: ColorRect
+
+  override ready() {
+    const hud = this.add(new CanvasLayer())
+    this.bar = hud.add(new HealthBar())
+    // 转场黑幕：盖住整个可见区域，透明度从 1 补间到 0
+    const r = this.tree.viewport.visibleRect
+    this.fade = hud.add(new ColorRect({ position: r.position, size: r.size, color: 0x000000, zIndex: 100 }))
+    this.fade.createTween().to(this.fade, { alpha: 0 }, 0.5).call(() => this.fade.queueFree())
+  }
+
+  hit() {
+    this.hp--
+    this.bar.ratio = this.hp / 10
+  }
+}
+```
+
+```ts
+for (let i = 0; i < 8; i++) g.scene.hit()
+expect(g.scene.bar.fill.scale.x).toBeCloseTo(0.2)
+expect(g.scene.bar.fill.color).toBe(0xe04040)
+g.stepSeconds(0.6)
+expect(g.scene.fade.isFreed).toBe(true) // 黑幕淡出后删掉
+```
+
+- `ColorRect`（继承 Node2D）：`size`、`color`（0xRRGGBB）。原点在**左上角**（和 Godot 一样，和 `Sprite2D` 默认居中不同）：血条改 `scale.x` 就从左往右缩。
+- 透明度用 `alpha`；`color`、`size` 都能补间（颜色按 RGB 通道插值）。没有 `hitArea` 时点击区域就是这个矩形（无头模式下也是），所以也能当简单的按钮底板。
+- 和贴图一起合批绘制（白色贴图染色），几十个血条不会增加绘制调用。圆、圆环之类的形状用贴图加 `modulate`。
+
 ### 场景切换与存档
 
 ```ts
@@ -1015,6 +1070,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `Sprite2D` | 贴图 | `texture` `centered`（默认 true）`offset` `flipH` `flipV` |
 | `AnimatedSprite2D` | 帧动画（继承 Sprite2D） | `frames` / `animations` `fps` `loop` `autoplay` `play()` `pause()` `stop()` `frame` `speedScale` `isPlaying` `animation`；信号 `frameChanged` `animationFinished` |
 | `Label` | 文字 | `text` `fontSize` `color` `fontWeight` `align` `verticalAlign` `stroke` `wrapWidth` `lineHeight` |
+| `ColorRect` | 纯色矩形（原点在左上角） | `size` `color` `rect` |
 | `RigidBody2D` | 动态刚体 | `mass` `friction` `bounce` `gravityScale` `linearVelocity` `angularVelocity` `lockRotation` `ccd` `applyCentralImpulse` `applyForce` `sleeping`；信号 `bodyEntered` `bodyExited` |
 | `StaticBody2D` | 静态刚体（地面、墙） | `friction` `bounce` |
 | `Area2D` | 检测区域 | 信号 `bodyEntered` `bodyExited`；`getOverlappingBodies()` |
@@ -1058,6 +1114,7 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 | `Sprite2D` | `texture`（路径；图集的帧是 `sprites.png#enemy_red` / `explosion.png#3`）、`centered`、`offset`、`flipH`、`flipV` |
 | `AnimatedSprite2D` | 同 Sprite2D，加 `animation`（有多套时）、`frame`（总是显示）、`playing` |
 | `Label` | `text`（总是显示，含空格时加引号）、`fontSize`、`align` |
+| `ColorRect` | `size`、`color`（总是显示） |
 | `RigidBody2D` | `mass`、`friction`、`bounce`、`linearVelocity`（运动时）、`sleeping`、`collisionLayer`、`collisionMask` |
 | `StaticBody2D` / `Area2D` | `friction`、`bounce`（静态刚体）、`collisionLayer`、`collisionMask` |
 | `CollisionShape2D` | `shape`（如 `circle(30)`）、`disabled` |

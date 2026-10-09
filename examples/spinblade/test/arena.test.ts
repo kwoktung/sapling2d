@@ -71,6 +71,16 @@ describe('场地', () => {
     expect(p.y).toBe(y2)
   })
 
+  it('摇杆：屏幕上任何地方都能按出来（右半边也行）', async () => {
+    const { g, arena } = await start()
+    isolate(arena)
+    g.pointerDown(480, 960) // 竖屏单手：拇指在中间偏右
+    g.pointerMove(480, 870)
+    g.step()
+    expect(arena.hud.joystick.isPressed).toBe(true)
+    expect(g.tree.input.getActionStrength('up')).toBe(1)
+  })
+
   it('被墙挡住：走进左边的墙，停在墙边', async () => {
     const { g, arena } = await start()
     isolate(arena)

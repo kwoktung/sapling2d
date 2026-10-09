@@ -133,7 +133,18 @@
 - 坐标：节点的全局坐标和指针事件的坐标（`position`、`pointerPosition`）都是**世界坐标**；没有相机时世界坐标就是设计坐标。
   `tree.viewport.screenToWorld` / `worldToScreen` 换算窗口坐标，`designToWorld` / `worldToDesign` 换算设计坐标（屏幕上的位置）；`visibleWorldRect` 是屏幕上可见的世界范围（`visibleRect` 是设计坐标）。
   手指按住不动而相机移动时，`pressedPointers` / `pointerPosition` 每帧按新的相机位置更新。
-- 有相机时，固定在屏幕上的界面（分数、按钮）会跟着画面一起移走；它们要放在 `CanvasLayer` 里（还没有实现）。
+- 有相机时，固定在屏幕上的界面（分数、按钮）要放在 `CanvasLayer` 里，否则会跟着画面一起移走。
+
+### 界面层（CanvasLayer）
+
+<!-- example:canvas-layer -->
+
+- `CanvasLayer`（不是 Node2D）下面的节点不跟随相机，用设计坐标（屏幕上的位置），仍然随视口缩放。全局变换只算到 CanvasLayer 为止。
+- `layer`（默认 1）：>= 0 画在场景上面（界面），< 0 画在场景下面（远景）；同一层级按场景树里的顺序（嵌套的层紧跟外层）。上面的层先收到指针事件。
+  `visible = false` 时整层（包括嵌套在里面的层）不显示、不能被点中。CanvasLayer 外面的 Node2D 隐藏**不影响**它（和 Godot 一样）：要跟着角色一起隐藏的血条不要放进 CanvasLayer。
+- 它下面的节点收到的指针事件 `position` 是设计坐标；场景里的节点收到的是世界坐标。
+- 属于场景的 CanvasLayer 随场景销毁；需要跨场景的界面（例如全局 HUD）让 Autoload 继承 CanvasLayer。
+- 刚体、`CharacterBody2D`、`TileMapLayer` 也可以放进 CanvasLayer，坐标同样是设计坐标；`CharacterBody2D` 只和同一画布（同一个 CanvasLayer，或都在场景里）的图块地图碰撞。
 
 ### 场景切换与存档
 
@@ -199,6 +210,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `TileMapLayer` | 一层图块地图 | `tileSet` `width` `height` `collisionLayer` `setCell` `eraseCell` `getCell` `getCellTileData` `localToMap` `mapToLocal` `getUsedRect` `usedCellCount` |
 | `CharacterBody2D` | 平台游戏的角色（只和图块地图碰撞） | `shape` `velocity` `velocityX` `velocityY` `setVelocity` `moveAndSlide()` `isOnFloor` `isOnWall` `isOnCeiling` `slideCollisionCount` `getSlideCollision(i)` `collisionMask` |
 | `Camera2D` | 相机（画面跟随） | `enabled` `offset` `limitLeft` `limitTop` `limitRight` `limitBottom` `positionSmoothingEnabled` `positionSmoothingSpeed` `makeCurrent()` `isCurrent` `resetSmoothing()` `screenCenter` |
+| `CanvasLayer`（不是 Node2D） | 界面层（不跟随相机） | `layer` `visible` |
 | `HitTester`（不是节点） | 两组对象之间的圆 / 矩形命中判定 | `forEachHit(as, bs, hit)`（`hit` 返回 true 表示 a 用掉了）、`HitTester.compact(list)`；对象需要 `x` `y` `hitShape`，可选 `dead` |
 | `CollisionShape2D` | 碰撞形状（必须是刚体 / 区域的直接子节点） | `shape`：`circle(r)` `rectangle(w, h)` `polygon(points)`；`disabled` |
 | `Timer` | 计时器 | `waitTime` `oneShot` `autostart` `start()` `stop()` `timeLeft`；信号 `timeout` |

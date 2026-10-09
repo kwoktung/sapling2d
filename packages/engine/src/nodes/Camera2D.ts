@@ -131,7 +131,7 @@ export class Camera2D extends Node2D {
   private _computeTarget(): void {
     let x = this.x
     let y = this.y
-    for (let n: Node | null = this.parent; n; n = n.parent) {
+    for (let n: Node | null = this._canvasParent; n; n = n._canvasParent) {
       if (!(n instanceof Node2D)) continue
       const s = n.scale
       let px = x * s.x

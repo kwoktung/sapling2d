@@ -1,6 +1,6 @@
 import { Vector2 } from '../math/Vector2'
 import type { ActionName } from './actions'
-import type { Node } from './Node'
+import type { CanvasLayerLike, Node } from './Node'
 import { Node2D } from './Node2D'
 import type { PointerEvent2D } from './pointer'
 import type { Viewport } from './Viewport'
@@ -197,10 +197,10 @@ export class Input {
       this._pointers.set(id, position)
       this._pointersDesign.set(id, design)
       this._pointerJustPressed = true
-      const node = this._pick(position)
+      const node = this._pick(position, design)
       if (node) {
         this._captures.set(id, { node })
-        node.pointerDown.emit(event(id, position, node))
+        node.pointerDown.emit(event(id, position, design, node))
       } else {
         this._unhandledPointers.add(id)
       }
@@ -216,7 +216,7 @@ export class Input {
         this._pointers.set(id, position)
         this._pointersDesign.set(id, design)
       }
-      target?.pointerMove.emit(event(id, position, target))
+      target?.pointerMove.emit(event(id, position, design, target))
       return
     }
 
@@ -227,7 +227,7 @@ export class Input {
     this._captures.delete(id)
     this._pointerJustReleased = true
     if (target) {
-      const ev = event(id, position, target)
+      const ev = event(id, position, design, target)
       target.pointerUp.emit(ev)
       if (e.type === 'pointerup' && target.hitTest(ev.localPosition)) target.clicked.emit(ev)
     }
@@ -256,16 +256,17 @@ export class Input {
     }
   }
 
-  /** 绘制顺序最上层、可点击且命中的节点。 */
-  private _pick(position: Vector2): Node2D | null {
+  /** 绘制顺序最上层、可点击且命中的节点。CanvasLayer 里的节点按设计坐标（`design`）判断，场景里的按世界坐标。 */
+  private _pick(world: Vector2, design: Vector2): Node2D | null {
     const order: Node2D[] = []
-    collectDrawOrder(this._topLevel(), order)
+    const inLayer: boolean[] = []
+    collectDrawOrder(this._topLevel(), order, inLayer)
     for (let i = order.length - 1; i >= 0; i--) {
       const n = order[i]!
       if (!n.inputPickable || n.isQueuedForDeletion || !n.isVisibleInTree || !n.canProcess()) continue
       // 缩放为 0 时变换不可逆：节点在屏幕上没有面积，不可能被点中（toLocal 会退化成原点，导致全屏误判）
       const inverse = n.globalTransform.inverse()
-      if (inverse && n.hitTest(inverse.apply(position))) return n
+      if (inverse && n.hitTest(inverse.apply(inLayer[i] ? design : world))) return n
     }
     return null
   }
@@ -278,18 +279,46 @@ export class Input {
   }
 }
 
-function event(pointerId: number, position: Vector2, node: Node2D): PointerEvent2D {
+/** 节点收到的事件：CanvasLayer 里的节点拿到设计坐标，场景里的拿到世界坐标。 */
+function event(pointerId: number, world: Vector2, design: Vector2, node: Node2D): PointerEvent2D {
+  const position = node._canvasLayer ? design : world
   return { pointerId, position, localPosition: node.toLocal(position) }
 }
 
 /**
- * 与渲染层相同的绘制顺序：树的先序；非 Node2D 节点被展开到最近的 Node2D 祖先下；
- * 同一父容器内按 zIndex 稳定排序（zIndex 大的后画、在上层）。
+ * 与渲染层相同的绘制顺序（先画的在前）：layer < 0 的 CanvasLayer、场景（世界）、layer >= 0 的 CanvasLayer。
+ * 同一 layer 的 CanvasLayer 按树的先序（不管 zIndex，嵌套的层紧跟在外层后面），和渲染层一致。
+ * 每一层里是树的先序；非 Node2D 节点被展开到最近的 Node2D 祖先下；同一父容器内按 zIndex 稳定排序（zIndex 大的后画、在上层）。
+ * `inLayer`（可选）和 `out` 一一对应：节点是否在某个 CanvasLayer 里。
  */
-export function collectDrawOrder(nodes: readonly Node[], out: Node2D[]): void {
+export function collectDrawOrder(nodes: readonly Node[], out: Node2D[], inLayer?: boolean[]): void {
+  const layers: CanvasLayerLike[] = []
+  collectLayers(nodes, layers)
+  const sorted = layers.map((layer, index) => ({ layer, index })).sort((a, b) => a.layer.layer - b.layer.layer || a.index - b.index)
+  const emit = (list: readonly Node[], flag: boolean) => {
+    const start = out.length
+    collectCanvas(list, out)
+    if (inLayer) for (let i = start; i < out.length; i++) inLayer[i] = flag
+  }
+  for (const { layer } of sorted) if (layer.layer < 0) emit(layer.children, true)
+  emit(nodes, false)
+  for (const { layer } of sorted) if (layer.layer >= 0) emit(layer.children, true)
+}
+
+/** 树的先序里遇到的所有 CanvasLayer（包括嵌套的）。 */
+function collectLayers(nodes: readonly Node[], out: CanvasLayerLike[]): void {
+  for (const n of nodes) {
+    if (n._isCanvasLayer) out.push(n as CanvasLayerLike)
+    collectLayers(n.children, out)
+  }
+}
+
+/** 一个画布（场景或一个 CanvasLayer）里的 Node2D，按绘制顺序；遇到 CanvasLayer 不展开（它自成一层）。 */
+function collectCanvas(nodes: readonly Node[], out: Node2D[]): void {
   const slots: Node2D[] = []
   const flatten = (list: readonly Node[]) => {
     for (const n of list) {
+      if (n._isCanvasLayer) continue
       if (n instanceof Node2D) slots.push(n)
       else flatten(n.children)
     }
@@ -298,6 +327,6 @@ export function collectDrawOrder(nodes: readonly Node[], out: Node2D[]): void {
   const sorted = slots.map((n, i) => ({ n, i })).sort((a, b) => a.n.zIndex - b.n.zIndex || a.i - b.i)
   for (const { n } of sorted) {
     out.push(n)
-    collectDrawOrder(n.children, out)
+    collectCanvas(n.children, out)
   }
 }

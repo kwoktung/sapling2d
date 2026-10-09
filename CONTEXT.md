@@ -29,6 +29,8 @@ Code-first、agent-friendly 的 2D 游戏引擎。基于 PixiJS v8（渲染）+ 
 - **CollisionObject2D** — `PhysicsBody2D` 和 `Area2D` 的基类，持有形状、碰撞层和 `bodyEntered` / `bodyExited` 信号。接触信号在 `world.step` 之后派发，回调里可以安全地 add / remove / queueFree。
 - **Area2D** — 传感器区域（planck 的 kinematic + sensor），跟随自身及祖先的全局变换，只检测 RigidBody2D（检测不到静态刚体和其他区域）。
 - **HitTester** — 不走 planck 的命中判定：`forEachHit(as, bs, hit)` 比较两组对象（`x`、`y`、`hitShape` 为 `circle` / `rectangle`）的每一对，只回答谁和谁重叠，没有物理反应。形状轴对齐、不随 scale 变化，比较的是局部坐标。和 `Area2D` 的区别：不是节点、不发信号、由游戏在 `process` 里主动调用，用于数量超出刚体预算的子弹和道具。
+- **TileSet / tileset()** — 图块集：一张图集贴图按 `tileSize` 切成格子，图块编号从 1 开始（0 表示空格子），每个图块可以有碰撞类型（`solid` / `oneWay`）和自定义字段。是一种资源，放进 `static assets` 预加载；一个图块集只对应一张图（ADR 0008）。
+- **TileMapLayer** — 一层图块地图（`Node2D`）：大小固定的格子数组（`Uint16Array`），多层地图就是多个节点。渲染按 16 × 16 格的区块，每个区块一个 Mesh，只画屏幕内的区块（ADR 0008）。不生成物理刚体；碰撞由 `CharacterBody2D` 直接查格子（ADR 0009）。
 - **Timer / SceneTreeTimer** — `Timer` 节点（`waitTime`、`oneShot`、`autostart`、`timeout` 信号），每帧最多触发一次、循环不漂移；一次性等待用 `await this.tree.createTimer(1).timeout`。
 - **Tween** — `this.createTween().to(target, props, duration, ease).parallel().wait(s).call(fn)`，绑定节点销毁时自动停止（不触发 `finished`）。从下一帧开始播放；每一步的起始值在该步开始时读取；同一个 `to()` 里的多个属性同时进行。`to(this, ...)` 在类方法里按 Node2D 的属性做类型检查。
 - **Engine-internal hooks** — 引擎节点通过 `_onEnterTree` / `_onExitTree` / `_internalProcess` 实现自身行为，用户覆写 `enterTree` / `exitTree` / `process` 时不需要调用 super。

@@ -1,3 +1,4 @@
+import type { TileMapLayer } from '../nodes/TileMapLayer'
 import { RandomNumberGenerator } from '../math/RandomNumberGenerator'
 import { fmt } from '../math/Vector2'
 import { PhysicsWorld, type PhysicsSettings } from '../physics/PhysicsWorld'
@@ -103,6 +104,8 @@ export class SceneTree {
   private _physics: PhysicsWorld | null = null
   /** @internal 树里覆写了 `physicsProcess` 的节点数；为 0 时物理步不遍历节点。 */
   _physicsProcessNodes = 0
+  /** @internal 树里的 TileMapLayer（进入树时登记、离开时注销），CharacterBody2D 按它们做格子碰撞。 */
+  readonly _tileLayers: TileMapLayer[] = []
   private _freeQueue: Node[] = []
 
   constructor(options: SceneTreeOptions = {}) {

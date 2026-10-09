@@ -7,6 +7,8 @@ import {
   Matrix,
   Mesh,
   MeshGeometry,
+  Particle,
+  ParticleContainer,
   Rectangle,
   roundPixelsBitGl,
   Shader,
@@ -18,6 +20,8 @@ import {
   type GlProgram,
   type TextStyleOptions,
 } from 'pixi.js'
+// ParticleContainer 的渲染管线是可选扩展（skipExtensionImports 不会自动加载）
+import 'pixi.js/particle-container'
 import type { Texture } from '../core/assets'
 import type { CanvasLayerLike, Node } from '../core/Node'
 import { Node2D } from '../core/Node2D'
@@ -27,6 +31,7 @@ import { Rect2 } from '../math/Rect2'
 import { Label } from '../nodes/Label'
 import { Sprite2D } from '../nodes/Sprite2D'
 import { ColorRect } from '../nodes/ColorRect'
+import { Particles2D } from '../nodes/Particles2D'
 import { TILE_CHUNK, TileMapLayer } from '../nodes/TileMapLayer'
 import type { Renderer } from '../runtime/Game'
 
@@ -64,6 +69,18 @@ interface View {
   textResolution?: number
   /** TileMapLayer 的区块层。 */
   tiles?: TileView
+  /** Particles2D 的粒子层。 */
+  particles?: ParticleView
+}
+
+/** Particles2D 的显示对象：一个 ParticleContainer（一次绘制调用），粒子对象按需创建、复用。 */
+interface ParticleView {
+  container: ParticleContainer
+  pool: Particle[]
+  /** 粒子当前用的贴图（节点的贴图句柄和背后的资源都要比较）。 */
+  texture: Texture | null
+  resource: unknown
+  tint: number
 }
 
 /** TileMapLayer 的显示对象：内容层里每个区块一个 Mesh（ADR 0008），区块进入屏幕时才创建。 */
@@ -163,6 +180,8 @@ export class PixiRenderer implements Renderer {
    * 只对贴图层打开，不对整个渲染器：文字、Graphics 和视口遮罩不受影响。
    */
   private readonly _pixelArt: boolean
+  /** 粒子内容层的变换（复用）。 */
+  private readonly _particleMatrix = new Matrix()
 
   private constructor(renderer: WebGLRenderer, pixelArt: boolean) {
     this._renderer = renderer
@@ -301,7 +320,7 @@ export class PixiRenderer implements Renderer {
     const view = this._syncNode(node)
     ordered.push(view.container)
     // 叶子节点（大多数子弹、精灵）不用递归：除非它的容器里还留着已经移走的子节点
-    const contentCount = view.sprite || view.text || view.tiles ? 1 : 0
+    const contentCount = view.sprite || view.text || view.tiles || view.particles ? 1 : 0
     if (children.length > 0 || view.container.children.length > contentCount) this._syncChildren(children, view.container, depth + 1)
   }
 
@@ -384,6 +403,15 @@ export class PixiRenderer implements Renderer {
       } else if (node instanceof Label) {
         view.text = new Text({ label: CONTENT_LABEL })
         view.container.addChild(view.text)
+      } else if (node instanceof Particles2D) {
+        const container = new ParticleContainer({
+          label: CONTENT_LABEL,
+          // 位置、缩放（在 vertex 里）、透明度每帧都变；贴图坐标不变，粒子不旋转
+          dynamicProperties: { position: true, vertex: true, color: true, rotation: false, uvs: false },
+          roundPixels: this._pixelArt,
+        })
+        view.particles = { container, pool: [], texture: null, resource: null, tint: -1 }
+        view.container.addChild(container)
       } else if (node instanceof TileMapLayer) {
         view.tiles = { content: new Container({ label: CONTENT_LABEL }), chunks: new Array<TileChunk | null>(node._chunksX * node._chunksY).fill(null), resource: null, x0: 0, y0: 0, x1: -1, y1: -1 }
         view.container.addChild(view.tiles.content)
@@ -406,6 +434,8 @@ export class PixiRenderer implements Renderer {
     // 区块的显示和重建每帧都要检查：镜头或视口变化时不会改节点的版本号
     // 隐藏的图层不建区块；重新显示后再同步
     if (view.tiles && node.visible) this._syncTiles(node as TileMapLayer, view.tiles)
+    // 粒子每帧都在动：每帧同步（隐藏时跳过）
+    if (view.particles && node.visible) this._syncParticles(node as Particles2D, view.particles)
 
     const textureResource = node instanceof Sprite2D ? node.texture?._resource : undefined
     if (view.version === node._version && view.textureResource === textureResource && (!view.text || view.textResolution === this._textResolution)) {
@@ -461,6 +491,83 @@ export class PixiRenderer implements Renderer {
       view.textResolution = this._textResolution
     }
     text.anchor.set(ANCHOR[node.align], ANCHOR[node.verticalAlign])
+  }
+
+  /**
+   * 同步粒子：把存活的粒子写进复用的 Particle 对象（每帧只写数字，不分配；粒子数第一次达到某个值时才创建对象）。
+   * 全局坐标的粒子：内容层的变换设成节点全局变换的逆，抵消掉节点自己的移动，粒子画在全局坐标上。
+   */
+  private _syncParticles(node: Particles2D, pv: ParticleView): void {
+    const pc = pv.container
+    const texture = node.texture
+    const resource = texture?._resource
+    const n = texture ? node._count : 0
+    const pool = pv.pool
+    if (texture !== pv.texture || resource !== pv.resource) {
+      pv.texture = texture
+      pv.resource = resource
+      const t = texture ? this._pixiTexture(texture) : PixiTexture.EMPTY
+      pc.texture = t
+      for (let i = 0; i < pool.length; i++) pool[i]!.texture = t
+      pc.update()
+    }
+    const tint = node.selfModulate
+    if (tint !== pv.tint) {
+      pv.tint = tint
+      for (let i = 0; i < pool.length; i++) pool[i]!.tint = tint
+    }
+    while (pool.length < n) pool.push(new Particle({ texture: pc.texture ?? PixiTexture.EMPTY, anchorX: 0.5, anchorY: 0.5, tint }))
+
+    if (node.localCoords) {
+      if (pc.x !== 0 || pc.y !== 0 || pc.rotation !== 0 || pc.scale.x !== 1 || pc.scale.y !== 1 || pc.skew.x !== 0 || pc.skew.y !== 0) {
+        pc.setFromMatrix(this._particleMatrix.identity())
+      }
+    } else {
+      node._computeGlobal()
+      const a = node._ga
+      const b = node._gb
+      const c = node._gc
+      const d = node._gd
+      const det = a * d - b * c
+      if (det === 0) {
+        pc.visible = false
+        return
+      }
+      pc.visible = true
+      const m = this._particleMatrix
+      m.a = d / det
+      m.b = -b / det
+      m.c = -c / det
+      m.d = a / det
+      m.tx = (c * node._gty - d * node._gtx) / det
+      m.ty = (b * node._gtx - a * node._gty) / det
+      pc.setFromMatrix(m)
+    }
+
+    const children = pc.particleChildren
+    if (children.length !== n) {
+      for (let i = children.length; i < n; i++) children[i] = pool[i]!
+      children.length = n
+      pc.update()
+    }
+    const px = node._px
+    const py = node._py
+    const age = node._age
+    const life = node._life
+    const s0 = node.scaleStart
+    const ds = node.scaleEnd - s0
+    const a0 = node.alphaStart
+    const da = node.alphaEnd - a0
+    for (let i = 0; i < n; i++) {
+      const p = pool[i]!
+      const t = age[i]! / life[i]!
+      const s = s0 + ds * t
+      p.x = px[i]!
+      p.y = py[i]!
+      p.scaleX = s
+      p.scaleY = s
+      p.alpha = a0 + da * t
+    }
   }
 
   /**
@@ -708,6 +815,7 @@ export class PixiRenderer implements Renderer {
       for (const chunk of view.tiles.chunks) if (chunk) destroyChunk(chunk)
       view.tiles.content.destroy()
     }
+    view.particles?.container.destroy()
     view.container.destroy({ children: false })
     this._views.delete(node)
     if (node._view === view.container) node._view = null

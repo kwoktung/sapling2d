@@ -89,6 +89,8 @@ export class SceneTree {
   private _autoloads = new Map<NodeClass, Node>()
   private _accumulator = 0
   private _physicsFrames = 0
+  /** 没暂停时执行的物理步数：`time` = 它 × 步长（计数而不是累加小数，不积累误差）。 */
+  private _gameSteps = 0
   private _processFrames = 0
   private _deferred: (() => void)[] = []
   private _paused = false
@@ -130,7 +132,7 @@ export class SceneTree {
     return this._scene
   }
 
-  /** 已执行的物理步数。 */
+  /** 已执行的物理步数（暂停时也计数：`processMode: always` 的节点仍然有物理步）。 */
   get physicsFrames(): number {
     return this._physicsFrames
   }
@@ -140,9 +142,12 @@ export class SceneTree {
     return this._processFrames
   }
 
-  /** 游戏内经过的时间（秒），按物理步累计，与真实时间无关（`timeScale` 为 0.5 时走得慢一半）。 */
+  /**
+   * 游戏时间（秒）：按物理步累计，与真实时间无关。`timeScale` 为 0.5 时走得慢一半，为 0 时停住；
+   * 暂停（`paused`）时也停住。用来记时间点、算冷却：`this.readyAt = this.tree.time + 0.5`。
+   */
   get time(): number {
-    return this._physicsFrames * this.physicsDelta
+    return this._gameSteps * this.physicsDelta
   }
 
   /** `this.rng.randf()` 的简写：[0, 1) 之间的随机数。 */
@@ -364,6 +369,7 @@ export class SceneTree {
       this._accumulator -= this.physicsDelta
       steps++
       this._physicsFrames++
+      if (!this._paused) this._gameSteps++
       // 整个物理步（physicsProcess 和刚体的接触信号）里，isActionJustPressed 都按物理步算
       this.input._inPhysics = true
       try {

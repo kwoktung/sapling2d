@@ -127,6 +127,20 @@ describe('tree.timeScale', () => {
     expect(scene.probe.physicsSteps).toBe(steps + 6)
   })
 
+  it('暂停时 tree.time 停住；physicsFrames 照常计数（always 的节点仍有物理步）', async () => {
+    const { g } = await setup()
+    g.step(30)
+    const t0 = g.tree.time
+    const f0 = g.tree.physicsFrames
+    g.tree.paused = true
+    g.step(60)
+    expect(g.tree.time).toBe(t0)
+    expect(g.tree.physicsFrames).toBe(f0 + 60)
+    g.tree.paused = false
+    g.step(60)
+    expect(g.tree.time).toBeCloseTo(t0 + 1)
+  })
+
   it('和 paused 互相独立', async () => {
     const { g, scene } = await setup()
     g.tree.timeScale = 0.5

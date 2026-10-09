@@ -6,7 +6,8 @@ import { bounds } from './bounds'
 /** 敌机需要从战场拿到的东西：玩家位置（瞄准用）和发射子弹。 */
 export interface EnemyHost {
   readonly player: { readonly x: number; readonly y: number }
-  spawnEnemyBullet(position: Vector2, velocity: Vector2): void
+  /** `style`：普通敌方子弹，或 Boss 的大号子弹。 */
+  spawnEnemyBullet(position: Vector2, velocity: Vector2, style?: 'normal' | 'boss'): void
 }
 
 /** 大型飞机悬停多久后离开。 */

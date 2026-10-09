@@ -170,6 +170,34 @@ const sprites = {}
   sprites.enemy_large = img
 }
 
+// Boss 300×230（机头朝下）
+{
+  const img = image(300, 230)
+  const cx = 150
+  glow(img, cx, 120, 140, [255, 60, 60], 0.25)
+  // 两翼和炮管
+  polygon(img, mirrored(cx, [[40, 40], [140, 70], [148, 120], [120, 150], [60, 130], [40, 100]]), vgrad([70, 20, 30], [170, 50, 60], 40, 150))
+  for (const dx of [-110, 110]) {
+    polygon(img, [[cx + dx - 10, 120], [cx + dx + 10, 120], [cx + dx + 8, 190], [cx + dx - 8, 190]], [60, 60, 80])
+    ellipse(img, cx + dx, 192, 9, 9, [255, 170, 60])
+  }
+  // 机身
+  polygon(img, mirrored(cx, [[0, 228], [26, 200], [56, 150], [64, 70], [44, 20], [20, 4], [0, 4]]), vgrad([60, 60, 90], [140, 140, 180], 0, 228))
+  polygon(img, mirrored(cx, [[0, 200], [18, 176], [34, 120], [30, 60], [0, 50]]), vgrad([110, 30, 40], [230, 70, 70], 50, 200))
+  ellipse(img, cx, 128, 26, 34, vgrad([255, 250, 220], [255, 120, 60], 94, 162)) // 核心
+  ellipse(img, cx, 128, 12, 16, [255, 255, 240])
+  for (const dx of [-36, 36]) ellipse(img, cx + dx, 76, 8, 8, [255, 80, 120])
+  sprites.boss = img
+}
+
+// Boss 子弹 30×30（橙色，比普通敌方子弹大）
+{
+  const img = image(30, 30)
+  glow(img, 15, 15, 15, [255, 150, 40], 0.75)
+  ellipse(img, 15, 15, 7, 7, [255, 245, 220])
+  sprites.bullet_boss = img
+}
+
 // 玩家子弹 16×42
 {
   const img = image(16, 42)

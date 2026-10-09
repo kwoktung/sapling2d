@@ -1,0 +1,37 @@
+{
+ "type": "tileset",
+ "version": "1.10",
+ "tiledversion": "1.10.2",
+ "name": "tiles",
+ "image": "../tiles.png",
+ "imagewidth": 192,
+ "imageheight": 48,
+ "tilewidth": 48,
+ "tileheight": 48,
+ "margin": 0,
+ "spacing": 0,
+ "columns": 4,
+ "tilecount": 4,
+ "tiles": [
+  {
+   "id": 2,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "properties": [
+    {
+     "name": "collision",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  }
+ ]
+}

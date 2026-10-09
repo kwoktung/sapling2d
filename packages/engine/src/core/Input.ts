@@ -35,6 +35,9 @@ interface Capture {
  *
  * 平台事件先进入队列，在每帧开始时（物理和 process 之前）统一处理，所以输入的效果是确定的：
  * 节点的指针信号在这时触发，`isActionJustPressed` 在这一整帧内为 true。
+ * 在 `physicsProcess` 里，`isActionJustPressed` / `isActionJustReleased` 按物理帧算（和 Godot 一样）：
+ * 上一个物理步之后按下的，在下一个物理步里为 true，一次按下只在一个物理步里为 true。
+ * 屏幕刷新率高于 60Hz 时有的帧没有物理步，这样按键也不会丢。
  *
  * ```ts
  * // 启动参数：actions: { drop: [pointerPress(), key('Space')] }
@@ -52,6 +55,11 @@ export class Input {
   private _actionPressed = new Set<string>()
   private _actionJustPressed = new Set<string>()
   private _actionJustReleased = new Set<string>()
+  /** 上一个物理步之后刚按下 / 刚松开的动作：`physicsProcess` 里查询的是它们。 */
+  private _physicsJustPressed = new Set<string>()
+  private _physicsJustReleased = new Set<string>()
+  /** @internal SceneTree 在物理步期间（physicsProcess 和刚体的接触信号）设为 true。 */
+  _inPhysics = false
 
   private _keysDown = new Set<string>()
   /** 当前按下的指针（设计坐标）。 */
@@ -79,6 +87,10 @@ export class Input {
   removeAction(name: ActionName): void {
     this._actions.delete(name)
     this._actionPressed.delete(name)
+    this._actionJustPressed.delete(name)
+    this._actionJustReleased.delete(name)
+    this._physicsJustPressed.delete(name)
+    this._physicsJustReleased.delete(name)
   }
 
   hasAction(name: ActionName): boolean {
@@ -91,16 +103,22 @@ export class Input {
     return this._actionPressed.has(name)
   }
 
-  /** 动作是否在本帧刚被按下。 */
+  /** 动作是否在本帧刚被按下（在 `physicsProcess` 里：是否在上一个物理步之后刚被按下）。 */
   isActionJustPressed(name: ActionName): boolean {
     this._assertAction(name)
-    return this._actionJustPressed.has(name)
+    return (this._inPhysics ? this._physicsJustPressed : this._actionJustPressed).has(name)
   }
 
-  /** 动作是否在本帧刚被松开。 */
+  /** 动作是否在本帧刚被松开（在 `physicsProcess` 里：是否在上一个物理步之后刚被松开）。 */
   isActionJustReleased(name: ActionName): boolean {
     this._assertAction(name)
-    return this._actionJustReleased.has(name)
+    return (this._inPhysics ? this._physicsJustReleased : this._actionJustReleased).has(name)
+  }
+
+  /** @internal 每个物理步结束时由 SceneTree 调用。 */
+  _endPhysicsStep(): void {
+    this._physicsJustPressed.clear()
+    this._physicsJustReleased.clear()
   }
 
   // ---------------------------------------------------------------- 原始状态
@@ -209,9 +227,11 @@ export class Input {
       if (pressed && !was) {
         this._actionPressed.add(name)
         this._actionJustPressed.add(name)
+        this._physicsJustPressed.add(name)
       } else if (!pressed && was) {
         this._actionPressed.delete(name)
         this._actionJustReleased.add(name)
+        this._physicsJustReleased.add(name)
       }
     }
   }

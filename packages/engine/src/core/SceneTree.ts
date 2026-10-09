@@ -104,6 +104,8 @@ export class SceneTree {
   private _physics: PhysicsWorld | null = null
   /** @internal 树里覆写了 `physicsProcess` 的节点数；为 0 时物理步不遍历节点。 */
   _physicsProcessNodes = 0
+  /** @internal 正在调用各节点的 physicsProcess（`CharacterBody2D.moveAndSlide` 只能在这时调用）。 */
+  _inPhysicsProcess = false
   /** @internal 树里的 TileMapLayer（进入树时登记、离开时注销），CharacterBody2D 按它们做格子碰撞。 */
   readonly _tileLayers: TileMapLayer[] = []
   private _freeQueue: Node[] = []
@@ -158,6 +160,11 @@ export class SceneTree {
   /** 物理世界：重力、像素/米换算。第一次访问（通常是第一个刚体进入树）时创建。 */
   get physics(): PhysicsWorld {
     return (this._physics ??= new PhysicsWorld(this._physicsSettings))
+  }
+
+  /** @internal 已经创建的物理世界；还没有刚体用过时为 null（不触发创建）。 */
+  get _physicsIfCreated(): PhysicsWorld | null {
+    return this._physics
   }
 
   // ---------------------------------------------------------------- Autoload
@@ -326,8 +333,22 @@ export class SceneTree {
       this._accumulator -= this.physicsDelta
       steps++
       this._physicsFrames++
-      if (this._physicsProcessNodes > 0) for (const node of this._snapshot()) if (node.canProcess()) node.physicsProcess(this.physicsDelta)
-      if (!this._paused) this._physics?._step(this.physicsDelta)
+      // 整个物理步（physicsProcess 和刚体的接触信号）里，isActionJustPressed 都按物理步算
+      this.input._inPhysics = true
+      try {
+        if (this._physicsProcessNodes > 0) {
+          this._inPhysicsProcess = true
+          try {
+            for (const node of this._snapshot()) if (node.canProcess()) node.physicsProcess(this.physicsDelta)
+          } finally {
+            this._inPhysicsProcess = false
+          }
+        }
+        if (!this._paused) this._physics?._step(this.physicsDelta)
+      } finally {
+        this.input._inPhysics = false
+        this.input._endPhysicsStep()
+      }
     }
     // 达到上限还有剩余：丢弃，而不是留到下一帧继续补
     if (this._accumulator >= this.physicsDelta - EPSILON) this._accumulator = 0

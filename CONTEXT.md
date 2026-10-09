@@ -31,11 +31,12 @@ Code-first、agent-friendly 的 2D 游戏引擎。基于 PixiJS v8（渲染）+ 
 - **HitTester** — 不走 planck 的命中判定：`forEachHit(as, bs, hit)` 比较两组对象（`x`、`y`、`hitShape` 为 `circle` / `rectangle`）的每一对，只回答谁和谁重叠，没有物理反应。形状轴对齐、不随 scale 变化，比较的是局部坐标。和 `Area2D` 的区别：不是节点、不发信号、由游戏在 `process` 里主动调用，用于数量超出刚体预算的子弹和道具。
 - **TileSet / tileset()** — 图块集：一张图集贴图按 `tileSize` 切成格子，图块编号从 1 开始（0 表示空格子），每个图块可以有碰撞类型（`solid` / `oneWay`）和自定义字段。是一种资源，放进 `static assets` 预加载；一个图块集只对应一张图（ADR 0008）。
 - **TileMapLayer** — 一层图块地图（`Node2D`）：大小固定的格子数组（`Uint16Array`），多层地图就是多个节点。渲染按 16 × 16 格的区块，每个区块一个 Mesh，只画屏幕内的区块（ADR 0008）。不生成物理刚体；碰撞由 `CharacterBody2D` 直接查格子（ADR 0009）。
+- **CharacterBody2D** — 由代码控制移动的角色（平台游戏的主角、敌人）：在 `physicsProcess` 里设置速度、调用 `moveAndSlide()`，按轴分离的格子扫掠和 TileMapLayer 碰撞（ADR 0009）。和 `RigidBody2D` 的区别：不是 planck 刚体，没有物理反应，`StaticBody2D` 挡不住它、planck 世界感知不到它；和 `HitTester` 的区别：它负责被地形挡住，角色和敌人、道具之间的命中仍用 `HitTester`。
 - **Timer / SceneTreeTimer** — `Timer` 节点（`waitTime`、`oneShot`、`autostart`、`timeout` 信号），每帧最多触发一次、循环不漂移；一次性等待用 `await this.tree.createTimer(1).timeout`。
 - **Tween** — `this.createTween().to(target, props, duration, ease).parallel().wait(s).call(fn)`，绑定节点销毁时自动停止（不触发 `finished`）。从下一帧开始播放；每一步的起始值在该步开始时读取；同一个 `to()` 里的多个属性同时进行。`to(this, ...)` 在类方法里按 Node2D 的属性做类型检查。
 - **Engine-internal hooks** — 引擎节点通过 `_onEnterTree` / `_onExitTree` / `_internalProcess` 实现自身行为，用户覆写 `enterTree` / `exitTree` / `process` 时不需要调用 super。
 - **Design resolution / Viewport** — 设计分辨率（默认 750×1334），游戏坐标都以它为准。`this.tree.viewport` 提供 `visibleRect`、`safeRect`、`screenToDesign` 和 `resized` 信号。`expand`（默认）等比缩放、多出的空间向两侧**对称**扩展（与 Godot 向右下扩展不同）；`keep` 裁剪到设计区域。渲染分辨率 = min(DPR, 2)。
-- **Input** — `this.tree.input`。平台原始事件在每帧开始时统一处理（确定性）。动作在启动参数 `actions` 中定义（`key('Space')`、`pointerPress()`），动作名可通过声明合并 `ActionRegistry` 加强类型。
+- **Input** — `this.tree.input`。平台原始事件在每帧开始时统一处理（确定性）。`isActionJustPressed` 在 `process` 里按帧、在 `physicsProcess` 里按物理步算（和 Godot 一样，高刷新率下不丢按键）。动作在启动参数 `actions` 中定义（`key('Space')`、`pointerPress()`），动作名可通过声明合并 `ActionRegistry` 加强类型。
 - **Pointer picking** — `inputPickable` 加 `hitArea`（Sprite2D 默认用贴图范围）的节点会收到 `pointerDown` / `pointerMove` / `pointerUp` / `clicked`；只有绘制顺序最上层的节点收到；按下后该指针被节点捕获。被节点处理掉的按下不触发 `pointerPress()` 动作。
 - **Audio** — `this.tree.audio`。资源用 `sfx(path)`（预解码，可叠加）和 `music(path)`（流式）声明。一次性音效 `tree.audio.play(stream, { volume, loop, bus })` 返回 Voice；节点用 `AudioStreamPlayer`（同一时间一个声音，离开树时停止）。平台只实现很薄的 `AudioBackend`。浏览器在第一次手势时自动解锁：之前请求的音乐排队，音效丢弃。后台时挂起。
 - **Audio bus** — `Master` / `Music` / `SFX` 三条音量总线，音量是 0–1 线性值（不是 Godot 的 dB）；实际音量 = 声音 × 总线 × Master，静音为 0。

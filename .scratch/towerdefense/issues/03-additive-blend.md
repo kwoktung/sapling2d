@@ -19,7 +19,7 @@
 - 选 `'inherit'` 作为默认值，是因为它正好就是 Pixi 容器的默认值：子节点的容器保持 `'inherit'`，Pixi 渲染时算出 `groupBlendMode` 往下传，所以“设在父节点上、整棵子树生效”不需要引擎自己遍历。粒子（ParticleContainerPipe）和图块地图（MeshPipe）也读 `groupBlendMode`。
 - 只做了 `'add'`：验证清单只证明了叠加的需要。`multiply` / `screen` 在 WebGL 里同样是基础混合（不需要滤镜），以后需要时加进 `BLEND_MODES` 就行。
 - 浏览器（Chrome）里检查了 Pixi 对象：刀光、火球、火花的内容层 `groupBlendMode` 都是 `'add'`。爆炸从“发灰的橙色一团”变成了中心亮、外圈橙色的光。
-- 没有单独上真机看效果：叠加是 WebGL1 的基础混合（`blendFunc(ONE, ONE)` 类），小游戏上没有兼容问题的理由。下次真机测试时顺便看一眼。
+- 真机（2026-10-10，iPhone 17，`VITE_VERIFY=1` 截图 `../assets/iphone-flash-additive.png`）：两团爆炸光圈都是中心亮、外圈橙色的光，压在怪物上的那团把怪物照亮，和浏览器一致。
 
 **代码审查后的修正（2026-10-10）：**
 

@@ -255,7 +255,7 @@ export class Battle extends Scene implements HeroWorld {
       const e = enemies[i]!
       if (!e.dead && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 <= r2) this.damage(e, p.damage)
     }
-    this._burst(p.x, p.y, blast)
+    this.burst(p.x, p.y, blast)
   }
 
   /** 剑士：朝目标方向的扇形，打中半径内、角度内的所有怪。 */
@@ -281,7 +281,7 @@ export class Battle extends Scene implements HeroWorld {
   }
 
   /** 爆炸特效：一个放大淡出的光圈 + 火花（都在 fx 里，叠加发光）。 */
-  private _burst(x: number, y: number, radius: number) {
+  burst(x: number, y: number, radius: number) {
     const s = (radius * 2) / 64
     const fx = this.fx.add(new Sprite2D({ texture: ASSETS.glow, position: v(x, y), scale: v(s * 0.4, s * 0.4), selfModulate: 0xff8030 }))
     fx.createTween().to(fx, { scale: v(s, s), alpha: 0 }, 0.3, Ease.QuadOut).call(() => fx.queueFree())

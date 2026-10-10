@@ -102,17 +102,33 @@ describe('三个大招', () => {
 
 describe('操作', () => {
   const ev = (x: number, y: number) => ({ x, y })
-  it('弓手：按住按钮拖到场上松手释放；拖回按钮上松手取消', async () => {
+  it('弓手 / 法师：按住按钮拖到场上松手直接释放', async () => {
+    for (const kind of ['archer', 'mage'] as const) {
+      const { g, battle } = await setup(kind)
+      full(battle, kind)
+      g.step()
+      const btn = battle.ultBar.buttons[kind]
+      g.drag(v(btn.x + 75, btn.y + 75), v(375, 400), { frames: 6 })
+      expect(battle.energy[kind]).toBe(0)
+      expect(battle.aimRing.visible).toBe(false)
+      expect(g.dump()).toContain(kind === 'archer' ? 'RainZone' : 'MeteorStrike')
+    }
+  })
+
+  it('点一下按钮进入选点模式：场上马上出现目标圈和提示；点场上释放，再点按钮取消', async () => {
     const { g, battle } = await setup('archer')
     full(battle, 'archer')
     g.step()
     const btn = battle.ultBar.buttons.archer
     const c = ev(btn.x + 75, btn.y + 75)
-    g.drag(v(c.x, c.y), v(c.x, c.y - 60), { frames: 4 }) // 没离开按钮：取消
-    expect(battle.energy.archer).toBe(ULT.energyMax)
-    g.drag(v(c.x, c.y), v(375, 400), { frames: 6 })
+    g.drag(v(c.x, c.y), v(c.x, c.y - 60), { frames: 4 }) // 没离开按钮：算点了一下
+    expect([battle.ultBar.aiming, battle.ultBar.waiting, battle.aimRing.visible]).toEqual(['archer', true, true])
+    expect(battle.hud.message.text).toContain('点场上释放')
+    g.tap(c.x, c.y) // 再点按钮：取消
+    expect([battle.ultBar.aiming, battle.aimRing.visible, battle.hud.message.text, battle.energy.archer]).toEqual([null, false, '', ULT.energyMax])
+    g.tap(c.x, c.y)
+    g.tap(375, 400)
     expect(battle.energy.archer).toBe(0)
-    expect(battle.aimRing.visible).toBe(false)
     expect(g.dump()).toContain('RainZone')
   })
 

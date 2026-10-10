@@ -63,23 +63,27 @@ export class UltButton extends Node2D {
 }
 
 /**
- * 屏幕底部的大招栏。操作：
- * - 弓手（箭雨）：按住按钮拖到场上，松手释放；拖回按钮上松手就取消；
- * - 法师（陨石）：点按钮进入选点模式（`aiming`），再点场上释放；再点一次按钮取消；
- * - 骑士（冲锋）：点按钮直接释放。
- * 只发信号，释放和目标圈由 Battle 处理；位置是设计坐标（这一层不跟相机走）。
+ * 屏幕底部的大招栏。弓手（箭雨）和法师（陨石）要选位置，两种操作都行：
+ * - 按住按钮拖到场上松手：直接释放（拖回按钮上松手不算，见下一条）；
+ * - 点一下按钮（在按钮上松手）：进入选点模式（`waiting`），场上显示目标圈和提示，再点场上释放；再点按钮取消。
+ * 骑士（冲锋）点按钮直接释放。只发信号，释放和目标圈由 Battle 处理；位置是设计坐标（这一层不跟相机走）。
  */
 export class UltBar extends CanvasLayer {
   readonly buttons: Record<HeroKind, UltButton>
-  /** 开始选目标（弓手按下、法师点按钮）、目标移动、结束（位置为 null 表示取消）。 */
+  /** 开始选目标（按下按钮）、进入选点模式（点了按钮）、目标移动、结束（位置为 null 表示取消）。 */
   readonly aimStart = new Signal<[kind: HeroKind]>()
+  readonly aimWait = new Signal<[kind: HeroKind]>()
   readonly aimMove = new Signal<[kind: HeroKind, at: Vector2]>()
   readonly aimEnd = new Signal<[kind: HeroKind, at: Vector2 | null]>()
   /** 骑士冲锋这类不用选目标的。 */
   readonly cast = new Signal<[kind: HeroKind]>()
-  /** 选点模式下接住场上点击的全屏层（法师）。 */
+  /** 选点模式下接住场上点击的全屏层。 */
   readonly catcher: ColorRect
+  /** 正在选目标的大招；`waiting`：在选点模式里（等着点场上）。 */
   aiming: HeroKind | null = null
+  waiting = false
+  /** 选点模式里又按下了按钮：松手时取消。 */
+  private _cancelOnUp = false
 
   constructor() {
     super({ name: 'UltBar', layer: 12 })
@@ -92,67 +96,67 @@ export class UltBar extends CanvasLayer {
     this.catcher.position = r.position
     this.catcher.size = r.size
     this.add(this.catcher)
-    this.catcher.pointerDown.connect((e) => this._catcherDown(e), this)
-    this.catcher.pointerMove.connect((e) => this.aimMove.emit('mage', e.position), this)
+    this.catcher.pointerDown.connect((e) => this.aiming && this.aimMove.emit(this.aiming, e.position), this)
+    this.catcher.pointerMove.connect((e) => this.aiming && this.aimMove.emit(this.aiming, e.position), this)
     this.catcher.pointerUp.connect((e) => this._catcherUp(e), this)
     for (const kind of HERO_KINDS) {
       const b = this.add(this.buttons[kind])
-      if (kind === 'archer') {
-        b.pointerDown.connect(() => this._archerDown(), this)
-        b.pointerMove.connect((e) => this.aiming === 'archer' && this.aimMove.emit('archer', e.position), this)
-        b.pointerUp.connect((e) => this._archerUp(b, e), this)
-      } else {
-        b.clicked.connect(() => this._tap(kind), this)
+      if (kind === 'knight') {
+        b.clicked.connect(() => b.charged && !this.aiming && this.cast.emit(kind), this)
+        continue
       }
+      b.pointerDown.connect(() => this._down(kind), this)
+      b.pointerMove.connect((e) => this.aiming === kind && !this.waiting && this.aimMove.emit(kind, e.position), this)
+      b.pointerUp.connect((e) => this._up(kind, b, e), this)
     }
     this._layout()
     this.tree.viewport.resized.connect(() => this._layout(), this)
   }
 
-  /** 取消正在选的目标（升级弹窗出现、英雄被拖走等）。 */
+  /** 取消正在选的目标（升级弹窗出现、再点一次按钮等）。 */
   cancelAim(): void {
     const kind = this.aiming
     if (!kind) return
     this.aiming = null
+    this.waiting = false
+    this._cancelOnUp = false
     this.catcher.visible = false
     this.aimEnd.emit(kind, null)
   }
 
-  private _archerDown() {
-    if (!this.buttons.archer.charged || this.aiming) return
-    this.aiming = 'archer'
-    this.aimStart.emit('archer')
-  }
-
-  private _archerUp(b: UltButton, e: PointerEvent2D) {
-    if (this.aiming !== 'archer') return
-    this.aiming = null
-    // 松在按钮上：取消
-    this.aimEnd.emit('archer', b.hitTest(b.toLocal(e.position)) ? null : e.position)
-  }
-
-  private _tap(kind: HeroKind) {
-    const b = this.buttons[kind]
-    if (kind === 'mage') {
-      if (this.aiming === 'mage') return this.cancelAim()
-      if (!b.charged || this.aiming) return
-      this.aiming = 'mage'
-      this.catcher.visible = true
-      this.aimStart.emit('mage')
+  private _down(kind: HeroKind) {
+    if (this.aiming === kind && this.waiting) {
+      this._cancelOnUp = true
       return
     }
-    if (b.charged && !this.aiming) this.cast.emit(kind)
+    if (!this.buttons[kind].charged || this.aiming) return
+    this.aiming = kind
+    this.waiting = false
+    this.aimStart.emit(kind)
   }
 
-  private _catcherDown(e: PointerEvent2D) {
-    if (this.aiming === 'mage') this.aimMove.emit('mage', e.position)
+  private _up(kind: HeroKind, b: UltButton, e: PointerEvent2D) {
+    if (this.aiming !== kind) return
+    if (this._cancelOnUp) return this.cancelAim()
+    if (this.waiting) return
+    if (b.hitTest(b.toLocal(e.position))) {
+      // 在按钮上松手：是“点一下”，进入选点模式
+      this.waiting = true
+      this.catcher.visible = true
+      this.aimWait.emit(kind)
+      return
+    }
+    this.aiming = null
+    this.aimEnd.emit(kind, e.position)
   }
 
   private _catcherUp(e: PointerEvent2D) {
-    if (this.aiming !== 'mage') return
+    const kind = this.aiming
+    if (!kind || !this.waiting) return
     this.aiming = null
+    this.waiting = false
     this.catcher.visible = false
-    this.aimEnd.emit('mage', e.position)
+    this.aimEnd.emit(kind, e.position)
   }
 
   private _layout() {

@@ -186,6 +186,7 @@ export class Battle extends Scene implements HeroWorld {
     this.ultBar = this.add(new UltBar())
     this.ultBar.aimMove.connect((kind, at) => this._aimAt(kind, at), this)
     this.ultBar.aimEnd.connect((kind, at) => this._aimEnd(kind, at), this)
+    this.ultBar.aimWait.connect((kind) => this._aimWait(kind), this)
     this.ultBar.cast.connect((kind) => kind === 'knight' && this.knightCharge(), this)
     this._updateHud()
     this.openHeroPicker('选择你的第一位英雄')
@@ -880,8 +881,20 @@ export class Battle extends Scene implements HeroWorld {
     this.aimRing.showAt(at.x, at.y, kind === 'archer' ? ULT.rain.radius : ULT.meteor.radius)
   }
 
+  /** 点了大招按钮、进入选点模式：目标圈先放在场地中间，提示怎么操作。 */
+  private _aimWait(kind: HeroKind) {
+    this.aimRing.showAt(375, 450, kind === 'archer' ? ULT.rain.radius : ULT.meteor.radius)
+    this.hud.flash('点场上释放\n再点按钮取消', 0)
+    this._aimHint = true
+  }
+
+  /** 选点模式的提示正在显示（结束时清掉；别的提示不动）。 */
+  private _aimHint = false
+
   private _aimEnd(kind: HeroKind, design: Vector2 | null) {
     this.aimRing.visible = false
+    if (this._aimHint) this.hud.flash('', 0)
+    this._aimHint = false
     if (!design) return
     const at = this.tree.viewport.designToWorld(design)
     if (kind === 'archer') this.arrowRain(at.x, at.y)

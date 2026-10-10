@@ -3,6 +3,7 @@ import { v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { ULT } from '../src/config'
 import { HEROES } from '../src/data/heroes'
+import type { Knight } from '../src/nodes/Hero'
 import { gameOptions } from '../src/game'
 import { linePath } from '../src/path'
 import type { Battle } from '../src/scenes/Battle'
@@ -84,19 +85,38 @@ describe('三个大招', () => {
     expect(g.tree.timeScale).toBe(1)
   })
 
-  it('冲锋：骑士竖直冲到顶再回来；沿线的敌人受伤、击退、眩晕，每只一次；偏离沿线的不受影响', async () => {
+  it('战吼：半径内的地面怪受伤、被嘲讽、被拉向骑士；Boss 只受伤；飞行和远的不受影响；骑士减伤、回血', async () => {
     const { g, battle } = await setup('knight')
-    const knight = battle.heroes[0]!
-    const onLine = [battle.spawnEnemy('slime', linePath(380, 300, 100000), 1e6), battle.spawnEnemy('slime', linePath(360, 500, 100000), 1e6)]
-    const off = battle.spawnEnemy('slime', linePath(500, 400, 100000), 1e6)
+    const knight = battle.heroes[0]! as Knight
+    knight.cooldown = 1e9
+    const near = battle.spawnEnemy('slime', linePath(375, 400, 100000), 1e6)
+    near.dist = 200 // (375, 600)：离骑士 140
+    near.pushBack(0)
+    near.stunLeft = 1e9
+    const boss = battle.spawnEnemy('slimeKing', linePath(500, 450, 100000), 1e6)
+    boss.dist = 200 // (500, 650)
+    boss.pushBack(0)
+    const bat = battle.spawnEnemy('bat', linePath(300, 450, 100000), 1e6)
+    bat.dist = 200
+    bat.pushBack(0)
+    const far = battle.spawnEnemy('slime', linePath(375, 100, 100000), 1e6)
+    far.dist = 200 // (375, 300)：440 外
+    far.pushBack(0)
+    knight.takeDamage(400) // 600 × 0.7 护甲：掉 280
+    const hp = knight.hp
     full(battle, 'knight')
-    expect(battle.knightCharge()).toBe(true)
-    expect(knight.busy).toBe(true)
-    g.stepSeconds(ULT.charge.time + 0.1)
-    expect([knight.busy, knight.y]).toEqual([false, 740])
-    expect(onLine.map((e) => 1e6 - e.hp)).toEqual([HEROES.knight.damage * ULT.charge.mul, HEROES.knight.damage * ULT.charge.mul])
-    expect(onLine.every((e) => e.stunLeft > 0)).toBe(true)
-    expect(off.hp).toBe(1e6)
+    expect(battle.warCry()).toBe(true)
+    const dmg = HEROES.knight.damage * ULT.warcry.mul
+    expect([1e6 - near.hp, 1e6 - boss.hp, 1e6 - bat.hp, 1e6 - far.hp]).toEqual([dmg, dmg, 0, 0])
+    expect([near.tauntLeft, boss.tauntLeft, bat.tauntLeft, far.tauntLeft]).toEqual([ULT.warcry.taunt, 0, 0, 0])
+    expect(near.y).toBeCloseTo(600 + ULT.warcry.pull)
+    expect(boss.y).toBe(650)
+    expect(knight.hp).toBeCloseTo(hp + knight.maxHp * ULT.warcry.heal)
+    expect(knight.armor).toBeCloseTo(0.7 * (1 - ULT.warcry.reduction))
+    g.step()
+    expect(near.target).toBe(knight)
+    g.stepSeconds(ULT.warcry.time)
+    expect(knight.armor).toBeCloseTo(0.7)
   })
 })
 
@@ -164,12 +184,12 @@ describe('操作', () => {
     expect(g.dump()).toContain('MeteorStrike')
   })
 
-  it('骑士：点按钮直接冲锋', async () => {
+  it('骑士：点按钮直接战吼', async () => {
     const { g, battle } = await setup('knight')
     full(battle, 'knight')
     g.step()
     const btn = battle.ultBar.buttons.knight
     g.tap(btn.x + 75, btn.y + 75)
-    expect(battle.heroes[0]!.busy).toBe(true)
+    expect((battle.heroes[0] as Knight).warcryLeft).toBeGreaterThan(0)
   })
 })

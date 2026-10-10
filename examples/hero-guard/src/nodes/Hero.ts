@@ -1,8 +1,8 @@
 import { ColorRect, Ease, Label, Node2D, Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
 import { ART_SCALE, ASSETS } from '../assets'
-import { HERO_FEEL, Z } from '../config'
+import { HERO_FEEL, ULT, Z } from '../config'
 import { HEROES, RIG, type HeroKind } from '../data/heroes'
-import { archerMods, HEADSHOT_EVERY, HEADSHOT_MUL, KNOCKBACK, knightMods, mageMods, TAUNT_EVERY, type ArcherMods, type KnightMods, type MageMods, type RunMods } from '../data/skills'
+import { archerMods, HEADSHOT_EVERY, HEADSHOT_MUL, KNOCKBACK, knightMods, mageMods, QUAKE_EVERY, type ArcherMods, type KnightMods, type MageMods, type RunMods } from '../data/skills'
 import type { Shot } from './Arrow'
 import type { Blast } from './Effects'
 import type { Enemy } from './Enemy'
@@ -27,10 +27,8 @@ export interface HeroWorld {
   chainLightning(x: number, y: number, first: Enemy, damage: number, jumps: number, falloff: number): void
   /** 骑士斩击：以 (x, y) 为圆心、朝 `angle`（0 朝上）的扇形（`whirl` 时 360°），打中范围内所有敌人。 */
   slash(hero: Hero, target: Enemy, s: Slash): void
-  /** 嘲讽光环：半径内的地面怪被强制来打骑士（一段时间）。 */
-  tauntAura(x: number, y: number): void
-  /** 骑士冲锋这一帧从 y0 冲到 y1：沿线的敌人受伤、击退、眩晕（每次冲锋每只一次）。 */
-  chargeSweep(knight: Hero, y0: number, y1: number): void
+  /** 骑士震地（重击质变）：以骑士为圆心的范围伤害 + 眩晕。 */
+  quake(knight: Hero, damage: number): void
   /** [0, 1) 的随机数（tree.rng，测试可复现）。 */
   random(): number
 }
@@ -42,9 +40,10 @@ export interface Slash {
   arc: number
   whirl: boolean
   knockback: number
-  collide: boolean
   stunChance: number
   stunTime: number
+  /** 对眩晕中的敌人伤害倍率。 */
+  stunnedMul: number
 }
 
 /** 英雄的活动区域（脚底不出这个矩形）。 */
@@ -122,9 +121,6 @@ export abstract class Hero extends Node2D {
     this.countdown = this.add(new Label({ text: '', fontSize: 30, fontWeight: 'bold', color: 0xffffff, align: 'center', verticalAlign: 'center', position: v(0, -96), stroke: { color: 0x000000, width: 5 }, visible: false }))
   }
 
-  /** 放大招中（骑士冲锋）：不攻击、不走位。 */
-  busy = false
-
   /** 受到的伤害乘这个数（基础护甲；骑士再乘守护分支的减伤）。 */
   get armor(): number {
     return HEROES[this.kind].armor
@@ -147,7 +143,6 @@ export abstract class Hero extends Node2D {
       this._flashLeft = Math.max(0, this._flashLeft - dt)
       this.body.flash = this._flashLeft / HERO_FEEL.flashTime
     }
-    if (this.busy) return
     if (!this._attacking && this.zone) this._walk(dt)
     if (this._attacking || this.cooldown > 0) return
     const target = this.world.findTarget(this.x, this.y, this.stats.range)
@@ -309,7 +304,7 @@ export abstract class Hero extends Node2D {
     this.release(t)
   }
 
-  /** 停下正在做的动作（阵亡、冲锋时），回到静止姿势。 */
+  /** 停下正在做的动作（阵亡时），回到静止姿势。 */
   cancelAttack(): void {
     this._anim?.kill()
     this._anim = null
@@ -451,12 +446,12 @@ export class Mage extends Hero {
 export const KNIGHT_ARC = (100 * Math.PI) / 180
 
 /**
- * 骑士：前方扇形斩击，击退。技能（`mods`）：重击（伤害、击退，质变撞人）、旋风（角度、距离、攻速，质变 360°）、
- * 守护（眩晕，质变每 4 秒嘲讽光环）。剑的动作是挥砍：往后举起 → 挥过去 → 收回。
+ * 骑士：前方扇形斩击（轻微击退，只是打击感）。技能（`mods`）：重击（伤害、眩晕、打眩晕的增伤，质变每第 4 次震地）、
+ * 旋风（角度、距离、攻速，质变 360°）、守护（血量、吸血、减伤，质变荆棘反伤）。大招战吼（`warcry`）：减伤 + 回血。
+ * 剑的动作是挥砍：往后举起 → 挥过去 → 收回。
  */
 export class Knight extends Hero {
   override readonly mods: KnightMods = knightMods()
-  private _tauntIn = TAUNT_EVERY
 
   constructor(world: HeroWorld, position: Vector2) {
     super(world, 'knight', position)
@@ -470,10 +465,6 @@ export class Knight extends Hero {
 
   protected override get hpMul(): number {
     return this.mods.hpMul
-  }
-
-  override get armor(): number {
-    return HEROES.knight.armor * this.mods.damageTakenMul
   }
 
   /**
@@ -491,54 +482,40 @@ export class Knight extends Hero {
     return { x: e.x + (dx / d) * r, y: e.y + (dy / d) * r }
   }
 
-  /** 冲锋：从当前位置竖直冲到 `topY` 再冲回来（总共 `time` 秒），每帧把这段移动交给 `chargeSweep`；结束时回调 `done`。 */
-  charge(topY: number, time: number, done: () => void): void {
-    this.cancelAttack()
-    this.busy = true
-    const homeY = this.y
-    const z = this.zIndex
-    this.zIndex = Z.charging
-    this._chargeY = homeY
-    this.createTween()
-      .to(this, { y: topY }, time * 0.45, Ease.QuadIn)
-      .to(this, { y: homeY }, time * 0.55, Ease.QuadOut)
-      .call(() => {
-        this.busy = false
-        this.zIndex = this.dead ? z : this.y
-        this._chargeY = null
-        done()
-      })
+  /** 战吼的减伤还剩几秒。 */
+  warcryLeft = 0
+  /** 斩击了几次（震地按它数）。 */
+  slashes = 0
+
+  /** 战吼：之后 `ULT.warcry.time` 秒受到的伤害减少，立刻回血（嘲讽、拉近、伤害由 Battle 结算）。 */
+  warcry(): void {
+    this.warcryLeft = ULT.warcry.time
+    this.heal(this.maxHp * ULT.warcry.heal)
   }
 
-  /** 冲锋中上一帧的 y（null 表示没在冲锋）。 */
-  private _chargeY: number | null = null
+  override get armor(): number {
+    return HEROES.knight.armor * this.mods.damageTakenMul * (this.warcryLeft > 0 ? 1 - ULT.warcry.reduction : 1)
+  }
 
   override process(dt: number) {
     super.process(dt)
-    if (this._chargeY !== null && !this.dead) {
-      this.world.chargeSweep(this, this._chargeY, this.y)
-      this._chargeY = this.y
-    }
-    if (!this.mods.taunt || this.dead || this.busy) return
-    this._tauntIn -= dt
-    if (this._tauntIn <= 0) {
-      this._tauntIn += TAUNT_EVERY
-      this.world.tauntAura(this.x, this.y)
-    }
+    if (this.warcryLeft > 0) this.warcryLeft = Math.max(0, this.warcryLeft - dt)
   }
 
   protected override release(target: Enemy): void {
     const m = this.mods
+    this.slashes++
     this.world.slash(this, target, {
       damage: this.stats.damage,
       range: this.stats.range,
       arc: m.arc,
       whirl: m.whirl,
-      knockback: KNOCKBACK * m.knockbackMul,
-      collide: m.collide,
+      knockback: KNOCKBACK,
       stunChance: m.stunChance,
       stunTime: m.stunTime,
+      stunnedMul: m.stunnedMul,
     })
+    if (m.quake && this.slashes % QUAKE_EVERY === 0) this.world.quake(this, this.stats.damage)
   }
 
   protected override weaponAngle(phase: 'windup' | 'release' | 'rest', aim: number): number {

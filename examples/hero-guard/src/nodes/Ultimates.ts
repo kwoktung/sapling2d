@@ -4,7 +4,7 @@ import { ULT, Z } from '../config'
 import { HERO_KINDS, HEROES, type HeroKind } from '../data/heroes'
 
 const BTN = 150
-const NAMES: Record<HeroKind, string> = { archer: '箭雨', mage: '陨石', knight: '冲锋' }
+const NAMES: Record<HeroKind, string> = { archer: '箭雨', mage: '陨石', knight: '战吼' }
 
 /** 图标贴图 128×128（按 2 倍存），按钮里显示成 BTN - 10。 */
 const ICON_SCALE = (BTN - 10) / 128
@@ -67,7 +67,7 @@ export class UltButton extends Node2D {
  * - 按住按钮拖到场上松手：直接释放（拖回按钮上松手不算，见下一条）；
  * - 点一下按钮（在按钮上松手）：进入选点模式（`waiting`），场上显示目标圈和提示，再点场上释放；再点按钮取消
  *   （选点模式里又从按钮拖到场上松手，也是释放：真机上玩家常这样操作）。
- * 骑士（冲锋）点按钮直接释放。只发信号，释放和目标圈由 Battle 处理；位置是设计坐标（这一层不跟相机走）。
+ * 骑士（战吼）点按钮直接释放。只发信号，释放和目标圈由 Battle 处理；位置是设计坐标（这一层不跟相机走）。
  */
 export class UltBar extends CanvasLayer {
   readonly buttons: Record<HeroKind, UltButton>
@@ -76,7 +76,7 @@ export class UltBar extends CanvasLayer {
   readonly aimWait = new Signal<[kind: HeroKind]>()
   readonly aimMove = new Signal<[kind: HeroKind, at: Vector2]>()
   readonly aimEnd = new Signal<[kind: HeroKind, at: Vector2 | null]>()
-  /** 骑士冲锋这类不用选目标的。 */
+  /** 骑士战吼这类不用选目标的。 */
   readonly cast = new Signal<[kind: HeroKind]>()
   /** 选点模式下接住场上点击的全屏层。 */
   readonly catcher: ColorRect

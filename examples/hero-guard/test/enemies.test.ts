@@ -68,13 +68,12 @@ describe('哥布林萨满', () => {
 })
 
 describe('幽灵', () => {
-  it('半透明；免疫减速、冰冻、眩晕、击退、嘲讽，伤害照吃', async () => {
+  it('半透明；免疫减速、冰冻、眩晕、击退，伤害照吃', async () => {
     const { g, battle } = await setup()
     const ghost = at(battle, 'ghost', 300, 300, 1000)
     expect(ghost.alpha).toBe(0.6)
     battle.slow(ghost, 0.5, 2)
     battle.stun(ghost, 2)
-    battle.tauntAura(ghost.x, ghost.y)
     ghost.frozenLeft = 0
     expect([ghost.slowPct, ghost.stunLeft, ghost.tauntLeft, ghost.speed]).toEqual([0, 0, 0, ENEMIES.ghost.speed])
     expect(battle.controllable(ghost)).toBe(false)

@@ -21,7 +21,7 @@
 | `shoot.mp3` | [Kenney — RPG Audio](https://kenney.nl/assets/rpg-audio) | `knifeSlice.ogg` |
 | `slash.mp3` | [rubberduck — 80 CC0 RPG SFX](https://opengameart.org/content/80-cc0-rpg-sfx) | `blade_01.ogg` |
 | `ult_archer.mp3` | [Kenney — RPG Audio](https://kenney.nl/assets/rpg-audio) | `knifeSlice2.ogg x3` |
-| `ult_knight.mp3` | [Kenney — RPG Audio](https://kenney.nl/assets/rpg-audio) | `drawKnife2.ogg` |
+| `ult_knight.mp3` | [rubberduck — 80 CC0 RPG SFX](https://opengameart.org/content/80-cc0-rpg-sfx) | `creature_roar_02.ogg` |
 | `ult_mage.mp3` | [rubberduck — 80 CC0 RPG SFX](https://opengameart.org/content/80-cc0-rpg-sfx) | `spell_fire_05.ogg` |
 | `win.mp3` | [Kenney — Music Jingles](https://kenney.nl/assets/music-jingles) | `jingles_PIZZI02.ogg` |
 | `hero_hit.mp3` | [Kenney — Impact Sounds](https://kenney.nl/assets/impact-sounds) | `impactPunch_medium_000.ogg` |

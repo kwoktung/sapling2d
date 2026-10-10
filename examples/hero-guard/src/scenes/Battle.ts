@@ -8,8 +8,6 @@ import {
   BURN_DPS,
   BURN_TIME,
   CHAIN_RANGE,
-  COLLIDE_MUL,
-  COLLIDE_RADIUS,
   drawOffers,
   isGeneric,
   FREEZE_HITS,
@@ -18,8 +16,9 @@ import {
   POISON_CLOUD_RADIUS,
   POISON_CLOUD_STACKS,
   runMods,
-  TAUNT_RADIUS,
-  TAUNT_TIME,
+  QUAKE_RADIUS,
+  QUAKE_MUL,
+  QUAKE_STUN,
   xpToNext,
   type BranchLevels,
   type GenericOption,
@@ -137,8 +136,6 @@ export class Battle extends Scene implements HeroWorld {
   boss: Enemy | null = null
   /** 最近死掉的、可以被复活的怪（巫妖用）。 */
   readonly graves: Grave[] = []
-  /** 这次冲锋已经撞过的敌人。 */
-  private readonly _charged = new Set<Enemy>()
   readonly enemies: Enemy[] = []
   readonly heroes: Hero[] = []
   hud!: Hud
@@ -187,7 +184,7 @@ export class Battle extends Scene implements HeroWorld {
     this.ultBar.aimMove.connect((kind, at) => this._aimAt(kind, at), this)
     this.ultBar.aimEnd.connect((kind, at) => this._aimEnd(kind, at), this)
     this.ultBar.aimWait.connect((kind) => this._aimWait(kind), this)
-    this.ultBar.cast.connect((kind) => kind === 'knight' && this.knightCharge(), this)
+    this.ultBar.cast.connect((kind) => kind === 'knight' && this.warCry(), this)
     this._updateHud()
     this.openHeroPicker('选择你的第一位英雄')
   }
@@ -467,8 +464,8 @@ export class Battle extends Scene implements HeroWorld {
   // ---------------------------------------------------------------- 骑士
 
   /**
-   * 斩击：以骑士脚底为圆心，半径内、朝目标方向的扇形里（`whirl` 时 360°）的敌人都受伤；
-   * 击退（沿各自的路线往回推）、几率眩晕；撞人质变时，被击退的敌人新位置附近的其他敌人受一半伤害。
+   * 斩击：以骑士脚底为圆心，半径内、朝目标方向的扇形里（`whirl` 时 360°）的敌人都受伤（眩晕中的乘 `stunnedMul`）；
+   * 轻微击退（沿各自的路线往回推）、几率眩晕。
    */
   slash(hero: Hero, target: Enemy, s: Slash): void {
     const angle = Math.atan2(target.x - hero.x, -(target.y - hero.y)) // 0 = 正上方，和刀光贴图一致
@@ -487,20 +484,11 @@ export class Battle extends Scene implements HeroWorld {
     }
     if (hit.length) this.sound('knockback')
     for (const e of hit) {
-      if (this.controllable(e)) {
-        e.pushBack(s.knockback)
-        if (s.stunChance > 0 && this.tree.rng.randf() < s.stunChance) this.stun(e, s.stunTime)
-      }
-      this.damage(e, s.damage, { source: 'knight' })
-    }
-    if (s.collide) {
-      for (const e of hit) {
-        if (e.dead || !this.controllable(e)) continue
-        for (const o of this.enemies) {
-          if (o === e || o.dead || hit.includes(o)) continue
-          if ((o.x - e.x) ** 2 + (o.y - e.y) ** 2 <= COLLIDE_RADIUS ** 2) this.damage(o, s.damage * COLLIDE_MUL, { source: 'knight' })
-        }
-      }
+      // 先算伤害（打的是眩晕中的就加成），再击退、掷眩晕
+      this.damage(e, s.damage * (e.stunLeft > 0 ? s.stunnedMul : 1), { source: 'knight' })
+      if (e.dead || !this.controllable(e)) continue
+      e.pushBack(s.knockback)
+      if (s.stunChance > 0 && this.tree.rng.randf() < s.stunChance) this.stun(e, s.stunTime)
     }
     this._slashFx(hero, angle, s)
   }
@@ -515,15 +503,22 @@ export class Battle extends Scene implements HeroWorld {
     }
   }
 
-  tauntAura(x: number, y: number): void {
+  /** 震地（重击质变）：骑士周围 `QUAKE_RADIUS` 内的敌人受伤、眩晕，一圈冲击波。 */
+  quake(knight: Hero, damage: number): void {
     for (const e of this.enemies) {
-      if (e.dead || !this.controllable(e) || ENEMIES[e.kind].flying || (e.x - x) ** 2 + (e.y - y) ** 2 > TAUNT_RADIUS ** 2) continue
-      e.tauntLeft = Math.max(e.tauntLeft, TAUNT_TIME)
-      this._tint(e)
+      if (e.dead || (e.x - knight.x) ** 2 + (e.y - knight.y) ** 2 > QUAKE_RADIUS ** 2) continue
+      this.damage(e, damage * QUAKE_MUL, { source: 'knight' })
+      this.stun(e, QUAKE_STUN)
     }
-    const s = (TAUNT_RADIUS * 2) / 256
-    const ring = this.fx.add(new Sprite2D({ texture: ASSETS.range, position: v(x, y - 20), scale: v(s * 0.3, s * 0.3), selfModulate: 0xffc060 }))
-    ring.createTween().to(ring, { scale: v(s, s), alpha: 0 }, 0.4, Ease.QuadOut).call(() => ring.queueFree())
+    this._shockwave(knight.x, knight.y, QUAKE_RADIUS, 0xffd080)
+    this.shake(FEEL.shake * 0.6, FEEL.shakeTime)
+  }
+
+  /** 从 (x, y) 扩散的一圈冲击波（柔边圆环，压扁贴在地上，叠加发光）。 */
+  private _shockwave(x: number, y: number, radius: number, color: number) {
+    const k = (radius * 2) / 128
+    const ring = this.fx.add(new Sprite2D({ texture: ASSETS.ring, position: v(x, y), scale: v(k * 0.2, k * 0.2 * 0.5), selfModulate: color }))
+    ring.createTween().to(ring, { scale: v(k, k * 0.5), alpha: 0 }, 0.45, Ease.QuadOut).call(() => ring.queueFree())
   }
 
   stun(e: Enemy, time: number): void {
@@ -695,7 +690,7 @@ export class Battle extends Scene implements HeroWorld {
       if (e.attackIn > 0) continue
       e.attackIn += data.attack.interval
       e.lunge()
-      this.hurtHero(t, data.attack.damage * (e.elite ? ELITE.attack : 1))
+      this.hurtHero(t, data.attack.damage * (e.elite ? ELITE.attack : 1), e)
     }
   }
 
@@ -709,10 +704,12 @@ export class Battle extends Scene implements HeroWorld {
     return e.ox === 0 && e.oy === 0 ? { path: e.path, dist: e.dist } : { path: this.pathFrom(e.x, e.y), dist: 0 }
   }
 
-  /** 英雄挨打：扣血、飘红字、音效；打死了墓碑出现、阵亡音效（怪下一帧自己放弃它）。 */
-  hurtHero(hero: Hero, amount: number): void {
+  /** 英雄挨打：扣血、飘红字、音效；打死了墓碑出现、阵亡音效（怪下一帧自己放弃它）。骑士有荆棘时反伤给 `attacker`。 */
+  hurtHero(hero: Hero, amount: number, attacker?: Enemy): void {
     const dealt = hero.takeDamage(amount)
     if (dealt <= 0) return
+    const thorns = hero instanceof Knight ? hero.mods.thorns : 0
+    if (thorns > 0 && attacker && !attacker.dead) this.damage(attacker, dealt * thorns, { source: 'knight' })
     this._float(String(Math.round(dealt)), hero.x, hero.y - 110, 0xff5050, 0.9)
     this.sound(hero.dead ? 'hero_die' : 'hero_hit')
   }
@@ -950,31 +947,39 @@ export class Battle extends Scene implements HeroWorld {
     return true
   }
 
-  /** 骑士冲锋：竖直冲到顶再回来，沿线的敌人受骑士伤害 × 4、击退 60、眩晕 1.5 秒（幽灵只受伤害）。 */
-  knightCharge(): boolean {
+  /**
+   * 骑士战吼：半径内的地面怪受骑士伤害 × mul，能控制的被嘲讽（只打骑士）、被拉向骑士；骑士减伤一段时间、立刻回血。
+   * Boss 免疫控制，只受伤害；飞行怪不受影响。
+   */
+  warCry(): boolean {
     const knight = this.heroOf('knight') as Knight | null
     if (!knight || !this.canUlt('knight')) return false
     this._consume('knight')
     this.sound('ult_knight')
-    this._charged.clear()
-    knight.charge(ULT.charge.topY, ULT.charge.time, () => this._charged.clear())
-    return true
-  }
-
-  chargeSweep(knight: Hero, y0: number, y1: number): void {
-    const half = ULT.charge.width / 2
-    const lo = Math.min(y0, y1) - 30
-    const hi = Math.max(y0, y1) + 30
+    const w = ULT.warcry
+    knight.warcry()
     for (const e of this.enemies) {
-      if (e.dead || this._charged.has(e) || Math.abs(e.x - knight.x) > half || e.y < lo || e.y > hi) continue
-      this._charged.add(e)
-      this.sound('knockback')
+      if (e.dead || ENEMIES[e.kind].flying) continue
+      const dx = knight.x - e.x
+      const dy = knight.y - e.y
+      const d = Math.hypot(dx, dy)
+      if (d > w.radius) continue
       if (this.controllable(e)) {
-        e.pushBack(ULT.charge.knockback)
-        this.stun(e, ULT.charge.stun)
+        e.tauntLeft = Math.max(e.tauntLeft, w.taunt)
+        // 拉近：沿着朝骑士的方向挪（只改偏移，离开路线；不拉到比够得着的距离更近）
+        const pull = Math.min(w.pull, Math.max(0, d - e.reach))
+        if (pull > 0) {
+          e.ox += (dx / d) * pull
+          e.oy += (dy / d) * pull
+          e.pushBack(0)
+        }
+        this._tint(e)
       }
-      this.damage(e, knight.stats.damage * ULT.charge.mul)
+      this.damage(e, knight.stats.damage * w.mul, { source: 'knight' })
     }
+    this._shockwave(knight.x, knight.y, w.radius, 0xff9040)
+    this.shake(FEEL.shake, FEEL.shakeTime)
+    return true
   }
 
   /** 打击停顿：游戏时间停一小会儿（按真实时间恢复；用 timeout.connect 不用 await，无头测试里也能恢复）。 */

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { HEROES } from '../src/data/heroes'
-import { availableNodes, BRANCHES, isGeneric, TAUNT_EVERY } from '../src/data/skills'
+import { availableNodes, BRANCHES, isGeneric, KNOCKBACK, QUAKE_EVERY, THORNS } from '../src/data/skills'
 import { gameOptions } from '../src/game'
 import { Knight } from '../src/nodes/Hero'
 import { linePath } from '../src/path'
@@ -31,7 +31,7 @@ async function withKnight() {
 }
 
 describe('骑士', () => {
-  it('扇形斩击：前方 100° 里的都打中，背后的不打；击退沿路线往回推 12', async () => {
+  it('扇形斩击：前方 100° 里的都打中，背后的不打；轻微击退（沿路线往回推 KNOCKBACK）', async () => {
     const { g, battle, knight } = await withKnight()
     // 离城门最近（路线短、剩余路程少）：它是目标
     const front = battle.spawnEnemy('slime', linePath(375, 430, 700), 10000)
@@ -43,7 +43,7 @@ describe('骑士', () => {
     const dist0 = side.dist
     while (knight.attacks < 1) g.step()
     expect([10000 - side.hp, 10000 - back.hp]).toEqual([HEROES.knight.damage, 0])
-    expect(side.dist).toBe(dist0 - 12)
+    expect(side.dist).toBe(dist0 - KNOCKBACK)
     void front
   })
 
@@ -58,19 +58,35 @@ describe('骑士', () => {
     expect(back.hp).toBe(10000 - HEROES.knight.damage)
   })
 
-  it('重击：伤害 +30%、击退翻倍、20% 几率眩晕 1 秒；质变：被击退的敌人撞到身后的敌人，造成一半伤害', async () => {
+  it('重击：伤害 +30%、20% 几率眩晕 1 秒、对眩晕中的敌人伤害 +50%', async () => {
     const { g, battle, knight } = await withKnight()
-    learn(battle, 'knight.smash.1', 'knight.smash.2', 'knight.smash.3', 'knight.smash.4')
-    expect([knight.mods.stunChance, knight.mods.stunTime]).toEqual([0.2, 1])
-    knight.mods.stunChance = 0 // 眩晕会改 tint，这里只看伤害和击退
-    const target = still(battle, 375, 600) // 距离 140：在范围里
-    const behind = still(battle, 375, 560) // 距离 180：斩击够不着，但目标被往上（沿路线往回）推 24 后就在 45 像素内
+    learn(battle, 'knight.smash.1', 'knight.smash.2', 'knight.smash.3')
+    expect([knight.mods.stunChance, knight.mods.stunTime, knight.mods.stunnedMul]).toEqual([0.2, 1, 1.5])
+    knight.mods.stunChance = 0
+    const stunned = still(battle, 375, 600) // still() 让它一直眩晕
+    const free = battle.spawnEnemy('slime', linePath(420, 400, 100000), 10000)
+    free.dist = 210
+    free.pushBack(0)
+    free.frozenLeft = 1e9 // 冰冻：停下但不算眩晕
     while (knight.attacks < 1) g.step()
-    g.step()
     const dmg = HEROES.knight.damage * 1.3
-    expect(10000 - target.hp).toBeCloseTo(dmg)
-    expect(10000 - behind.hp).toBeCloseTo(dmg * 0.5)
-    expect(target.y).toBeCloseTo(600 - 24)
+    expect(10000 - stunned.hp).toBeCloseTo(dmg * 1.5)
+    expect(10000 - free.hp).toBeCloseTo(dmg)
+  })
+
+  it('重击质变：每第 4 次斩击震地，半径 140 内（包括背后）的敌人受伤、眩晕', async () => {
+    const { g, battle, knight } = await withKnight()
+    learn(battle, 'knight.smash.4')
+    still(battle, 375, 620) // 前面的目标
+    const back = battle.spawnEnemy('slime', linePath(375, 640, 300000), 10000) // 背后 100、剩余路程更长（不会被当成目标）：斩击打不到
+    back.dist = 200
+    back.pushBack(0)
+    back.frozenLeft = 1e9
+    while (knight.attacks < QUAKE_EVERY - 1) g.step()
+    expect(back.hp).toBe(10000)
+    while (knight.attacks < QUAKE_EVERY) g.step()
+    expect(back.hp).toBeCloseTo(10000 - HEROES.knight.damage)
+    expect(back.stunLeft).toBeGreaterThan(0.5)
   })
 
   it('眩晕（几率按 tree.rng）：停下、不打人', async () => {
@@ -95,20 +111,15 @@ describe('骑士', () => {
     expect(knight.hp - before).toBeCloseTo(knight.stats.damage * 0.15, 0)
   })
 
-  it('守护质变：每 4 秒嘲讽光环，半径 120 内的地面怪被强制来打骑士；飞行的、远的不受影响', async () => {
+  it('守护质变：荆棘，受到伤害的 50% 反弹给攻击者', async () => {
     const { g, battle, knight } = await withKnight()
     learn(battle, 'knight.guard.4')
     knight.cooldown = 1e9
-    const near = still(battle, 420, 700)
-    const far = still(battle, 700, 300)
-    const bat = battle.spawnEnemy('bat', linePath(330, 500, 100000), 10000)
-    bat.dist = 200
-    bat.pushBack(0)
-    bat.stunLeft = 1e9
-    g.stepSeconds(TAUNT_EVERY + 0.05)
-    expect(near.tauntLeft).toBeGreaterThan(3)
-    expect(near.target).toBe(knight)
-    expect([far.tauntLeft, far.target, bat.tauntLeft, bat.target]).toEqual([0, null, 0, null])
+    const e = battle.spawnEnemy('skeleton', linePath(430, 600, 100000), 10000)
+    while (knight.hp === knight.maxHp) g.step()
+    const taken = knight.maxHp - knight.hp
+    expect(taken).toBeCloseTo(12 * 0.7)
+    expect(10000 - e.hp).toBeCloseTo(taken * THORNS)
   })
 
   it('三条分支都出现在三选一里', async () => {

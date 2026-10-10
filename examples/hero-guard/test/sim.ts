@@ -95,7 +95,8 @@ export async function simulate(seed: number, strategy: Strategy, maxMinutes = 25
         const d = densest(b, ULT.meteor.radius)
         if (d && d.n >= 5 && b.meteor(d.x, d.y)) ults++
       }
-      if (b.canUlt('knight') && b.enemies.filter((e) => !e.dead).length >= 6 && b.knightCharge()) ults++
+      const knight = b.heroOf('knight')
+      if (knight && b.canUlt('knight') && b.enemies.filter((e) => !e.dead && Math.hypot(e.x - knight.x, e.y - knight.y) <= ULT.warcry.radius).length >= 4 && b.warCry()) ults++
     }
     if (b.lives !== lives) {
       leaks[b.wave] = (leaks[b.wave] ?? 0) + (lives - b.lives)

@@ -165,7 +165,7 @@ const ICONS: Record<string, string> = {
   generic_xp: 'an open magic book with sparkles',
   ult_archer: 'a rain of many arrows falling from the sky',
   ult_mage: 'a flaming meteor falling down',
-  ult_knight: 'a knight charging forward with a lance and dust trail',
+  ult_knight: 'a knight in blue armor shouting a battle cry with his sword raised high, an orange shockwave ring bursting around him',
 }
 
 const ART_13: AssetSpec[] = [

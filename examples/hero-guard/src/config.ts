@@ -98,8 +98,6 @@ export const Z = {
   projectile: 2000,
   fx: 2100,
   floatText: 2200,
-  /** 冲锋中的骑士画在最上面。 */
-  charging: 2300,
 }
 
 /** 大招（spec 的起始值）。 */
@@ -113,6 +111,9 @@ export const ULT = {
   rain: { radius: 120, time: 2, volleys: 10, mul: 2.5 },
   /** 法师陨石：半径、落地前的延迟、伤害 = 法师伤害 × mul。 */
   meteor: { radius: 160, delay: 0.8, mul: 16, hitStop: 0.08 },
-  /** 骑士冲锋：沿线的宽度、伤害 = 骑士伤害 × mul、击退、眩晕、冲到顶再回来的总时间。 */
-  charge: { width: 80, mul: 4, knockback: 60, stun: 1.5, time: 0.7, topY: 120 },
+  /**
+   * 骑士战吼：半径内的地面怪受骑士伤害 × mul，被嘲讽 `taunt` 秒、被拉向骑士 `pull` 像素（Boss 只受伤害，飞行怪不受影响）；
+   * 骑士 `time` 秒内受到的伤害减少 `reduction`，立刻回复最大血量的 `heal`。
+   */
+  warcry: { radius: 250, mul: 2, taunt: 5, pull: 60, time: 5, reduction: 0.6, heal: 0.3 },
 }

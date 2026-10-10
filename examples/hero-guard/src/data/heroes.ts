@@ -22,7 +22,7 @@ export interface HeroBase {
 export const HEROES: Record<HeroKind, HeroBase> = {
   archer: { name: '弓手', desc: '远程单体，射程最远', damage: 22, interval: 0.7, range: 340, hp: 180, armor: 1, role: 'ranged' },
   mage: { name: '法师', desc: '范围伤害，清成群的小怪', damage: 32, interval: 1.6, range: 280, hp: 150, armor: 1, role: 'ranged' },
-  knight: { name: '骑士', desc: '近战，拦住怪物、击退', damage: 40, interval: 1.1, range: 150, hp: 600, armor: 0.7, role: 'melee' },
+  knight: { name: '骑士', desc: '近战，拦住怪物、扛伤害', damage: 40, interval: 1.1, range: 150, hp: 600, armor: 0.7, role: 'melee' },
 }
 
 /**

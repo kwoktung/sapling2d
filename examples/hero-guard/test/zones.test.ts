@@ -221,21 +221,6 @@ describe('血量、阵亡和复活', () => {
     const knight = battle.placeHero('knight')
     expect(knight.maxHp).toBe(600 * 1.2)
   })
-
-  it('冲锋从骑士当前的位置出发，冲完回到原位', async () => {
-    const { g, battle } = await setup()
-    const knight = battle.startWith('knight')
-    battle.stopSpawning()
-    battle.state = 'wave'
-    knight.x = 200
-    knight.y = 700
-    battle.energy.knight = ULT.energyMax
-    expect(battle.knightCharge()).toBe(true)
-    g.stepSeconds(ULT.charge.time * 0.4)
-    expect(knight.y).toBeLessThan(500)
-    while (knight.busy) g.step()
-    expect([knight.x, Math.round(knight.y)]).toEqual([200, 700])
-  })
 })
 
 const HEROES_HP = { archer: 180 }

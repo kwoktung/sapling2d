@@ -50,9 +50,10 @@ export function mageMods(): MageMods {
 /** 骑士这一局的修正值。 */
 export interface KnightMods {
   damageMul: number
-  knockbackMul: number
-  /** 质变：被击退的敌人撞到身后的敌人，造成伤害。 */
-  collide: boolean
+  /** 对眩晕中的敌人伤害倍率。 */
+  stunnedMul: number
+  /** 质变：每第 4 次斩击震地（范围伤害 + 眩晕）。 */
+  quake: boolean
   /** 斩击角度（弧度）、攻击距离倍率、攻击间隔倍率。 */
   arc: number
   rangeMul: number
@@ -66,12 +67,12 @@ export interface KnightMods {
   hpMul: number
   lifesteal: number
   damageTakenMul: number
-  /** 质变：嘲讽光环。 */
-  taunt: boolean
+  /** 质变：荆棘，受到伤害的这个比例反弹给攻击者（0 表示没有）。 */
+  thorns: number
 }
 
 export function knightMods(): KnightMods {
-  return { damageMul: 1, knockbackMul: 1, collide: false, arc: (100 * Math.PI) / 180, rangeMul: 1, intervalMul: 1, whirl: false, stunChance: 0, stunTime: 1, hpMul: 1, lifesteal: 0, damageTakenMul: 1, taunt: false }
+  return { damageMul: 1, stunnedMul: 1, quake: false, arc: (100 * Math.PI) / 180, rangeMul: 1, intervalMul: 1, whirl: false, stunChance: 0, stunTime: 1, hpMul: 1, lifesteal: 0, damageTakenMul: 1, thorns: 0 }
 }
 
 /** 各英雄的修正值类型。 */
@@ -81,14 +82,15 @@ export interface HeroMods {
   knight: KnightMods
 }
 
-export const KNOCKBACK = 12
-/** 击退撞人：被击退的敌人新位置周围这么远的敌人受伤，伤害是斩击的一半。 */
-export const COLLIDE_RADIUS = 45
-export const COLLIDE_MUL = 0.5
-/** 嘲讽光环：每隔几秒、半径、强制敌人打骑士多久（到下一次光环）。 */
-export const TAUNT_EVERY = 4
-export const TAUNT_RADIUS = 120
-export const TAUNT_TIME = 4
+/** 斩击的击退（像素）：只是打击感，不把怪推开（骑士要拦住它们）。 */
+export const KNOCKBACK = 6
+/** 震地质变：每第几次斩击、半径、伤害倍率（× 斩击伤害）、眩晕时间。 */
+export const QUAKE_EVERY = 4
+export const QUAKE_RADIUS = 140
+export const QUAKE_MUL = 1
+export const QUAKE_STUN = 0.8
+/** 荆棘质变：反弹受到伤害的比例。 */
+export const THORNS = 0.5
 
 export const BURN_TIME = 2
 export const BURN_DPS = 8
@@ -165,9 +167,9 @@ export const BRANCHES: Branch[] = [
   ]),
   branch('knight', 'smash', '重击', [
     ['斩击伤害 +30%', (m) => (m.damageMul *= 1.3)],
-    ['击退距离翻倍', (m) => (m.knockbackMul *= 2)],
     ['20% 几率眩晕 1 秒', (m) => (m.stunChance = 0.2)],
-    ['质变：被击退的敌人撞到身后的敌人，造成一半伤害', (m) => (m.collide = true)],
+    ['对眩晕中的敌人伤害 +50%', (m) => (m.stunnedMul *= 1.5)],
+    ['质变：每第 4 次斩击震地，半径 140 范围伤害并眩晕 0.8 秒', (m) => (m.quake = true)],
   ]),
   branch('knight', 'whirl', '旋风', [
     ['斩击角度 +40°', (m) => (m.arc += (40 * Math.PI) / 180)],
@@ -179,7 +181,7 @@ export const BRANCHES: Branch[] = [
     ['骑士血量 +30%', (m) => (m.hpMul *= 1.3)],
     ['斩击吸血：造成伤害的 15%', (m) => (m.lifesteal += 0.15)],
     ['受到的伤害 −15%', (m) => (m.damageTakenMul *= 0.85)],
-    ['质变：嘲讽光环，每 4 秒强制半径 120 内的敌人来打骑士', (m) => (m.taunt = true)],
+    ['质变：荆棘，受到伤害的 50% 反弹给攻击者', (m) => (m.thorns = THORNS)],
   ]),
   branch('mage', 'lightning', '雷电', [
     ['每第 3 次攻击额外放连锁闪电（跳 2 次，每跳 60%）', (m) => (m.chainEvery = 3)],

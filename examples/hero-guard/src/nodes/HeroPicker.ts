@@ -1,20 +1,21 @@
-import { CanvasLayer, ColorRect, Ease, Label, Signal, Sprite2D, v } from 'sapling2d'
+import { CanvasLayer, ColorRect, Ease, Label, NineSliceSprite, Signal, Sprite2D, v } from 'sapling2d'
 import { ART_SCALE, ASSETS } from '../assets'
 import { HEROES, type HeroKind } from '../data/heroes'
+import { INK, INK_SOFT, panelOptions } from './ui'
 
 const CARD_W = 600
 const CARD_H = 200
 
-/** 一张英雄卡：立绘、名字、定位。还没实现的英雄显示“敬请期待”、不能点。占位外观，13 换成九宫格边框。 */
-class HeroCard extends ColorRect {
+/** 一张英雄卡（木框）：立绘、名字、定位。还没实现的英雄显示“敬请期待”、变暗、不能点。 */
+class HeroCard extends NineSliceSprite {
   constructor(
     readonly kind: HeroKind,
     readonly enabled: boolean,
   ) {
-    super({ size: v(CARD_W, CARD_H), color: enabled ? 0x2c3a4a : 0x2a2a2a, inputPickable: enabled })
-    this.add(new Sprite2D({ texture: ASSETS.heroes.get(`${kind}_body`), position: v(100, CARD_H - 12), scale: v(ART_SCALE * 1.15, ART_SCALE * 1.15), alpha: enabled ? 1 : 0.4 }))
-    this.add(new Label({ text: HEROES[kind].name, fontSize: 46, fontWeight: 'bold', color: enabled ? 0xffe8a0 : 0x888888, align: 'left', position: v(200, 50) }))
-    this.add(new Label({ text: enabled ? HEROES[kind].role : '敬请期待', fontSize: 30, color: enabled ? 0xffffff : 0x888888, align: 'left', position: v(200, 120) }))
+    super(panelOptions(v(CARD_W, CARD_H), { inputPickable: enabled, selfModulate: enabled ? 0xffffff : 0x8a8a8a }))
+    this.add(new Sprite2D({ texture: ASSETS.heroes.get(`${kind}_body`), position: v(108, CARD_H - 22), scale: v(ART_SCALE * 1.05, ART_SCALE * 1.05), alpha: enabled ? 1 : 0.4 }))
+    this.add(new Label({ text: HEROES[kind].name, fontSize: 46, fontWeight: 'bold', color: enabled ? INK : 0x5a5048, align: 'left', position: v(210, 50) }))
+    this.add(new Label({ text: enabled ? HEROES[kind].role : '敬请期待', fontSize: 30, color: enabled ? INK_SOFT : 0x5a5048, align: 'left', position: v(210, 120) }))
   }
 }
 

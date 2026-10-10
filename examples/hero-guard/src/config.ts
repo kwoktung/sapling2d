@@ -22,8 +22,13 @@ export const PATH = {
   jitterY: 40,
   /** 相邻两个控制点横向最多差多少：越大越弯。 */
   maxDx: 260,
-  /** 路线预览：点的间距、显示多久（之后淡出）。 */
+  /**
+   * 路线预览：点的间距、显示多久（之后淡出）。普通怪只显示前 `previewLength` 像素，
+   * 而且离上一条普通预览不到 `previewGap` 秒就不显示（怪多的时候满屏都是点）。精英和 Boss 总是显示整条。
+   */
   previewSpacing: 26,
+  previewLength: 520,
+  previewGap: 1.5,
   previewTime: 0.8,
   previewFade: 0.4,
 }
@@ -53,6 +58,7 @@ export const FEEL = {
 
 /** 绘制层级：怪物和英雄按 y 排序（zIndex = y，0–1334），其他东西放在这个范围之外。 */
 export const Z = {
+  background: -1000,
   slot: -200,
   preview: -100,
   projectile: 2000,

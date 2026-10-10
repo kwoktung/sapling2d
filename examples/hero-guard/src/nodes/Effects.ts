@@ -4,6 +4,8 @@ import { Z } from '../config'
 import type { Enemy } from './Enemy'
 
 const FIREBALL_SPEED = 620
+/** 火球贴图里火焰的半径（像素，贴图按 2 倍存）。 */
+const FIRE_R = 44
 
 /** 火球这一发的效果（法师出手时算好）。 */
 export interface Blast {
@@ -17,7 +19,7 @@ export interface Blast {
 
 /**
  * 火球（对象池复用）：飞向出手时目标所在的点（不追踪），到了回调 `onArrive` 爆炸。
- * 用光晕贴图染橙色、叠加发光。
+ * 黑底的火球贴图，叠加发光，飞行时打转。
  */
 export class Fireball extends Sprite2D {
   active = false
@@ -27,7 +29,7 @@ export class Fireball extends Sprite2D {
   onArrive: ((f: Fireball) => void) | null = null
 
   constructor() {
-    super({ texture: ASSETS.glow, visible: false, zIndex: Z.projectile, selfModulate: 0xff8a30, scale: v(0.55, 0.55), blendMode: 'add' })
+    super({ texture: ASSETS.fx.get('fx_fireball'), visible: false, zIndex: Z.projectile, scale: v(0.4, 0.4), blendMode: 'add' })
   }
 
   launch(x: number, y: number, target: Enemy, blast: Blast): void {
@@ -42,6 +44,7 @@ export class Fireball extends Sprite2D {
 
   override process(dt: number) {
     if (!this.active) return
+    this.rotation += dt * 12
     const dx = this.tx - this.x
     const dy = this.ty - this.y
     const d = Math.hypot(dx, dy)
@@ -59,9 +62,10 @@ export class Fireball extends Sprite2D {
   }
 }
 
-/** 燃烧地面：一块橙色的光晕，持续一段时间（Battle 每 0.5 秒对里面的敌人造成伤害），结束时淡出删除。 */
-export class BurnZone extends Sprite2D {
+/** 燃烧地面：压扁的火团慢慢打转，持续一段时间（Battle 每 0.5 秒对里面的敌人造成伤害），结束时淡出删除。 */
+export class BurnZone extends Node2D {
   timeLeft: number
+  private readonly _fire: Sprite2D
 
   constructor(
     x: number,
@@ -69,15 +73,17 @@ export class BurnZone extends Sprite2D {
     readonly radius: number,
     time: number,
   ) {
-    const s = (radius * 2) / 64
-    super({ texture: ASSETS.glow, position: v(x, y), scale: v(s, s * 0.6), selfModulate: 0xff5a10, alpha: 0.7, zIndex: Z.preview + 1, blendMode: 'add' })
+    const s = radius / FIRE_R
+    super({ position: v(x, y), scale: v(1, 0.6), zIndex: Z.preview + 1, blendMode: 'add' })
+    this._fire = this.add(new Sprite2D({ texture: ASSETS.fx.get('fx_fireball'), scale: v(s, s), alpha: 0.7 }))
     this.timeLeft = time
   }
 
   override process(dt: number) {
     this.timeLeft -= dt
-    // 微微闪动
-    this.alpha = 0.55 + 0.15 * Math.sin(this.timeLeft * 18)
+    // 打转、微微闪动（压扁的是父节点：子节点转起来还是贴在地上的椭圆）
+    this._fire.rotation += dt * 2
+    this._fire.alpha = 0.55 + 0.15 * Math.sin(this.timeLeft * 18)
     if (this.timeLeft <= 0) {
       this.timeLeft = Infinity
       this.createTween().to(this, { alpha: 0 }, 0.25).call(() => this.queueFree())
@@ -89,33 +95,30 @@ export class BurnZone extends Sprite2D {
   }
 }
 
+/** 闪电贴图里电弧的横向范围（像素）：从 x=10 到 108，中心偏右 9。 */
+const BOLT_LEN = 98
+const BOLT_SHIFT = 9
+
 /**
- * 一段闪电：两点之间拉长的光晕贴图（叠加发光、淡蓝色），很快淡出。
- * 引擎没有画线的节点：用旋转 + 拉伸的精灵拼，中间加一个折点显得不那么直。
+ * 一段闪电：横向的闪电贴图旋转、拉长到两点之间（叠加发光），很快淡出。`flip` 上下翻转，连续几跳看起来不一样。
  */
 export class Bolt extends Node2D {
-  constructor(x0: number, y0: number, x1: number, y1: number, jitter: number) {
+  constructor(x0: number, y0: number, x1: number, y1: number, flip: boolean) {
     super({ zIndex: Z.fx, blendMode: 'add' })
-    const mx = (x0 + x1) / 2 + jitter
-    const my = (y0 + y1) / 2
-    this._segment(x0, y0, mx, my)
-    this._segment(mx, my, x1, y1)
+    const len = Math.hypot(x1 - x0, y1 - y0)
+    const k = len / BOLT_LEN
+    const angle = Math.atan2(y1 - y0, x1 - x0)
+    this.add(
+      new Sprite2D({
+        texture: ASSETS.fx.get('fx_lightning'),
+        position: v((x0 + x1) / 2 - Math.cos(angle) * BOLT_SHIFT * k, (y0 + y1) / 2 - Math.sin(angle) * BOLT_SHIFT * k),
+        rotation: angle,
+        scale: v(k, flip ? -0.8 : 0.8),
+      }),
+    )
   }
 
   override ready() {
     this.createTween().to(this, { alpha: 0 }, 0.18, Ease.QuadIn).call(() => this.queueFree())
-  }
-
-  private _segment(x0: number, y0: number, x1: number, y1: number) {
-    const len = Math.hypot(x1 - x0, y1 - y0)
-    this.add(
-      new Sprite2D({
-        texture: ASSETS.glow,
-        position: v((x0 + x1) / 2, (y0 + y1) / 2),
-        rotation: Math.atan2(y1 - y0, x1 - x0),
-        scale: v(len / 50, 0.22),
-        selfModulate: 0x9fd8ff,
-      }),
-    )
   }
 }

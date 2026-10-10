@@ -27,6 +27,19 @@ export interface AssetSpec {
    * AI 每次生成都不一样：挑定之后用它固定下来，以后重新抠图、打包结果不变。`prompt` 留着记录它是怎么来的。
    */
   from?: string
+  /** 画面比例，默认 '1:1'（背景用 '9:16'）。 */
+  aspect?: '1:1' | '9:16'
+  /**
+   * false：不抠图（背景；黑底的特效贴图——游戏里叠加发光时黑色等于透明）。提示词里的背景说明也跟着变成黑底 / 不要求纯色。
+   * 默认 true。
+   */
+  key?: boolean
+  /** 显示宽度（像素）：按宽缩放（背景）；不设时按 `displayHeight`。 */
+  displayWidth?: number
+  /** true：不套角色的风格模板、不附风格锚点（特效、背景、界面这些不是角色的素材）。 */
+  plain?: boolean
+  /** 不进图集，单独输出成 `public/assets/<id>.<publish>`（背景用 jpg：体积小得多）。 */
+  publish?: 'jpg' | 'png'
 }
 
 /** 风格锚点（相对 art/）：生成模式的素材都附上它，保证风格统一。03 从候选里选定的弓手（refs/ 进 git）。 */
@@ -120,7 +133,108 @@ const ENEMY_PARTS: AssetSpec[] = Object.entries(ENEMY_ART).map(([kind, e]) => {
   }
 })
 
+/**
+ * 13：特效、背景、界面。都是 plain：不套角色风格、不附风格锚点。挑定的候选存进 `refs/`（`from`）。
+ * - 特效黑底不抠图：游戏里叠加发光（`blendMode: 'add'`），黑色等于透明；箭和界面是品红底、抠图。
+ * - 背景单独发布成 jpg（不进图集）。
+ * - 图标（技能分支、通用强化、大招）没出候选，生成一次看过之后存进 `refs/`。
+ */
+const VFX: Record<string, { prompt: string; height: number }> = {
+  slash: { prompt: 'a bright white-to-cyan crescent sword slash arc, a sweeping curved swoosh with glowing edges and speed streaks, the arc opening downward', height: 200 },
+  fireball: { prompt: 'a round fireball with swirling orange and yellow flames and a bright hot core', height: 64 },
+  ice: { prompt: 'a burst of sharp light-blue ice crystal shards radiating from the center, frosty sparkles', height: 130 },
+  lightning: { prompt: 'a single jagged electric lightning bolt running horizontally from left to right, bright white core with light blue glow', height: 60 },
+  poison: { prompt: 'a puff of toxic green poison gas cloud with a few bubbles', height: 140 },
+  explosion: { prompt: 'a big cartoon fiery explosion burst with orange and yellow flames, a smoke ring and flying sparks', height: 260 },
+}
+
+const ICONS: Record<string, string> = {
+  archer_multishot: 'three arrows flying side by side in a fan',
+  archer_sniper: 'a red crosshair target with an arrow hitting the bullseye',
+  archer_poison: 'an arrow with a green dripping poison tip',
+  mage_fire: 'a burning orange flame',
+  mage_frost: 'a light blue snowflake ice crystal',
+  mage_lightning: 'a yellow lightning bolt',
+  knight_smash: 'a heavy steel hammer striking down with an impact burst',
+  knight_whirl: 'a sword spinning in a circular whirlwind',
+  knight_guard: 'a round blue and silver shield',
+  generic_attackSpeed: 'a winged boot with speed lines',
+  generic_damage: 'a sharp glowing sword blade',
+  generic_lives: 'a stone castle wall with a red heart',
+  generic_ultCharge: 'a glowing golden energy orb',
+  generic_xp: 'an open magic book with sparkles',
+  ult_archer: 'a rain of many arrows falling from the sky',
+  ult_mage: 'a flaming meteor falling down',
+  ult_knight: 'a knight charging forward with a lance and dust trail',
+}
+
+const ART_13: AssetSpec[] = [
+  {
+    id: 'bg',
+    mode: 'generate',
+    plain: true,
+    key: false,
+    aspect: '9:16',
+    displayHeight: 1334,
+    displayWidth: 750,
+    publish: 'jpg',
+    from: 'refs/bg.jpg',
+    prompt:
+      'A vertical background for a portrait mobile tower defense game, seen from above at a slight angle, polished cartoon style with clean outlines and soft flat shading. A lush green meadow battlefield. At the very top edge: a glowing purple magic portal in front of a dark forest edge, where monsters come from. At the very bottom edge: a sturdy grey stone castle wall with a wooden gate spanning the whole width. In between: open grass with tiny flowers; a few rocks and bushes only along the left and right edges; the large central area is clear, evenly lit and has NO roads, NO paths, NO characters.',
+  },
+  {
+    id: 'ui_panel',
+    mode: 'generate',
+    plain: true,
+    displayHeight: 100,
+    atlas: 'ui',
+    from: 'refs/ui_panel.jpg',
+    prompt:
+      'A square game UI panel frame for a cartoon fantasy mobile game: a thick carved wooden border with small golden corner ornaments, and a plain empty parchment paper center. Flat front view, perfectly symmetric, bold dark outlines, flat cel shading. Nothing inside the panel.',
+  },
+  {
+    id: 'ui_button',
+    mode: 'generate',
+    plain: true,
+    displayHeight: 50,
+    atlas: 'ui',
+    from: 'refs/ui_button.jpg',
+    prompt:
+      'A wide rounded rectangle game UI button for a cartoon fantasy mobile game: green with a light glossy highlight on top, a darker green bottom edge and a thick dark outline. Flat front view, symmetric, empty with no text or icon.',
+  },
+  ...Object.entries(VFX).map(([id, e]) => ({
+    id: `fx_${id}`,
+    mode: 'generate' as const,
+    plain: true,
+    key: false,
+    background: '#000000',
+    displayHeight: e.height,
+    atlas: 'fx',
+    from: `refs/fx_${id}.jpg`,
+    prompt: `A game visual effect sprite for a cartoon mobile game: ${e.prompt}. Only the effect itself, centered, with empty margin around it.`,
+  })),
+  {
+    id: 'fx_arrow',
+    mode: 'generate',
+    plain: true,
+    displayHeight: 44,
+    atlas: 'fx',
+    from: 'refs/fx_arrow.jpg',
+    prompt: 'A single wooden arrow with a steel arrowhead and white feathers, pointing straight up, isolated object, cartoon fantasy mobile game style with bold dark outlines and flat cel shading.',
+  },
+  ...Object.entries(ICONS).map(([id, what]) => ({
+    id: `icon_${id}`,
+    mode: 'generate' as const,
+    plain: true,
+    displayHeight: 64,
+    atlas: 'ui',
+    from: `refs/icon_${id}.jpg`,
+    prompt: `A square game skill icon for a cartoon fantasy mobile game: ${what}, centered on a round dark slate badge with a thick golden rim. Bold dark outlines, flat cel shading, bright saturated colors, readable at small size.`,
+  })),
+]
+
 export const ASSETS: AssetSpec[] = [
+  ...ART_13,
   ...ENEMY_PARTS,
   ...HERO_PARTS,
 ]

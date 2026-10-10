@@ -6,3 +6,5 @@ logs
 art/raw/
 art/work/
 art/preview.png
+# 背景的 2 倍原图 5 MB，从 refs/bg.jpg 可以重新生成；游戏用的是 public/assets/bg.jpg
+art/sprites/bg.png

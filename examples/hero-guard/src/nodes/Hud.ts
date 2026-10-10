@@ -2,10 +2,12 @@ import { CanvasLayer, ColorRect, Label, v } from 'sapling2d'
 
 const XP_W = 300
 const XP_H = 14
-const BOSS_W = 440
-const BOSS_H = 18
+const BOSS_W = 320
+const BOSS_H = 12
+/** Boss 血条半透明：它压在场地顶部（怪物出生的地方），不能挡住怪。 */
+const BOSS_ALPHA = 0.7
 
-/** 界面层：顶部的命和波次、屏幕中间的提示文字（占位，13 换成正式界面）。 */
+/** 界面层：顶部的命、波次、等级和经验条，Boss 血条，屏幕中间的提示文字。 */
 export class Hud extends CanvasLayer {
   readonly lives = new Label({ name: 'Lives', text: '', fontSize: 32, color: 0xffffff, align: 'left', stroke: { color: 0x000000, width: 4 } })
   readonly wave = new Label({ name: 'Wave', text: '', fontSize: 32, color: 0xffe080, align: 'right', stroke: { color: 0x000000, width: 4 } })
@@ -14,8 +16,8 @@ export class Hud extends CanvasLayer {
   readonly xpBack = new ColorRect({ name: 'XpBack', size: v(XP_W, XP_H), color: 0x1a2a3a })
   readonly xpFill = new ColorRect({ name: 'XpFill', size: v(XP_W, XP_H), color: 0x60c0ff })
   /** Boss 血条：Boss 在场时显示在顶部中间。 */
-  readonly bossName = new Label({ name: 'BossName', text: '', fontSize: 28, fontWeight: 'bold', color: 0xffb0b0, align: 'center', verticalAlign: 'center', stroke: { color: 0x000000, width: 4 }, visible: false })
-  readonly bossBack = new ColorRect({ name: 'BossBack', size: v(BOSS_W, BOSS_H), color: 0x2a1010, visible: false })
+  readonly bossName = new Label({ name: 'BossName', text: '', fontSize: 22, fontWeight: 'bold', color: 0xffb0b0, align: 'center', verticalAlign: 'center', stroke: { color: 0x000000, width: 4 }, alpha: BOSS_ALPHA, visible: false })
+  readonly bossBack = new ColorRect({ name: 'BossBack', size: v(BOSS_W, BOSS_H), color: 0x2a1010, alpha: BOSS_ALPHA, visible: false })
   readonly bossFill = new ColorRect({ name: 'BossFill', size: v(BOSS_W, BOSS_H), color: 0xe04040 })
 
   constructor() {
@@ -69,8 +71,8 @@ export class Hud extends CanvasLayer {
     this.level.position = v(r.left + 24, r.top + 92)
     this.xpBack.position = v(r.left + 100, r.top + 92 - XP_H / 2)
     const cx = (r.left + r.right) / 2
-    this.bossName.position = v(cx, r.top + 140)
-    this.bossBack.position = v(cx - BOSS_W / 2, r.top + 162)
+    this.bossName.position = v(cx, r.top + 130)
+    this.bossBack.position = v(cx - BOSS_W / 2, r.top + 146)
     this.message.position = v((r.left + r.right) / 2, r.top + r.height * 0.3)
   }
 }

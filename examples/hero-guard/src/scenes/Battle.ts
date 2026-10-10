@@ -1,6 +1,6 @@
-import { Camera2D, ColorRect, Ease, HitTester, Node2D, Particles2D, Scene, Sprite2D, type Curve2D, type PointerEvent2D, type Tween, v, Vector2 } from 'sapling2d'
+import { Camera2D, Ease, HitTester, Node2D, Particles2D, Scene, Sprite2D, type Curve2D, type PointerEvent2D, type Tween, v, Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
-import { FEEL, FIELD, SLOTS, START, ULT, Z } from '../config'
+import { FEEL, FIELD, PATH, SLOTS, START, ULT, Z } from '../config'
 import { ENEMIES, enemyHp, type EnemyKind } from '../data/enemies'
 import { HERO_KINDS, HEROES, type HeroKind } from '../data/heroes'
 import {
@@ -41,6 +41,18 @@ import { AimRing, MeteorStrike, RainZone, UltBar } from '../nodes/Ultimates'
 import { UpgradePicker } from '../nodes/UpgradePicker'
 import { Slot } from '../nodes/Slot'
 import { randomPath } from '../path'
+
+/** 特效贴图里图案的半径（像素，贴图按 2 倍存）：按它把特效缩放到想要的范围。 */
+const SLASH_R = 149
+const EXPLOSION_R = 179
+const ICE_R = 102
+const POISON_R = 84
+/** 背景贴图的尺寸、城墙顶的高度（像素）。 */
+const BG_W = 1500
+const BG_H = 2688
+const BG_WALL_Y = 2300
+/** 刀光贴图的弧顶朝下偏右 160°：转回朝上（和 `angle` 的约定一致）。 */
+const SLASH_TURN = (-160 * Math.PI) / 180
 
 /** `choosing` 选英雄、`placing` 点槽位放下选好的英雄、`wave` 出怪中、`gap` 两波之间。 */
 export type BattleState = 'choosing' | 'placing' | 'wave' | 'gap' | 'won' | 'lost'
@@ -138,6 +150,7 @@ export class Battle extends Scene implements HeroWorld {
   fx!: Node2D
   sparks!: Particles2D
   debris!: Particles2D
+  background!: Sprite2D
   /** 测试用：不自动出怪、不自动推进波次（见 stopSpawning）。 */
   manual = false
   private _spawners: Spawner[] = []
@@ -153,7 +166,9 @@ export class Battle extends Scene implements HeroWorld {
   private _drag: { hero: Hero; dx: number; dy: number } | null = null
 
   override ready() {
-    this.add(new ColorRect({ name: 'BaseLine', position: v(0, FIELD.baseY), size: v(750, 4), color: 0xc04030, zIndex: Z.slot }))
+    this.background = this.add(new Sprite2D({ name: 'Background', texture: ASSETS.bg, zIndex: Z.background }))
+    this._layoutBackground()
+    this.tree.viewport.resized.connect(() => this._layoutBackground(), this)
     let i = 0
     for (const y of SLOTS.rows) {
       for (const x of SLOTS.columns) {
@@ -178,6 +193,18 @@ export class Battle extends Scene implements HeroWorld {
     this.ultBar.cast.connect((kind) => kind === 'knight' && this.knightCharge(), this)
     this._updateHud()
     this.openHeroPicker('选择你的第一位英雄')
+  }
+
+  /**
+   * 背景：贴图 1500×2688，城墙顶在贴图 y≈2300。把城墙顶对齐到底线 `FIELD.baseY` 下面一点（怪物走到城墙才扣命），
+   * 再放大到盖住左右和顶部（多 4%：屏幕震动时不露边）。比贴图更长的屏幕底下会露出一条，用游戏的背景色（城墙底部的颜色）补上。
+   */
+  private _layoutBackground() {
+    const r = this.tree.viewport.visibleRect
+    const wall = FIELD.baseY + 30
+    const k = Math.max(r.width / BG_W, (wall - r.top) / BG_WALL_Y) * 1.04
+    this.background.scale = v(k, k)
+    this.background.position = v(375, wall - (BG_WALL_Y - BG_H / 2) * k)
   }
 
   override exitTree() {
@@ -428,7 +455,7 @@ export class Battle extends Scene implements HeroWorld {
       this.damage(e, b.damage, { source: 'mage' })
     }
     if (b.burnGround) this.burns.push(this.add(new BurnZone(f.x, f.y + 20, b.radius, BURN_TIME)))
-    this._burst(f.x, f.y, b.radius, 0xff8030)
+    this._burst(f.x, f.y, b.radius, b.slowPct > 0 || b.freeze ? 'ice' : 'fire')
   }
 
   chainLightning(x: number, y: number, first: Enemy, damage: number, jumps: number, falloff: number): void {
@@ -439,7 +466,7 @@ export class Battle extends Scene implements HeroWorld {
     let dmg = damage
     for (let k = 0; k <= jumps && t; k++) {
       hit.add(t)
-      this.add(new Bolt(fromX, fromY, t.x, t.y - 24, this.tree.rng.randfRange(-14, 14)))
+      this.add(new Bolt(fromX, fromY, t.x, t.y - 24, k % 2 === 1))
       fromX = t.x
       fromY = t.y - 24
       this.damage(t, dmg, { source: 'mage' })
@@ -500,10 +527,10 @@ export class Battle extends Scene implements HeroWorld {
 
   /** 刀光：120° 的弧，叠加发光、按距离缩放；360° 时三片拼成一圈。 */
   private _slashFx(hero: Hero, angle: number, s: Slash) {
-    const scale = ((s.range + 26) * 2) / 200
+    const scale = (s.range + 26) / SLASH_R
     const pieces = s.whirl ? [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3] : [0]
     for (const p of pieces) {
-      const fx = this.fx.add(new Sprite2D({ texture: ASSETS.slash, position: v(hero.x, hero.y - 30), rotation: angle + p, scale: v(scale * 0.8, scale * 0.8), selfModulate: 0xb8d8ff }))
+      const fx = this.fx.add(new Sprite2D({ texture: ASSETS.fx.get('fx_slash'), position: v(hero.x, hero.y - 30), rotation: angle + p + SLASH_TURN, scale: v(scale * 0.8, scale * 0.8), alpha: 0.85 }))
       fx.createTween().to(fx, { scale: v(scale, scale), alpha: 0 }, 0.2, Ease.QuadOut).call(() => fx.queueFree())
     }
   }
@@ -525,11 +552,11 @@ export class Battle extends Scene implements HeroWorld {
     this._tint(e)
   }
 
-  /** 爆炸特效：放大淡出的光圈（叠加发光）+ 火花。 */
-  private _burst(x: number, y: number, radius: number, color: number) {
-    const s = (radius * 2) / 64
-    const fx = this.fx.add(new Sprite2D({ texture: ASSETS.glow, position: v(x, y), scale: v(s * 0.4, s * 0.4), selfModulate: color }))
-    fx.createTween().to(fx, { scale: v(s, s), alpha: 0 }, 0.3, Ease.QuadOut).call(() => fx.queueFree())
+  /** 爆炸特效：放大淡出的爆炸（寒冰是冰晶）贴图（叠加发光）+ 火花。 */
+  private _burst(x: number, y: number, radius: number, kind: 'fire' | 'ice') {
+    const s = radius / (kind === 'fire' ? EXPLOSION_R : ICE_R)
+    const fx = this.fx.add(new Sprite2D({ texture: ASSETS.fx.get(kind === 'fire' ? 'fx_explosion' : 'fx_ice'), position: v(x, y), scale: v(s * 0.5, s * 0.5), rotation: this.tree.rng.randfRange(-0.4, 0.4) }))
+    fx.createTween().to(fx, { scale: v(s, s), alpha: 0 }, 0.35, Ease.QuadOut).call(() => fx.queueFree())
     this.sparks.position = v(x, y)
     this.sparks.emit(FEEL.sparks * 2)
   }
@@ -559,6 +586,8 @@ export class Battle extends Scene implements HeroWorld {
     }
     if (++e.frostHits >= FREEZE_HITS) {
       e.frozenLeft = FREEZE_TIME
+      const ice = this.fx.add(new Sprite2D({ texture: ASSETS.fx.get('fx_ice'), position: v(e.x, e.y - 24), scale: v(0.2, 0.2) }))
+      ice.createTween().to(ice, { scale: v(0.45, 0.45), alpha: 0 }, 0.4, Ease.QuadOut).call(() => ice.queueFree())
       e.frostHits = 0
       e.frostWindowStart = -1
       this._tint(e)
@@ -615,6 +644,8 @@ export class Battle extends Scene implements HeroWorld {
 
   /** 治疗光环的计时：每 0.5 秒结算一次（开局先等 0.5 秒）。 */
   private _healTick = POISON_TICK
+  /** 上一条普通怪路线预览的时间。 */
+  private _lastPreview = -Infinity
 
   /** 萨满的治疗光环：每 0.5 秒给半径内的其他怪回血，萨满身上闪一圈绿光。 */
   private _tickHeal(dt: number) {
@@ -705,9 +736,16 @@ export class Battle extends Scene implements HeroWorld {
 
   // ---------------------------------------------------------------- 怪物
 
-  /** 出一只怪：默认走一条新的随机路线，出现时路线预览闪一下。`preview: false` 时不显示路线（分裂出来的小怪）。 */
+  /**
+   * 出一只怪：默认走一条新的随机路线，出现时路线预览闪一下（普通怪限流，见 `PATH.previewGap`）。
+   * `preview: false` 时不显示路线（分裂出来的小怪、复活的怪）。
+   */
   spawnEnemy(kind: EnemyKind, path: Curve2D = randomPath((a, b) => this.tree.rng.randfRange(a, b)), hp?: number, elite = false, preview = true): Enemy {
-    if (preview) this.add(new PathPreview(path))
+    const important = elite || !!ENEMIES[kind].boss
+    if (preview && (important || this.tree.time - this._lastPreview >= PATH.previewGap)) {
+      this.add(new PathPreview(path, important))
+      if (!important) this._lastPreview = this.tree.time
+    }
     const e = this.add(new Enemy(kind, path, hp ?? enemyHp(kind, Math.max(1, this.wave), elite), LOOKS[kind], this.tree.rng.randfRange(0, Math.PI), elite))
     this.enemies.push(e)
     if (ENEMIES[kind].boss) {
@@ -749,8 +787,9 @@ export class Battle extends Scene implements HeroWorld {
       for (const o of this.enemies) {
         if (o !== e && !o.dead && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 <= POISON_CLOUD_RADIUS ** 2) this.poison(o, m.poisonDps, m.poisonTime, m.poisonStacks, POISON_CLOUD_STACKS)
       }
-      this.sparks.position = v(e.x, e.y - 24)
-      this.sparks.emit(FEEL.sparks * 2)
+      const k = POISON_CLOUD_RADIUS / POISON_R
+      const cloud = this.fx.add(new Sprite2D({ texture: ASSETS.fx.get('fx_poison'), position: v(e.x, e.y - 24), scale: v(k * 0.5, k * 0.5), alpha: 0.8 }))
+      cloud.createTween().to(cloud, { scale: v(k, k), alpha: 0 }, 0.6, Ease.QuadOut).call(() => cloud.queueFree())
     }
     // 巫妖可以复活的怪：记下死在哪
     if (this.enemies.some((b) => !b.dead && ENEMIES[b.kind].revive?.kind === e.kind)) {
@@ -841,7 +880,7 @@ export class Battle extends Scene implements HeroWorld {
       new MeteorStrike(x, y, ULT.meteor.radius, (cx, cy) => {
         const r2 = ULT.meteor.radius ** 2
         for (const e of this.enemies) if (!e.dead && (e.x - cx) ** 2 + (e.y - cy) ** 2 <= r2) this.damage(e, damage)
-        this._burst(cx, cy, ULT.meteor.radius, 0xff6020)
+        this._burst(cx, cy, ULT.meteor.radius, 'fire')
         this.shake(FEEL.shake * 1.6, FEEL.shakeTime * 1.4)
         this.hitStop(ULT.meteor.hitStop)
       }),

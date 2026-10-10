@@ -1,4 +1,4 @@
-import { CanvasLayer, ColorRect, Ease, Label, Node2D, Signal, Sprite2D, v, type PointerEvent2D, type Vector2 } from 'sapling2d'
+import { CanvasLayer, ColorRect, Ease, Label, Node2D, Rect2, Signal, Sprite2D, v, type PointerEvent2D, type Vector2 } from 'sapling2d'
 import { ART_SCALE, ASSETS } from '../assets'
 import { ULT, Z } from '../config'
 import { HERO_KINDS, HEROES, type HeroKind } from '../data/heroes'
@@ -6,8 +6,14 @@ import { HERO_KINDS, HEROES, type HeroKind } from '../data/heroes'
 const BTN = 150
 const NAMES: Record<HeroKind, string> = { archer: '箭雨', mage: '陨石', knight: '冲锋' }
 
-/** 一个大招按钮：英雄头像、充能进度（从下往上填满）、名字；充满时发光脉动。没上场的英雄是灰的。 */
-export class UltButton extends ColorRect {
+/** 图标贴图 128×128（按 2 倍存），按钮里显示成 BTN - 10。 */
+const ICON_SCALE = (BTN - 10) / 128
+const BAR_H = 10
+
+/** 一个大招按钮（原点在左上角，BTN × BTN）：大招图标（没充满时变暗）、名字、底下的充能条；充满时发光脉动。没上场的英雄是半透明的。 */
+export class UltButton extends Node2D {
+  readonly icon: Sprite2D
+  /** 充能条（ColorRect 原点在左上角：改 scale.x 从左往右填满）。 */
   readonly fill: ColorRect
   readonly glow: Sprite2D
   /** 0–1。 */
@@ -18,11 +24,12 @@ export class UltButton extends ColorRect {
   private _t = 0
 
   constructor(readonly kind: HeroKind) {
-    super({ size: v(BTN, BTN), color: 0x1e2830, inputPickable: true })
+    super({ inputPickable: true, hitArea: new Rect2(0, 0, BTN, BTN) })
     this.glow = this.add(new Sprite2D({ texture: ASSETS.glow, position: v(BTN / 2, BTN / 2), scale: v(3.4, 3.4), selfModulate: 0xffd060, blendMode: 'add', visible: false, zIndex: -1 }))
-    this.fill = this.add(new ColorRect({ size: v(BTN, BTN), color: 0x3a6a8a, alpha: 0.8 }))
-    this.add(new Sprite2D({ texture: ASSETS.heroes.get(`${kind}_body`), position: v(BTN / 2, BTN - 34), scale: v(ART_SCALE * 0.62, ART_SCALE * 0.62) }))
-    this.add(new Label({ text: NAMES[kind], fontSize: 26, fontWeight: 'bold', color: 0xffffff, align: 'center', verticalAlign: 'center', position: v(BTN / 2, BTN - 16), stroke: { color: 0x000000, width: 4 } }))
+    this.icon = this.add(new Sprite2D({ texture: ASSETS.ui.get(`icon_ult_${kind}`), position: v(BTN / 2, BTN / 2), scale: v(ICON_SCALE, ICON_SCALE) }))
+    this.add(new Label({ text: NAMES[kind], fontSize: 26, fontWeight: 'bold', color: 0xffffff, align: 'center', verticalAlign: 'center', position: v(BTN / 2, BTN - 12), stroke: { color: 0x000000, width: 4 } }))
+    const bar = this.add(new ColorRect({ position: v(16, BTN + 2), size: v(BTN - 32, BAR_H), color: 0x1a2028 }))
+    this.fill = bar.add(new ColorRect({ size: v(BTN - 32, BAR_H), color: 0x60c0ff }))
   }
 
   update(placed: boolean, charge: number, charged: boolean): void {
@@ -30,10 +37,9 @@ export class UltButton extends ColorRect {
     this.charge = charge
     this.charged = placed && charged
     this.alpha = placed ? 1 : 0.35
-    // 充能：从下往上填满（ColorRect 原点在左上角：改 y 和 scale.y）
-    this.fill.scale = v(1, charge)
-    this.fill.y = BTN * (1 - charge)
-    this.fill.color = this.charged ? 0xd09a30 : 0x3a6a8a
+    this.fill.scale = v(charge, 1)
+    this.fill.color = this.charged ? 0xffc040 : 0x60c0ff
+    this.icon.selfModulate = this.charged ? 0xffffff : 0x7a8088
     this.glow.visible = this.charged
   }
 
@@ -203,7 +209,7 @@ export class RainZone extends Node2D {
     const r = Math.sqrt(this.randf(0, 1)) * this.radius
     const tx = Math.cos(a) * r
     const ty = Math.sin(a) * r * 0.6
-    const arrow = this.add(new Sprite2D({ texture: ASSETS.arrow, position: v(tx + 60, ty - 220), rotation: Math.PI + 0.26 }))
+    const arrow = this.add(new Sprite2D({ texture: ASSETS.fx.get('fx_arrow'), position: v(tx + 60, ty - 220), rotation: Math.PI + 0.26, scale: v(ART_SCALE * 1.2, ART_SCALE * 1.2) }))
     arrow.createTween().to(arrow, { position: v(tx, ty) }, 0.12).call(() => arrow.queueFree())
   }
 }
@@ -224,13 +230,13 @@ export class MeteorStrike extends Node2D {
     this._ringScale = (radius * 2) / 256
     const s = this._ringScale
     this._ring = this.add(new Sprite2D({ texture: ASSETS.range, scale: v(s * 1.3, s * 1.3), selfModulate: 0xff6040 }))
-    this._rock = this.add(new Sprite2D({ texture: ASSETS.glow, position: v(-140, -700), scale: v(1.8, 1.8), selfModulate: 0xff7a20, blendMode: 'add' }))
+    this._rock = this.add(new Sprite2D({ texture: ASSETS.fx.get('fx_fireball'), position: v(-140, -700), scale: v(1.2, 1.2), blendMode: 'add' }))
   }
 
   override ready() {
     const s = this._ringScale
     this._ring.createTween().to(this._ring, { scale: v(s, s) }, ULT.meteor.delay, Ease.QuadIn)
-    this._rock.createTween().to(this._rock, { position: v(0, 0) }, ULT.meteor.delay, Ease.QuadIn).call(() => {
+    this._rock.createTween().to(this._rock, { position: v(0, 0), rotation: 8 }, ULT.meteor.delay, Ease.QuadIn).call(() => {
       this.land(this.x, this.y)
       this.queueFree()
     })

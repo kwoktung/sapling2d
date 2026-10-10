@@ -1,12 +1,12 @@
 import { Sprite2D, v } from 'sapling2d'
-import { ASSETS } from '../assets'
+import { ART_SCALE, ASSETS } from '../assets'
 import { Z } from '../config'
 import type { Enemy } from './Enemy'
 
 const SPEED = 1100
-const NORMAL_SCALE = v(1, 1)
+const NORMAL_SCALE = v(ART_SCALE, ART_SCALE)
 /** 爆头的箭画大一点。 */
-const HEADSHOT_SCALE = v(1.6, 1.6)
+const HEADSHOT_SCALE = v(ART_SCALE * 1.6, ART_SCALE * 1.6)
 /** 穿透箭碰到敌人的距离（像素）。 */
 export const PIERCE_RADIUS = 30
 
@@ -41,7 +41,7 @@ export class Arrow extends Sprite2D {
   private _left = 0
 
   constructor() {
-    super({ texture: ASSETS.arrow, visible: false, zIndex: Z.projectile })
+    super({ texture: ASSETS.fx.get('fx_arrow'), visible: false, zIndex: Z.projectile })
   }
 
   launch(x: number, y: number, target: Enemy, shot: Shot, range: number): void {

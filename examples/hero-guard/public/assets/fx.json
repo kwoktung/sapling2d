@@ -1,0 +1,154 @@
+{
+ "frames": {
+  "fx_slash": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 400,
+    "h": 400
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 400,
+    "h": 400
+   },
+   "sourceSize": {
+    "w": 400,
+    "h": 400
+   }
+  },
+  "fx_fireball": {
+   "frame": {
+    "x": 402,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "fx_ice": {
+   "frame": {
+    "x": 0,
+    "y": 402,
+    "w": 260,
+    "h": 260
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 260
+   },
+   "sourceSize": {
+    "w": 260,
+    "h": 260
+   }
+  },
+  "fx_lightning": {
+   "frame": {
+    "x": 402,
+    "y": 130,
+    "w": 120,
+    "h": 120
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 120,
+    "h": 120
+   },
+   "sourceSize": {
+    "w": 120,
+    "h": 120
+   }
+  },
+  "fx_poison": {
+   "frame": {
+    "x": 532,
+    "y": 0,
+    "w": 280,
+    "h": 280
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 280,
+    "h": 280
+   },
+   "sourceSize": {
+    "w": 280,
+    "h": 280
+   }
+  },
+  "fx_explosion": {
+   "frame": {
+    "x": 0,
+    "y": 664,
+    "w": 520,
+    "h": 520
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 520,
+    "h": 520
+   },
+   "sourceSize": {
+    "w": 520,
+    "h": 520
+   }
+  },
+  "fx_arrow": {
+   "frame": {
+    "x": 402,
+    "y": 252,
+    "w": 17,
+    "h": 88
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 17,
+    "h": 88
+   },
+   "sourceSize": {
+    "w": 17,
+    "h": 88
+   }
+  }
+ },
+ "meta": {
+  "app": "hero-guard/scripts/art",
+  "image": "fx.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 812,
+   "h": 1184
+  },
+  "scale": "1"
+ }
+}

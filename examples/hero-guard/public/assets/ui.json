@@ -1,0 +1,394 @@
+{
+ "frames": {
+  "ui_panel": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 201,
+    "h": 200
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 201,
+    "h": 200
+   },
+   "sourceSize": {
+    "w": 201,
+    "h": 200
+   }
+  },
+  "ui_button": {
+   "frame": {
+    "x": 0,
+    "y": 202,
+    "w": 220,
+    "h": 100
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 100
+   },
+   "sourceSize": {
+    "w": 220,
+    "h": 100
+   }
+  },
+  "icon_archer_multishot": {
+   "frame": {
+    "x": 222,
+    "y": 0,
+    "w": 129,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 129,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 129,
+    "h": 128
+   }
+  },
+  "icon_archer_sniper": {
+   "frame": {
+    "x": 222,
+    "y": 130,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_archer_poison": {
+   "frame": {
+    "x": 0,
+    "y": 304,
+    "w": 127,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 127,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 127,
+    "h": 128
+   }
+  },
+  "icon_mage_fire": {
+   "frame": {
+    "x": 129,
+    "y": 304,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_mage_frost": {
+   "frame": {
+    "x": 353,
+    "y": 0,
+    "w": 127,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 127,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 127,
+    "h": 128
+   }
+  },
+  "icon_mage_lightning": {
+   "frame": {
+    "x": 352,
+    "y": 130,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_knight_smash": {
+   "frame": {
+    "x": 259,
+    "y": 260,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_knight_whirl": {
+   "frame": {
+    "x": 0,
+    "y": 434,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_knight_guard": {
+   "frame": {
+    "x": 130,
+    "y": 434,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_generic_attackSpeed": {
+   "frame": {
+    "x": 260,
+    "y": 390,
+    "w": 125,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 125,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 125,
+    "h": 128
+   }
+  },
+  "icon_generic_damage": {
+   "frame": {
+    "x": 482,
+    "y": 0,
+    "w": 127,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 127,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 127,
+    "h": 128
+   }
+  },
+  "icon_generic_lives": {
+   "frame": {
+    "x": 387,
+    "y": 390,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_generic_ultCharge": {
+   "frame": {
+    "x": 389,
+    "y": 260,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_generic_xp": {
+   "frame": {
+    "x": 0,
+    "y": 564,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_ult_archer": {
+   "frame": {
+    "x": 130,
+    "y": 564,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_ult_mage": {
+   "frame": {
+    "x": 260,
+    "y": 520,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "icon_ult_knight": {
+   "frame": {
+    "x": 390,
+    "y": 520,
+    "w": 128,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  }
+ },
+ "meta": {
+  "app": "hero-guard/scripts/art",
+  "image": "ui.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 609,
+   "h": 692
+  },
+  "scale": "1"
+ }
+}

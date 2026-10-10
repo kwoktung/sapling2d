@@ -49,8 +49,14 @@ function rawFile(id: string): string | null {
 
 function promptFor(a: AssetSpec): string {
   const bg = a.background ?? DEFAULT_BG
-  const background = `Solid flat background color ${bg} filling the whole image (no gradient, no vignette, no shadow on it).`
+  const background =
+    a.key === false
+      ? a.background
+        ? `Pure black background (${a.background}) around the subject.`
+        : ''
+      : `Solid flat background color ${bg} filling the whole image (no gradient, no vignette, no shadow on it).`
   if (a.mode === 'edit') return `${a.prompt}\nKeep exactly the same art style, colors, outline and proportions as the reference image. ${background}`
+  if (a.plain) return `${a.prompt}\nNo text, no watermark, no border. ${background}`
   const style = readFileSync(join(ART, 'style.md'), 'utf8').trim()
   const anchor = STYLE_ANCHOR ? '\nMatch the art style of the reference image exactly (line weight, shading, palette, proportions), but draw the subject described here.' : ''
   return `${style}\n\nSubject: ${a.prompt}${anchor}\n${background}`
@@ -59,7 +65,7 @@ function promptFor(a: AssetSpec): string {
 async function generate(a: AssetSpec): Promise<void> {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY is not set')
-  const refs = [...(a.mode === 'generate' && STYLE_ANCHOR ? [STYLE_ANCHOR] : []), ...(a.refs ?? [])]
+  const refs = [...(a.mode === 'generate' && !a.plain && STYLE_ANCHOR ? [STYLE_ANCHOR] : []), ...(a.refs ?? [])]
   const parts: unknown[] = [{ text: promptFor(a) }]
   for (const r of refs) {
     const file = join(ART, r)
@@ -69,7 +75,7 @@ async function generate(a: AssetSpec): Promise<void> {
     const mimeType = bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png' : 'image/jpeg'
     parts.push({ inlineData: { mimeType, data: bytes.toString('base64') } })
   }
-  const body = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: '1:1' } } }
+  const body = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: a.aspect ?? '1:1' } } }
   for (let attempt = 1; ; attempt++) {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
       method: 'POST',
@@ -117,6 +123,12 @@ async function keyAll(): Promise<void> {
   for (const a of selected) {
     const raw = rawFile(a.id)
     if (!raw) throw new Error(`${a.id}: no raw image in art/raw/ (run gen first)`)
+    if (a.key === false) {
+      // 不抠图：原样转成 PNG（背景、黑底特效）
+      await sharp(raw).png().toFile(join(WORK, `${a.id}.png`))
+      console.log(`  copy  ${a.id}`)
+      continue
+    }
     const { data, info } = await sharp(raw).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
     const keyed = chromaKey({ data, width: info.width, height: info.height }, a.background ?? DEFAULT_BG)
     await sharp(Buffer.from(keyed.data), { raw: { width: keyed.width, height: keyed.height, channels: 4 } })
@@ -128,12 +140,12 @@ async function keyAll(): Promise<void> {
 
 async function resizeAll(): Promise<void> {
   for (const a of selected) {
-    const height = Math.round(a.displayHeight * 2)
+    const size = a.displayWidth ? { width: Math.round(a.displayWidth * 2) } : { height: Math.round(a.displayHeight * 2) }
     await sharp(join(WORK, `${a.id}.png`))
-      .resize({ height, fit: 'inside', kernel: 'lanczos3' })
+      .resize({ ...size, fit: 'inside', kernel: 'lanczos3' })
       .png({ compressionLevel: 9 })
       .toFile(join(SPRITES, `${a.id}.png`))
-    console.log(`  size  ${a.id} → ${height}px tall`)
+    console.log(`  size  ${a.id} → ${a.displayWidth ? `${size.width}px wide` : `${size.height}px tall`}`)
   }
 }
 
@@ -178,13 +190,21 @@ async function packAll(): Promise<void> {
         ...(r.data.pivot ? { pivot: r.data.pivot } : {}),
       }
     }
+    // 调色板量化（有损，256 色 + 抖动）：卡通平涂的图看不出差别，体积大约是原来的 1/3（小游戏包只有 4 MB）
     await sharp({ create: { width: bin.width, height: bin.height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
       .composite(layers)
-      .png({ compressionLevel: 9 })
+      .png({ compressionLevel: 9, palette: true, quality: 90, effort: 10 })
       .toFile(join(PUBLIC, `${name}.png`))
     const json = { frames, meta: { app: 'hero-guard/scripts/art', image: `${name}.png`, format: 'RGBA8888', size: { w: bin.width, h: bin.height }, scale: '1' } }
     writeFileSync(join(PUBLIC, `${name}.json`), `${JSON.stringify(json, null, 1)}\n`)
     console.log(`  pack  ${name}.png ${bin.width}×${bin.height} (${list.length} sprites)`)
+  }
+  // 不进图集、单独发布的素材（背景）
+  for (const a of selected.filter((x) => x.publish)) {
+    const out = join(PUBLIC, `${a.id}.${a.publish}`)
+    const img = sharp(join(SPRITES, `${a.id}.png`))
+    await (a.publish === 'jpg' ? img.flatten({ background: '#000000' }).jpeg({ quality: 82, mozjpeg: true }) : img.png({ compressionLevel: 9, palette: true, quality: 90 })).toFile(out)
+    console.log(`  publish ${a.id}.${a.publish}`)
   }
 }
 

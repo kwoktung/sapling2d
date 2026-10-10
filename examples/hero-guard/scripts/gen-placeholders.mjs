@@ -86,27 +86,9 @@ const slot = canvas(110, 110)
 ellipse(slot, 0, 55, 55, 52, 52, 0x3a4a3a, 0x6a806a, 5)
 save('slot.png', slot)
 
-const arrow = canvas(8, 36)
-rect(arrow, 0, 3, 6, 2, 30, 0xe8d8b0)
-for (let y = 0; y < 8; y++) rect(arrow, 0, 4 - y / 2, y, Math.max(1, y), 1, 0xffffff)
-save('arrow.png', arrow)
-
 save('glow.png', softCircle(64, 0.3))
 save('spark.png', softCircle(12, 0.4))
 save('dot.png', softCircle(14, 0.6))
 save('range.png', ring(256, 4, 160))
 
-// 刀光：上方 120° 的弧（白色，边缘淡出），圆心在图中心；游戏里叠加发光、染色、按射程缩放
-const slash = canvas(200, 200)
-for (let y = 0; y < 200; y++) {
-  for (let x = 0; x < 200; x++) {
-    const dx = x + 0.5 - 100, dy = y + 0.5 - 100
-    const d = Math.hypot(dx, dy)
-    const angle = Math.atan2(dx, -dy) // 0 = 正上方
-    if (d > 98 || d < 60 || Math.abs(angle) > Math.PI / 3) continue
-    const edge = Math.min(1, (98 - d) / 8, (d - 60) / 20, (Math.PI / 3 - Math.abs(angle)) / 0.3)
-    setPx(slash, x, y, 0xffffff, Math.round(230 * edge))
-  }
-}
-save('slash.png', slash)
 console.log('placeholders written to public/assets/')

@@ -150,7 +150,7 @@ export class Node2D extends Node {
     this._version++
   }
 
-  /** 同一父节点下的绘制顺序，数值大的画在上面。 */
+  /** 同一父节点下的绘制顺序，数值大的画在上面；父节点自己算 0，所以为负的子节点画在父节点下面。点击命中按同样的顺序。 */
   get zIndex(): number {
     return this._zIndex
   }

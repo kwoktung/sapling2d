@@ -1,6 +1,6 @@
-import type { Container, Sprite, Text } from 'pixi.js'
+import { NineSliceSprite as PixiNineSlice, type Container, type Sprite, type Text } from 'pixi.js'
 import { describe, expect, it } from 'vitest'
-import { AnimatedSprite2D, atlas, ColorRect, Label, Node, Node2D, Particles2D, Scene, sheet, Sprite2D, tex, v } from 'sapling2d'
+import { AnimatedSprite2D, atlas, ColorRect, Label, NineSliceSprite, Node, Node2D, Particles2D, Scene, sheet, Sprite2D, tex, v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { PixiRenderer } from '../src/render/PixiRenderer'
 
@@ -160,6 +160,42 @@ describe('render sync', () => {
     s.selfModulate = 0x808080
     sync()
     expect([c.alpha, sprite.tint]).toEqual([1, 0x808080])
+  })
+})
+
+describe('NineSliceSprite', () => {
+  it('写到 Pixi 的 NineSliceSprite：贴图、四个边距、尺寸、selfModulate；原点在左上角；改尺寸后跟着变', async () => {
+    const g = await createTestGame({ main: Scene })
+    const r = PixiRenderer._createForSyncTests()
+    const panel = atlas('nine-ui.png', {
+      frames: { panel: { frame: { x: 0, y: 0, w: 60, h: 60 }, trimmed: true, spriteSourceSize: { x: 2, y: 2, w: 60, h: 60 }, sourceSize: { w: 64, h: 64 } } },
+    })
+    panel.texture._setLoaded({ width: 64, height: 64 }, 64, 64)
+    const n = g.scene.add(new NineSliceSprite({ name: 'Card', texture: panel.get('panel'), margins: { left: 10, top: 12, right: 14, bottom: 16 }, size: v(300, 120), selfModulate: 0xffe0a0 }))
+    r.sync(g.tree)
+    const d = view(n)!.children[0] as PixiNineSlice
+    expect(d).toBeInstanceOf(PixiNineSlice)
+    expect([d.leftWidth, d.topHeight, d.rightWidth, d.bottomHeight, d.width, d.height, d.tint]).toEqual([10, 12, 14, 16, 300, 120, 0xffe0a0])
+    expect([d.anchor.x, d.anchor.y]).toEqual([0, 0])
+    expect(d.texture.orig.width).toBe(64) // 裁掉透明边的帧：按原始尺寸
+
+    n.size = v(200, 80)
+    n.margins = 8
+    r.sync(g.tree)
+    expect([d.width, d.height, d.leftWidth, d.bottomHeight]).toEqual([200, 80, 8, 8])
+  })
+
+  it('点击区域是 (0, 0)–size；dump；边距不合法时报错；size 能补间', async () => {
+    const g = await createTestGame({ main: Scene })
+    const n = g.scene.add(new NineSliceSprite({ name: 'Btn', margins: 6, size: v(100, 40) }))
+    expect([n.hitTest(v(0, 0)), n.hitTest(v(100, 40)), n.hitTest(v(101, 20)), n.hitTest(v(-1, 0))]).toEqual([true, true, false, false])
+    expect(g.dump()).toContain('Btn (NineSliceSprite) position=(0, 0) texture=null size=(100, 40) margins=6')
+    n.margins = { left: 1, top: 2, right: 3, bottom: 4 }
+    expect(g.dump()).toContain('margins=1,2,3,4')
+    expect(() => (n.margins = -1)).toThrow(/margin left must be a finite number >= 0, got -1/)
+    n.createTween().to(n, { size: v(200, 40) }, 0.1)
+    g.stepSeconds(0.2)
+    expect(n.size.x).toBe(200)
   })
 })
 

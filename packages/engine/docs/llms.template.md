@@ -267,6 +267,17 @@ shake(camera: Camera2D, strength: number, duration: number) {
 - 透明度用 `alpha`；`color`、`size` 都能补间（颜色按 RGB 通道插值）。没有 `hitArea` 时点击区域就是这个矩形（无头模式下也是），所以也能当简单的按钮底板。**当按钮或遮罩用时要设 `inputPickable: true`**：不设的话照常画出来，但点不到、也挡不住下面的点击，没有任何提示。
 - 和贴图一起合批绘制（白色贴图染色），几十个血条不会增加绘制调用。圆、圆环之类的形状用贴图加 `modulate`。
 
+### 九宫格（NineSliceSprite）
+
+<!-- example:nine-slice -->
+
+<!-- example:nine-slice#test -->
+
+- `NineSliceSprite`（继承 Node2D）：`texture`、`margins`（`{ left, top, right, bottom }`，或一个数字表示四边相同；像素，按贴图裁剪前的原始尺寸）、`size`。四个角不缩放，上下边只横向拉伸，左右边只纵向拉伸，中间两个方向都拉伸。
+- 原点在**左上角**（和 `ColorRect` 一样）；`size` 能补间。没有 `hitArea` 时点击区域就是 `(0, 0)–size`（无头模式下也是），设 `inputPickable: true` 就能当按钮。
+- 边框贴图做成**正方形、四边是花边、中间可以拉伸**的样子；`margins` 就是花边的宽度。`size` 小于两边边距之和时，四个角按比例缩小。
+- `selfModulate` 给边框染色（按钮按下时变暗），`modulate`、`alpha`、`blendMode` 照常；图集里裁掉透明边的帧也能用。
+
 ### 场景切换与存档
 
 <!-- example:scenes-storage -->
@@ -370,6 +381,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `AnimatedSprite2D` | 帧动画（继承 Sprite2D） | `frames` / `animations` `fps` `loop` `autoplay` `play()` `pause()` `stop()` `frame` `speedScale` `isPlaying` `animation`；信号 `frameChanged` `animationFinished` |
 | `Label` | 文字 | `text` `fontSize` `color` `fontWeight` `align` `verticalAlign` `stroke` `wrapWidth` `lineHeight` |
 | `ColorRect` | 纯色矩形（原点在左上角） | `size` `color` `rect` |
+| `NineSliceSprite` | 九宫格（界面边框，原点在左上角） | `texture` `margins` `size` `rect` |
 | `Particles2D` | 粒子发射器（粒子不是节点） | `texture` `amount` `lifetime` `lifetimeRandomness` `emitting` `oneShot` `rate` `direction` `spread` `speedMin` `speedMax` `gravity` `damping` `scaleStart` `scaleEnd` `alphaStart` `alphaEnd` `localCoords` `emit()` `restart()` `aliveCount`；信号 `finished` |
 | `RigidBody2D` | 动态刚体 | `mass` `friction` `bounce` `gravityScale` `linearVelocity` `angularVelocity` `lockRotation` `ccd` `applyCentralImpulse` `applyForce` `sleeping`；信号 `bodyEntered` `bodyExited` |
 | `StaticBody2D` | 静态刚体（地面、墙） | `friction` `bounce` |

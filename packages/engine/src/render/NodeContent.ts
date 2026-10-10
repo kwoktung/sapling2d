@@ -1,12 +1,14 @@
-import { Matrix, Particle, ParticleContainer, Sprite, Text, Texture as PixiTexture, type Container, type TextStyleOptions } from 'pixi.js'
-// ParticleContainer 的渲染管线是可选扩展（skipExtensionImports 不会自动加载）
+import { Matrix, NineSliceSprite as PixiNineSlice, Particle, ParticleContainer, Sprite, Text, Texture as PixiTexture, type Container, type TextStyleOptions } from 'pixi.js'
+// ParticleContainer 和 NineSliceSprite 的渲染管线是可选扩展（skipExtensionImports 不会自动加载）
 import 'pixi.js/particle-container'
+import 'pixi.js/sprite-nine-slice'
 import type { Texture } from '../core/assets'
 import type { Node2D } from '../core/Node2D'
 import { invertAffine } from '../math/Affine'
 import type { Rect2 } from '../math/Rect2'
 import { ColorRect } from '../nodes/ColorRect'
 import { Label } from '../nodes/Label'
+import { NineSliceSprite } from '../nodes/NineSliceSprite'
 import { Particles2D } from '../nodes/Particles2D'
 import { Sprite2D } from '../nodes/Sprite2D'
 import { TileMapLayer } from '../nodes/TileMapLayer'
@@ -49,6 +51,7 @@ export interface NodeContent {
 export function createContent(node: Node2D, ctx: SyncContext): NodeContent | null {
   if (node instanceof Sprite2D) return new SpriteContent(ctx)
   if (node instanceof ColorRect) return new ColorRectContent(ctx)
+  if (node instanceof NineSliceSprite) return new NineSliceContent(ctx)
   if (node instanceof Label) return new LabelContent()
   if (node instanceof Particles2D) return new ParticlesContent(ctx)
   if (node instanceof TileMapLayer) return new TileMapContent(node, ctx)
@@ -106,6 +109,36 @@ class SpriteContent implements NodeContent {
   destroy(): void {
     this.display.destroy()
     this.overlay?.destroy()
+  }
+}
+
+/** NineSliceSprite：Pixi 的 NineSliceSprite（四角不缩放、边和中间拉伸），原点在左上角。 */
+class NineSliceContent implements NodeContent {
+  readonly display: PixiNineSlice
+  /** 上次同步时贴图句柄背后的资源，用来发现“贴图后来才加载完成”。 */
+  private _resource: unknown = undefined
+
+  constructor(ctx: SyncContext) {
+    this.display = new PixiNineSlice({ label: CONTENT_LABEL, texture: PixiTexture.EMPTY, roundPixels: ctx.pixelArt })
+  }
+
+  sync(node: NineSliceSprite, ctx: SyncContext, changed: boolean): void {
+    const resource = node.texture?._resource
+    if (!changed && resource === this._resource) return
+    this._resource = resource
+    const s = this.display
+    s.texture = node.texture ? ctx.textures.get(node.texture) : PixiTexture.EMPTY
+    const m = node.margins
+    s.leftWidth = m.left
+    s.topHeight = m.top
+    s.rightWidth = m.right
+    s.bottomHeight = m.bottom
+    s.setSize(node.size.x, node.size.y)
+    s.tint = node.selfModulate
+  }
+
+  destroy(): void {
+    this.display.destroy()
   }
 }
 

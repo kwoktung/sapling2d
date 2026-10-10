@@ -323,6 +323,17 @@ enemy.createTween().to(enemy, { modulate: 0xffffff }, 0.2)
 fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 ```
 
+### 受击闪白（Sprite2D.flash）
+
+<!-- example:flash -->
+
+<!-- example:flash#test -->
+
+- `flash`（0–1，默认 0）：在贴图的形状上叠一层 `flashColor`（默认白色），1 时整个形状变成纯色、透明的地方仍然透明。受击设成 1 再补间回 0；反复受击时先 `kill()` 上一个补间。`flashColor` 也能补间（按 RGB 通道）。
+- 和 `modulate` 的区别：`modulate` 是乘法，只能变暗或偏色；`flash` 能把颜色变成白色（或任何亮色）。`modulate`、`alpha`、`blendMode` 照常作用在闪光上（节点被 `modulate` 染蓝时闪出来是淡蓝）。
+- 帧动画、图集的帧、翻转、`offset` 都照常对齐；只作用于这个精灵自己的贴图，不影响子节点（Sprite2D 及子类：`AnimatedSprite2D`、`TouchScreenButton`）。
+- 代价：一张图第一次闪白时，在显存里生成一张**同样大小**的白色剪影，之后这张图的所有帧、所有精灵共用；切换场景卸载图片时一起释放。闪白中的精灵多画一个剪影精灵，和原图合批，不增加绘制调用。大图集闪一次就多占一份显存：给要闪白的角色单独打一张图集。
+
 ### 叠加发光（blendMode）
 
 <!-- example:blend-mode -->
@@ -341,7 +352,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `Node` | 基类 | `add` `remove` `queueFree` `callDeferred` `addToGroup` `createTween` `processMode` `tree` |
 | `Node2D` | 带变换 | `position` `x` `y` `rotation` `scale` `visible` `zIndex` `alpha` `modulate` `selfModulate` `blendMode` `globalPosition` `toLocal` `toGlobal`；`inputPickable` `hitArea` + 信号 `pointerDown` `pointerMove` `pointerUp` `clicked` |
 | `Scene` | 场景根 | `static assets` |
-| `Sprite2D` | 贴图 | `texture` `centered`（默认 true）`offset` `flipH` `flipV` |
+| `Sprite2D` | 贴图 | `texture` `centered`（默认 true）`offset` `flipH` `flipV` `flash` `flashColor` |
 | `AnimatedSprite2D` | 帧动画（继承 Sprite2D） | `frames` / `animations` `fps` `loop` `autoplay` `play()` `pause()` `stop()` `frame` `speedScale` `isPlaying` `animation`；信号 `frameChanged` `animationFinished` |
 | `Label` | 文字 | `text` `fontSize` `color` `fontWeight` `align` `verticalAlign` `stroke` `wrapWidth` `lineHeight` |
 | `ColorRect` | 纯色矩形（原点在左上角） | `size` `color` `rect` |
@@ -386,7 +397,7 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 |---|---|
 | 所有节点 | `groups`、`processMode` |
 | `Node2D` 及子类 | `position`（总是显示）、`rotationDegrees`、`scale`、`visible`、`zIndex`、`alpha`、`modulate` / `selfModulate`（`#ff6666` 形式）、`blendMode` |
-| `Sprite2D` | `texture`（路径；图集的帧是 `sprites.png#enemy_red` / `explosion.png#3`）、`centered`、`offset`、`flipH`、`flipV` |
+| `Sprite2D` | `texture`（路径；图集的帧是 `sprites.png#enemy_red` / `explosion.png#3`）、`centered`、`offset`、`flipH`、`flipV`、`flash`、`flashColor` |
 | `AnimatedSprite2D` | 同 Sprite2D，加 `animation`（有多套时）、`frame`（总是显示）、`playing` |
 | `Label` | `text`（总是显示，含空格时加引号）、`fontSize`、`align` |
 | `ColorRect` | `size`、`color`（总是显示） |

@@ -1,6 +1,6 @@
 // 生成灰盒原型的占位图：node scripts/gen-assets.mjs
 // - 英雄：每种一张 6 帧的横条（96×96 一帧）：0–1 待机，2–5 攻击（前摇下蹲 → 蓄力 → 出手拉长 → 收招）
-// - 怪物和它的白色剪影（受击闪白用）、槽位、箭、火球、爆炸、刀光、火花、射程圈
+// - 怪物、槽位、箭、火球、爆炸、刀光、火花、射程圈
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 
@@ -149,20 +149,14 @@ for (const [name, look] of Object.entries(HEROES)) {
 
 // ---------------------------------------------------------------- 怪物
 
-/** 怪物 56×56：带描边的圆和眼睛。`white` 时整只画成白色剪影（受击闪白）。 */
-function enemy(white) {
-  const c = canvas(56, 56)
-  ellipse(c, 0, 28, 30, 25, 24, white ? 0xffffff : 0xd0503c, white ? 0xffffff : 0x6a1e14)
-  if (!white) {
-    rect(c, 0, 16, 22, 7, 8, 0xffffff)
-    rect(c, 0, 33, 22, 7, 8, 0xffffff)
-    rect(c, 0, 18, 25, 4, 4, 0x1a1a1a)
-    rect(c, 0, 35, 25, 4, 4, 0x1a1a1a)
-  }
-  return c
-}
-save('enemy.png', enemy(false))
-save('enemy_flash.png', enemy(true))
+/** 怪物 56×56：带描边的圆和眼睛（受击闪白用引擎的 Sprite2D.flash，不需要剪影图）。 */
+const enemy = canvas(56, 56)
+ellipse(enemy, 0, 28, 30, 25, 24, 0xd0503c, 0x6a1e14)
+rect(enemy, 0, 16, 22, 7, 8, 0xffffff)
+rect(enemy, 0, 33, 22, 7, 8, 0xffffff)
+rect(enemy, 0, 18, 25, 4, 4, 0x1a1a1a)
+rect(enemy, 0, 35, 25, 4, 4, 0x1a1a1a)
+save('enemy.png', enemy)
 
 // ---------------------------------------------------------------- 场地和特效
 

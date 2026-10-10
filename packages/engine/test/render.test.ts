@@ -163,6 +163,60 @@ describe('render sync', () => {
   })
 })
 
+describe('flash（闪白）', () => {
+  it('第一次闪白时才创建覆盖层：在内容层上面、子节点下面，跟随贴图的锚点、翻转和偏移；染成 flashColor，透明度是 flash', async () => {
+    const g = await createTestGame({ main: Scene })
+    const r = PixiRenderer._createForSyncTests()
+    const s = g.scene.add(new Sprite2D({ name: 'S', texture: tex('flash-enemy.png'), offset: v(3, 4), flipH: true }))
+    s.add(new Node2D({ name: 'Child' }))
+    r.sync(g.tree)
+    expect(labels(view(s)!)).toEqual(['__content', 'Child']) // 从没闪过：没有覆盖层
+
+    s.flash = 0.75
+    s.flashColor = 0xff4040
+    r.sync(g.tree)
+    expect(labels(view(s)!)).toEqual(['__content', '__flash', 'Child'])
+    const o = view(s)!.children[1] as Sprite
+    expect([o.visible, o.alpha, o.tint, o.anchor.x, o.x, o.y, o.scale.x]).toEqual([true, 0.75, 0xff4040, 0.5, 3, 4, -1])
+
+    s.flash = 0 // 不闪时隐藏，覆盖层留着下次用
+    r.sync(g.tree)
+    expect([labels(view(s)!), o.visible]).toEqual([['__content', '__flash', 'Child'], false])
+  })
+
+  it('叶子节点（没有子节点）也会挂上覆盖层；节点销毁时一起销毁', async () => {
+    const g = await createTestGame({ main: Scene })
+    const r = PixiRenderer._createForSyncTests()
+    const s = g.scene.add(new Sprite2D({ texture: tex('flash-leaf.png') }))
+    r.sync(g.tree)
+    s.flash = 1
+    r.sync(g.tree)
+    const o = view(s)!.children[1] as Sprite
+    expect(o.label).toBe('__flash')
+    s.queueFree()
+    g.step()
+    r.sync(g.tree)
+    expect(o.destroyed).toBe(true)
+  })
+
+  it('截断到 0–1；不是默认值时出现在 dump 里；flash 和 flashColor 都能补间', async () => {
+    const g = await createTestGame({ main: Scene })
+    const s = g.scene.add(new Sprite2D({ name: 'S', flash: 3 }))
+    expect(s.flash).toBe(1)
+    s.flash = -1
+    expect(s.flash).toBe(0)
+    s.flash = 0.5
+    s.flashColor = 0xff0000
+    expect(g.dump()).toContain('S (Sprite2D) position=(0, 0) texture=null flash=0.5 flashColor=#ff0000')
+    s.createTween().to(s, { flash: 0, flashColor: 0x0000ff }, 0.1)
+    g.stepSeconds(0.05)
+    expect(s.flash).toBeCloseTo(0.25, 1)
+    expect(s.flashColor).toBe(0x800080) // 按 RGB 通道插值
+    g.stepSeconds(0.1)
+    expect([s.flash, s.flashColor]).toEqual([0, 0x0000ff])
+  })
+})
+
 describe('blendMode', () => {
   it('写到节点容器上：inherit 跟随父容器（Pixi 的默认值），add 作用于整棵子树，子节点可以设回 normal', async () => {
     const g = await createTestGame({ main: Scene })

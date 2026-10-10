@@ -96,7 +96,7 @@ export class PixiRenderer implements Renderer {
   private constructor(renderer: WebGLRenderer, pixelArt: boolean) {
     this._renderer = renderer
     this._pixelArt = pixelArt
-    this._textures = new TextureCache(pixelArt)
+    this._textures = new TextureCache(pixelArt, renderer)
     this._tileMaps = new TileMapRenderer({ pixelArt, compileShaders: !!renderer, textures: this._textures })
     this._ctx = { pixelArt, textures: this._textures, tileMaps: this._tileMaps, textResolution: 1, visibleRect: new Rect2(0, 0, 0, 0), offsetX: 0, offsetY: 0 }
     this._worldContainer.sortableChildren = true
@@ -199,21 +199,22 @@ export class PixiRenderer implements Renderer {
   /**
    * 同步一组兄弟节点，并让 `parent` 的子显示对象与它们的顺序一致。
    * `depth` 选用哪个复用数组：每层递归一个，同一层的兄弟调用依次复用（上一个用完才轮到下一个）。
-   * `content`：`parent` 所属节点的内容层（永远在第 0 个、最底层），没有时为 null。
+   * `content`：`parent` 所属节点的内容（内容层永远在第 0 个、最底层，有覆盖层时紧跟在后面），没有时为 null。
    */
-  private _syncChildren(nodes: readonly Node[], parent: Container, depth: number, content: Container | null): void {
+  private _syncChildren(nodes: readonly Node[], parent: Container, depth: number, content: NodeContent | null): void {
     const ordered = (this._orderedByDepth[depth] ??= [])
     ordered.length = 0
     for (let i = 0; i < nodes.length; i++) this._visit(nodes[i]!, ordered, depth)
 
-    // 保持顺序：内容层在第 0 个，之后是子节点的容器
+    // 保持顺序：内容层、覆盖层（闪白）在前，之后是子节点的容器
     const current = parent.children
-    const offset = content ? 1 : 0
-    let inOrder = current.length === offset + ordered.length
+    const offset = contentCount(content)
+    let inOrder = current.length === offset + ordered.length && (offset < 2 || current[1] === content!.overlay)
     for (let i = 0; inOrder && i < ordered.length; i++) inOrder = current[offset + i] === ordered[i]
     if (inOrder) return
     parent.removeChildren()
-    if (content) parent.addChild(content)
+    if (content) parent.addChild(content.display)
+    if (content?.overlay) parent.addChild(content.overlay)
     for (let i = 0; i < ordered.length; i++) parent.addChild(ordered[i]!)
   }
 
@@ -231,9 +232,9 @@ export class PixiRenderer implements Renderer {
     }
     const view = this._syncNode(node)
     ordered.push(view.container)
-    // 叶子节点（大多数子弹、精灵）不用递归：除非它的容器里还留着已经移走的子节点
-    const content = view.content ? view.content.display : null
-    if (children.length > 0 || view.container.children.length > (content ? 1 : 0)) this._syncChildren(children, view.container, depth + 1, content)
+    // 叶子节点（大多数子弹、精灵）不用递归：除非它的容器里还留着已经移走的子节点，或者内容刚多了覆盖层
+    const content = view.content
+    if (children.length > 0 || view.container.children.length !== contentCount(content)) this._syncChildren(children, view.container, depth + 1, content)
   }
 
   private _visitLayer(node: CanvasLayerLike, depth: number): void {
@@ -374,4 +375,9 @@ export class PixiRenderer implements Renderer {
     this._views.delete(node)
     if (node._view === view.container) node._view = null
   }
+}
+
+/** 节点容器开头属于节点自己内容的显示对象个数：内容层 + 覆盖层（有的话）。 */
+function contentCount(content: NodeContent | null): number {
+  return content ? (content.overlay ? 2 : 1) : 0
 }

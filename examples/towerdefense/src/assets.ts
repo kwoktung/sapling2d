@@ -6,8 +6,6 @@ export const ASSETS = {
   mage: sheet('hero_mage.png', { columns: 6, rows: 1 }),
   knight: sheet('hero_knight.png', { columns: 6, rows: 1 }),
   enemy: tex('enemy.png'),
-  /** 怪物的白色剪影：受击闪白（引擎的 modulate 只能变暗，不能变亮）。 */
-  enemyFlash: tex('enemy_flash.png'),
   slot: tex('slot.png'),
   arrow: tex('arrow.png'),
   glow: tex('glow.png'),

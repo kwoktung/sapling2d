@@ -5,12 +5,10 @@ import type { CurvePath } from '../path'
 
 /**
  * 怪物：沿 CurvePath 匀速前进（按弧长）。`dist` 是走过的距离，`remaining` 越小越靠近底线（英雄优先打它）。
- * 受击时白色剪影闪一下、沿路径往回推一点；头顶血条。
+ * 受击时闪白（`Sprite2D.flash`）、沿路径往回推一点；头顶血条。
  */
 export class Enemy extends Node2D {
   readonly body = new Sprite2D({ texture: ASSETS.enemy })
-  /** 受击闪白：叠在身体上的白色剪影（验证清单“受击闪白”的绕法：每只怪多一个精灵、多一张图）。 */
-  readonly flash = new Sprite2D({ texture: ASSETS.enemyFlash, visible: false })
   readonly barBack = new ColorRect({ size: v(ENEMY.barWidth, ENEMY.barHeight), color: 0x301818, position: v(-ENEMY.barWidth / 2, -40), visible: false })
   readonly barFill = new ColorRect({ size: v(ENEMY.barWidth, ENEMY.barHeight), color: 0x60d060 })
   dist = 0
@@ -31,7 +29,6 @@ export class Enemy extends Node2D {
     super()
     this.hp = maxHp
     this.add(this.body)
-    this.add(this.flash)
     this.add(this.barBack)
     this.barBack.add(this.barFill)
     this._move(0)
@@ -45,8 +42,8 @@ export class Enemy extends Node2D {
     if (this.dead) return
     this._move(this.speed * dt)
     if (this._flashLeft > 0) {
-      this._flashLeft -= dt
-      if (this._flashLeft <= 0) this.flash.visible = false
+      this._flashLeft = Math.max(0, this._flashLeft - dt)
+      this.body.flash = this._flashLeft / ENEMY.flashTime // 1 → 0 淡出
     }
     if (this.dist >= this.path.length) this.leaked = true
   }
@@ -55,7 +52,7 @@ export class Enemy extends Node2D {
   damage(amount: number): boolean {
     if (this.dead) return false
     this.hp -= amount
-    this.flash.visible = true
+    this.body.flash = 1
     this._flashLeft = ENEMY.flashTime
     this._move(-ENEMY.knockback)
     this.barBack.visible = true

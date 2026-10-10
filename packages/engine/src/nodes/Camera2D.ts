@@ -69,23 +69,17 @@ export class Camera2D extends Node2D {
   set enabled(value: boolean) {
     if (this._enabled === value) return
     this._enabled = value
-    if (!this.isInsideTree) return
-    const tree = this.tree
-    if (!value && tree._currentCamera === this) tree._pickCamera()
-    else if (value && !tree._currentCamera) this.makeCurrent()
+    if (this.isInsideTree) this.tree._cameraManager.enabledChanged(this)
   }
 
   /** 是否是当前相机。 */
   get isCurrent(): boolean {
-    return this.isInsideTree && this.tree._currentCamera === this
+    return this.isInsideTree && this.tree._cameraManager.current === this
   }
 
   /** 成为当前相机（必须在树里且启用）。画面直接跳到它的位置，不平滑。 */
   makeCurrent(): void {
-    if (!this._enabled) throw new Error(`Camera2D "${this.name}" is disabled; set enabled = true before makeCurrent().`)
-    const tree = this.tree
-    tree._currentCamera = this
-    this._centerValid = false
+    this.tree._cameraManager.makeCurrent(this)
   }
 
   /** 平滑跟随时，下一次更新直接跳到目标位置（瞬移、换关时用）。 */
@@ -101,19 +95,14 @@ export class Camera2D extends Node2D {
   }
 
   override _onEnterTree(): void {
-    const tree = this.tree
-    tree._cameras.push(this)
-    if (this._enabled && !tree._currentCamera) this.makeCurrent()
+    this.tree._cameraManager.add(this)
   }
 
   override _onExitTree(): void {
-    const tree = this.tree
-    const i = tree._cameras.indexOf(this)
-    if (i >= 0) tree._cameras.splice(i, 1)
-    if (tree._currentCamera === this) tree._pickCamera()
+    this.tree._cameraManager.remove(this)
   }
 
-  /** @internal 每帧 process 之后由 SceneTree 对当前相机调用：更新画面中心（世界坐标）。 */
+  /** @internal 每帧 process 之后由 `CameraManager` 对当前相机调用：更新画面中心（世界坐标）。 */
   _step(dt: number): void {
     this._computeTarget()
     if (!this._centerValid || !this.positionSmoothingEnabled) {

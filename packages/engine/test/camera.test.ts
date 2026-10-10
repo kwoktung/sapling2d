@@ -96,7 +96,7 @@ describe('Camera2D', () => {
     expect(() => b.makeCurrent()).toThrow(/disabled/)
     a.queueFree()
     g.step()
-    expect(g.tree._currentCamera).toBeNull()
+    expect(g.tree._cameraManager.current).toBeNull()
     expect(center()).toBe(375)
     b.enabled = true
     g.step()

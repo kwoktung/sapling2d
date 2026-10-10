@@ -82,7 +82,10 @@ class SpriteContent implements NodeContent {
     this._resource = resource
     const s = this.display
     s.texture = node.texture ? ctx.textures.get(node.texture) : PixiTexture.EMPTY
-    s.anchor.set(node.centered ? 0.5 : 0)
+    // centered：有锚点（TexturePacker 的 pivot）用锚点，否则用中心；锚点和 Pixi 的 anchor 一样相对裁剪前的原始尺寸
+    const pivot = node.centered ? (node.texture?.pivot ?? null) : null
+    if (pivot) s.anchor.set(pivot.x, pivot.y)
+    else s.anchor.set(node.centered ? 0.5 : 0)
     s.position.set(node.offset.x, node.offset.y)
     s.scale.set(node.flipH ? -1 : 1, node.flipV ? -1 : 1)
     s.tint = node.selfModulate

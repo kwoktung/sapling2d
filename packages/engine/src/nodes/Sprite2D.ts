@@ -5,7 +5,7 @@ import { Vector2 } from '../math/Vector2'
 
 export interface Sprite2DOptions extends Node2DOptions {
   texture?: Texture | null
-  /** 以贴图中心为原点（默认 true）。为 false 时原点在左上角。 */
+  /** 以贴图的锚点为原点（默认 true）：图集的帧带锚点（TexturePacker 的 pivot）时用它，否则用中心。为 false 时原点在左上角。 */
   centered?: boolean
   /** 贴图相对节点原点的偏移（像素）。 */
   offset?: Vector2
@@ -120,13 +120,14 @@ export class Sprite2D extends Node2D {
     return COLOR_PROPS
   }
 
-  /** 贴图在局部坐标中占据的矩形（已考虑 centered 和 offset）；没有贴图或尺寸未知时为 null。 */
+  /** 贴图在局部坐标中占据的矩形（已考虑 centered、贴图的锚点和 offset）；没有贴图或尺寸未知时为 null。 */
   get rect(): Rect2 | null {
     const t = this._texture
     if (!t || t.width === 0 || t.height === 0) return null
-    const x = (this._centered ? -t.width / 2 : 0) + this._offset.x
-    const y = (this._centered ? -t.height / 2 : 0) + this._offset.y
-    return new Rect2(x, y, t.width, t.height)
+    const pivot = this._centered ? t.pivot : null
+    const ax = this._centered ? (pivot ? pivot.x : 0.5) : 0
+    const ay = this._centered ? (pivot ? pivot.y : 0.5) : 0
+    return new Rect2(-ax * t.width + this._offset.x, -ay * t.height + this._offset.y, t.width, t.height)
   }
 
   /** 没有设置 hitArea 时，用贴图范围做点击检测。 */

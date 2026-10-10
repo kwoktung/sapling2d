@@ -56,6 +56,22 @@ describe('atlas', () => {
     expect([a.get('a').width, a.get('a').height]).toEqual([5, 6])
   })
 
+  it('pivot / anchor：帧的锚点（0–1，相对原始尺寸）；正好是中心时当作没有；不是有限数时报错', () => {
+    const a = atlas('anim-pivot.png', {
+      frames: {
+        feet: { frame: { x: 0, y: 0, w: 10, h: 10 }, pivot: { x: 0.5, y: 0.9 } },
+        pixi: { frame: { x: 10, y: 0, w: 10, h: 10 }, anchor: { x: 0.25, y: 1 } },
+        center: { frame: { x: 20, y: 0, w: 10, h: 10 }, pivot: { x: 0.5, y: 0.5 } },
+        none: { frame: { x: 30, y: 0, w: 10, h: 10 } },
+      },
+    })
+    expect(a.get('feet').pivot!.equals(v(0.5, 0.9))).toBe(true)
+    expect(a.get('pixi').pivot!.equals(v(0.25, 1))).toBe(true)
+    expect([a.get('center').pivot, a.get('none').pivot]).toEqual([null, null])
+    expect(sheet('anim-pivot-grid.png', { columns: 2, rows: 1 }).frame(0).pivot).toBeNull()
+    expect(() => atlas('anim-pivot-bad.png', { frames: { x: { frame: { x: 0, y: 0, w: 1, h: 1 }, pivot: { x: NaN, y: 0 } } } })).toThrow(/frame "x" has an invalid pivot/)
+  })
+
   it('名字不存在、前缀没有帧、旋转打包时报错', () => {
     const a = atlas('anim-atlas.png', ATLAS)
     expect(() => a.get('run')).toThrow(/no frame named "run". Similar: run_10, run_2, run_1/)

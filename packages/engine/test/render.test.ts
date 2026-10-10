@@ -1,6 +1,6 @@
 import type { Container, Sprite, Text } from 'pixi.js'
 import { describe, expect, it } from 'vitest'
-import { ColorRect, Label, Node, Node2D, Particles2D, Scene, sheet, Sprite2D, tex, v } from 'sapling2d'
+import { AnimatedSprite2D, atlas, ColorRect, Label, Node, Node2D, Particles2D, Scene, sheet, Sprite2D, tex, v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { PixiRenderer } from '../src/render/PixiRenderer'
 
@@ -160,6 +160,45 @@ describe('render sync', () => {
     s.selfModulate = 0x808080
     sync()
     expect([c.alpha, sprite.tint]).toEqual([1, 0x808080])
+  })
+})
+
+describe('贴图的锚点（pivot）', () => {
+  // 画布 100×80（裁掉了透明边），锚点在脚底 (0.5, 0.9)；第二帧画布一样大、锚点不同
+  const knight = atlas('pivot-knight.png', {
+    frames: {
+      idle: { frame: { x: 0, y: 0, w: 40, h: 60 }, trimmed: true, spriteSourceSize: { x: 30, y: 12, w: 40, h: 60 }, sourceSize: { w: 100, h: 80 }, pivot: { x: 0.5, y: 0.9 } },
+      lunge: { frame: { x: 40, y: 0, w: 70, h: 60 }, trimmed: true, spriteSourceSize: { x: 10, y: 12, w: 70, h: 60 }, sourceSize: { w: 100, h: 80 }, pivot: { x: 0.3, y: 0.9 } },
+    },
+  })
+
+  it('centered（默认）时以锚点为原点：rect 和点击范围跟着锚点；centered: false 时忽略锚点；offset 照常叠加', async () => {
+    const s = new Sprite2D({ texture: knight.get('idle') })
+    expect([s.rect!.x, s.rect!.y, s.rect!.width, s.rect!.height]).toEqual([-50, -72, 100, 80])
+    expect(s.hitTest(v(0, -70))).toBe(true) // 头顶附近
+    expect(s.hitTest(v(0, 20))).toBe(false) // 脚底以下 8 像素就出界了（居中时还在里面）
+    s.offset = v(5, 0)
+    expect(s.rect!.x).toBe(-45)
+    s.centered = false
+    expect([s.rect!.x, s.rect!.y]).toEqual([5, 0])
+  })
+
+  it('写到 Pixi 的 anchor；帧动画切到锚点不同的帧时跟着变；闪白的覆盖层也一样', async () => {
+    const g = await createTestGame({ main: Scene })
+    const r = PixiRenderer._createForSyncTests()
+    const s = g.scene.add(new AnimatedSprite2D({ frames: [knight.get('idle'), knight.get('lunge')], fps: 60, autoplay: true, flash: 1 }))
+    r.sync(g.tree)
+    const content = () => view(s)!.children[0] as Sprite
+    expect([content().anchor.x, content().anchor.y]).toEqual([0.5, 0.9])
+    g.step()
+    r.sync(g.tree)
+    expect([content().anchor.x, content().anchor.y]).toEqual([0.3, 0.9])
+    const overlay = view(s)!.children[1] as Sprite
+    expect([overlay.anchor.x, overlay.anchor.y]).toEqual([0.3, 0.9])
+
+    s.centered = false
+    r.sync(g.tree)
+    expect([content().anchor.x, content().anchor.y]).toEqual([0, 0])
   })
 })
 

@@ -171,7 +171,8 @@ aseprite -b hero.aseprite --sheet public/assets/hero.png --data src/hero.json --
 
 <!-- example:texturepacker#test -->
 
-- **同一个角色的所有序列用相同的画布尺寸导出**（攻击时武器挥出去的部分也要在画布里）。TexturePacker 开启 trim（裁掉透明边，省图集空间）：帧的尺寸仍是画布尺寸、以画布中心对齐，切换动作时角色不会跳。画布不一样大时，切换动作会跳一下。
+- **同一个角色的所有序列用相同的画布尺寸导出**（攻击时武器挥出去的部分也要在画布里）。TexturePacker 开启 trim（裁掉透明边，省图集空间）：帧的尺寸仍是画布尺寸、以画布中心对齐，切换动作时角色不会跳。
+- 画布没法统一时（不同工具、不同人做的序列）用**锚点**：TexturePacker 里选中帧、打开 pivot points，把锚点放在角色脚底（同一个角色每帧都放在脚底），导出的 JSON 里每帧带 `pivot`（PixiJS 格式叫 `anchor`，两个都认）。`Sprite2D` 默认（`centered: true`）就以锚点为原点，切换动作时脚底不动；`texture.pivot` 能读到（0–1，相对裁剪前的尺寸）。`centered: false` 时忽略锚点、原点在左上角；`offset` 照常叠加。没设 `hitArea` 时的点击范围也跟着锚点。
 - TexturePacker 里关闭 rotation（不支持旋转打包，加载时报错）。数据格式选 JSON (Hash) 或 JSON (Array)。
 - 帧名带编号，`frames(prefix)` 按数字排序（`_2` 在 `_10` 之前，补零也可以）。**一套动画的前缀不要是另一套的前缀**：`hero_attack_` 也会匹配 `hero_attack_heavy_01.png`，改成 `hero_attack-heavy_01` 这类名字。
 - `durations` 的长度和帧数对不上时报错（`animation "attack" has 5 frames but 4 durations`）：美术加减了帧，记得改时长。
@@ -365,7 +366,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `Node` | 基类 | `add` `remove` `queueFree` `callDeferred` `addToGroup` `createTween` `processMode` `tree` |
 | `Node2D` | 带变换 | `position` `x` `y` `rotation` `scale` `visible` `zIndex` `alpha` `modulate` `selfModulate` `blendMode` `globalPosition` `toLocal` `toGlobal`；`inputPickable` `hitArea` + 信号 `pointerDown` `pointerMove` `pointerUp` `clicked` |
 | `Scene` | 场景根 | `static assets` |
-| `Sprite2D` | 贴图 | `texture` `centered`（默认 true）`offset` `flipH` `flipV` `flash` `flashColor` |
+| `Sprite2D` | 贴图 | `texture` `centered`（默认 true：以贴图的锚点或中心为原点）`offset` `flipH` `flipV` `flash` `flashColor` |
 | `AnimatedSprite2D` | 帧动画（继承 Sprite2D） | `frames` / `animations` `fps` `loop` `autoplay` `play()` `pause()` `stop()` `frame` `speedScale` `isPlaying` `animation`；信号 `frameChanged` `animationFinished` |
 | `Label` | 文字 | `text` `fontSize` `color` `fontWeight` `align` `verticalAlign` `stroke` `wrapWidth` `lineHeight` |
 | `ColorRect` | 纯色矩形（原点在左上角） | `size` `color` `rect` |

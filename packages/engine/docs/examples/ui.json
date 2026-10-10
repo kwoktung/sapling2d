@@ -1,0 +1,7 @@
+{
+  "frames": {
+    "panel_wood": { "frame": { "x": 0, "y": 0, "w": 96, "h": 96 }, "rotated": false, "trimmed": false, "spriteSourceSize": { "x": 0, "y": 0, "w": 96, "h": 96 }, "sourceSize": { "w": 96, "h": 96 } },
+    "button": { "frame": { "x": 96, "y": 0, "w": 64, "h": 64 }, "rotated": false, "trimmed": false, "spriteSourceSize": { "x": 0, "y": 0, "w": 64, "h": 64 }, "sourceSize": { "w": 64, "h": 64 } }
+  },
+  "meta": { "app": "https://www.codeandweb.com/texturepacker", "image": "ui.png", "format": "RGBA8888", "size": { "w": 160, "h": 96 }, "scale": "1" }
+}

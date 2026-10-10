@@ -371,7 +371,7 @@ export class SceneTree {
       this._physicsFrames++
       if (!this._paused) this._gameSteps++
       // 整个物理步（physicsProcess 和刚体的接触信号）里，isActionJustPressed 都按物理步算
-      this.input._inPhysics = true
+      this.input._beginPhysicsStep()
       try {
         if (this._physicsProcessNodes > 0) {
           this._inPhysicsProcess = true
@@ -383,7 +383,6 @@ export class SceneTree {
         }
         if (!this._paused) this._physics?._step(this.physicsDelta)
       } finally {
-        this.input._inPhysics = false
         this.input._endPhysicsStep()
       }
     }

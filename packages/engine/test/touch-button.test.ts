@@ -241,6 +241,21 @@ describe('TouchScreenButton 审查修复', () => {
     expect(dragged.isInsideTree).toBe(true)
   })
 
+  it('拖着的节点中途被销毁后，这个手指不再算拖着节点：滑进 passbyPress 按钮会按下', async () => {
+    let dragged!: Node2D
+    const g = await setup((scene) => {
+      scene.add(new TouchScreenButton({ action: 'tbRight', position: v(300, 300), hitArea: AREA, passbyPress: true }))
+      dragged = scene.add(new Node2D({ position: v(600, 300), inputPickable: true, hitArea: AREA }))
+    })
+    g.pointerDown(600, 300, 1)
+    g.step()
+    dragged.queueFree()
+    g.step()
+    g.pointerMove(300, 300, 1)
+    g.step()
+    expect(g.tree.input.isActionPressed('tbRight')).toBe(true)
+  })
+
   it('切到后台时，队列里还没处理的按下也会被取消', async () => {
     const g = await setup((scene) => scene.add(new TouchScreenButton({ action: 'tbJump', position: v(100, 100), hitArea: AREA })))
     g.pointerDown(100, 100, 9) // 还在队列里

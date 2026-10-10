@@ -35,7 +35,7 @@ Date: 2026-10-10
 | 02 | `aseprite()` 导入器：tag、方向、重复、时长、slices | 01 |
 | 03 | TexturePacker 管线：文档和示例（`atlas().frames()` + `durations`） | 01 |
 | 04 | TexturePacker 的 pivot（每张贴图一个锚点） | 03（已完成） |
-| 05 | `atlas().frames(prefix)` 只匹配“前缀 + 编号”（03 发现） | 待定 |
+| 05 | `atlas().frames(prefix)` 只匹配“前缀 + 编号”（03 发现） | 已完成 |
 
 ## 未定（Fog）
 

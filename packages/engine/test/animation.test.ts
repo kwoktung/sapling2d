@@ -46,6 +46,25 @@ describe('atlas', () => {
     expect(b._frame!.trim!.equals(v(4, 6))).toBe(true)
   })
 
+  it('frames(prefix) 只取“前缀 + 编号”：分隔符和扩展名可选；前缀后面不是编号的不算', () => {
+    const a = atlas('anim-prefix.png', {
+      frames: Object.fromEntries(
+        ['hero_attack_01.png', 'hero_attack_02.png', 'hero_attack_heavy_01.png', 'hero_attack_heavy_02.png', 'boom-1', 'boom 2', 'boom3', 'boomerang_1', 'logo.png'].map((n, i) => [
+          n,
+          { frame: { x: i, y: 0, w: 1, h: 1 } },
+        ]),
+      ),
+    })
+    const names = (prefix: string) => a.frames(prefix).map((t) => t.path.split('#')[1])
+    expect(names('hero_attack_')).toEqual(['hero_attack_01.png', 'hero_attack_02.png'])
+    expect(names('hero_attack')).toEqual(['hero_attack_01.png', 'hero_attack_02.png']) // 分隔符可以不写在前缀里
+    expect(names('hero_attack_heavy_')).toEqual(['hero_attack_heavy_01.png', 'hero_attack_heavy_02.png'])
+    expect(names('boom')).toEqual(['boom-1', 'boom 2', 'boom3'])
+    // 只有“前缀开头、后面不是编号”的帧：报错里列出来，并提示更长的前缀
+    expect(() => a.frames('boomer')).toThrow(/not followed by a number: boomerang_1\. Use a longer prefix \(e\.g\. "boomerang_"\)/)
+    expect(() => a.frames('logo')).toThrow(/not followed by a number: logo\.png\. Use a longer prefix \(e\.g\. "logo\.png"\)/)
+  })
+
   it('frames(prefix) 按数字自然排序', () => {
     const a = atlas('anim-atlas.png', ATLAS)
     expect(a.frames('run_').map((t) => t.path)).toEqual(['anim-atlas.png#run_1', 'anim-atlas.png#run_2', 'anim-atlas.png#run_10'])
@@ -75,7 +94,7 @@ describe('atlas', () => {
   it('名字不存在、前缀没有帧、旋转打包时报错', () => {
     const a = atlas('anim-atlas.png', ATLAS)
     expect(() => a.get('run')).toThrow(/no frame named "run". Similar: run_10, run_2, run_1/)
-    expect(() => a.frames('jump_')).toThrow(/no frames start with "jump_"/)
+    expect(() => a.frames('jump_')).toThrow(/no frames named "jump_" \+ a number\./)
     expect(() => atlas('anim-rot.png', { frames: { x: { frame: { x: 0, y: 0, w: 1, h: 1 }, rotated: true } } })).toThrow(/rotation disabled/)
   })
 })

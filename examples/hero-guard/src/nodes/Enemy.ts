@@ -3,6 +3,9 @@ import { ART_SCALE, ASSETS } from '../assets'
 import { AGGRO, ENEMY_FEEL } from '../config'
 import { ELITE, ENEMIES, type EnemyKind } from '../data/enemies'
 
+/** 精英暗环的颜色（深紫）。 */
+const ELITE_RING_COLOR = 0x2a0838
+
 /** 怪物追打的目标（英雄）：只要位置和死活。 */
 export interface EnemyTarget {
   readonly x: number
@@ -55,6 +58,8 @@ export class Enemy extends Node2D {
   /** 身体的半径（像素，按显示的宽度算）：近战够得着的距离 = 英雄半径 + 它。 */
   readonly radius: number
   private _lunge: Tween | null = null
+  /** 精英脚下的暗环（不是精英时为 null）。 */
+  readonly eliteRing: Sprite2D | null = null
   private _flashLeft = 0
   private _hop: number
   private readonly _p = { x: 0, y: 0 }
@@ -68,7 +73,7 @@ export class Enemy extends Node2D {
     readonly maxHp: number,
     look: EnemyLook,
     phase: number,
-    /** 精英：体型大一号、身后一圈金光（血量由 Battle 按精英算好传进来）。 */
+    /** 精英：体型大一号、脚下一圈暗环（血量由 Battle 按精英算好传进来）。 */
     readonly elite = false,
   ) {
     super({ alpha: ENEMIES[kind].alpha ?? 1 })
@@ -79,7 +84,11 @@ export class Enemy extends Node2D {
     // 身体显示出来的高度（已乘缩放）：血条放在它上面
     const height = look.texture.height * ART_SCALE * k
     this.radius = look.texture.width * ART_SCALE * k * 0.35
-    if (elite) this.add(new Sprite2D({ texture: ASSETS.glow, position: v(0, -height / 2), scale: v((height / 64) * 1.4, (height / 64) * 1.4), selfModulate: 0xffc030, blendMode: 'add', zIndex: -1 }))
+    // 精英：脚下一圈暗环（压扁贴在地上，不随弹跳动），缓慢明暗呼吸
+    if (elite) {
+      const w = (look.texture.width * ART_SCALE * k * 1.5) / 128
+      this.eliteRing = this.add(new Sprite2D({ texture: ASSETS.ring, scale: v(w, w * 0.42), selfModulate: ELITE_RING_COLOR, zIndex: -1 }))
+    }
     // 锚点在脚底：身体放在原点，弹跳时往上挪
     this.body = this.add(new Sprite2D({ texture: look.texture, scale: v(k * ART_SCALE, k * ART_SCALE) }))
     this.barBack = this.add(
@@ -138,6 +147,7 @@ export class Enemy extends Node2D {
     const k = this._sizeScale * ART_SCALE
     this.body.y = -s * ENEMY_FEEL.hopHeight
     this.body.scale = v(k * (1 + squash), k * (1 - squash)) // 朝向用 flipH，不用负的缩放
+    if (this.eliteRing) this.eliteRing.alpha = 0.75 + 0.2 * Math.sin(this._hop * 0.8)
     if (this._flashLeft > 0) {
       this._flashLeft = Math.max(0, this._flashLeft - dt)
       this.body.flash = this._flashLeft / ENEMY_FEEL.flashTime

@@ -89,6 +89,7 @@ describe('精英', () => {
     const { g, battle } = await setup()
     const e = battle.spawnEnemy('slime', linePath(300, 1120, 1300), undefined, true)
     expect([e.maxHp, e.xp, e.leak, e.elite]).toEqual([ENEMIES.slime.hp * ELITE.hp, ENEMIES.slime.xp * ELITE.xp, 2, true])
+    expect(e.eliteRing?.visible).toBe(true) // 脚下的暗环
     expect(e.body.scale.x).toBeCloseTo(ELITE.scale * ART_SCALE, 1)
     g.stepSeconds(4)
     expect(battle.lives).toBe(18)

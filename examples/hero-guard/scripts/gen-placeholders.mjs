@@ -1,5 +1,5 @@
 // 生成骨架阶段的占位图：node scripts/gen-placeholders.mjs（美术到位后由 scripts/art/ 的管线替换）
-// - 火花、光晕、路线虚线的点、射程圈（其余都已经换成美术管线生成的图集）
+// - 火花、光晕、路线虚线的点、射程圈、精英怪的暗环（其余都已经换成美术管线生成的图集）
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 
@@ -78,6 +78,22 @@ function ring(size, width, alpha = 255) {
   }
   return c
 }
+/** 柔边的粗圆环（白色）：半径 inner–outer（占整张图半径的比例）之间，中间最实、两边淡出。 */
+function softRing(size, inner, outer) {
+  const c = canvas(size, size)
+  const r = size / 2
+  const mid = (inner + outer) / 2
+  const half = (outer - inner) / 2
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x + 0.5 - r, y + 0.5 - r) / r
+      const t = 1 - Math.abs(d - mid) / half
+      if (t <= 0) continue
+      setPx(c, x, y, 0xffffff, Math.round(255 * Math.min(1, t * 1.6)))
+    }
+  }
+  return c
+}
 const save = (name, c) => writeFileSync(new URL(name, OUT), png(c))
 
 // ---------------------------------------------------------------- 怪物和场地
@@ -87,5 +103,7 @@ save('glow.png', softCircle(64, 0.3))
 save('spark.png', softCircle(12, 0.4))
 save('dot.png', softCircle(14, 0.6))
 save('range.png', ring(256, 4, 160))
+// 精英怪脚下的暗环（游戏里染成深紫、压扁贴在地上）
+save('ring.png', softRing(128, 0.55, 0.98))
 
 console.log('placeholders written to public/assets/')

@@ -27,6 +27,8 @@ export const ASSETS = {
   spark: tex('spark.png'),
   dot: tex('dot.png'),
   range: tex('range.png'),
+  /** 柔边粗圆环（白色）：精英怪脚下的暗环。 */
+  ring: tex('ring.png'),
 }
 
 /** 图集里的精灵是显示尺寸的 2 倍（高分屏清晰），显示时乘这个缩放。 */

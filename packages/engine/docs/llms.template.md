@@ -150,6 +150,19 @@ aseprite -b hero.aseprite --sheet public/assets/hero.png --data src/hero.json --
 - `slice(name, frame)`：slice 在这一帧的 `{ bounds, pivot }`，**以精灵中心为原点**，直接加到精灵位置上（`flipH` 时 x 取反）。`frame` 传播放中精灵的 `sprite.texture`（`sprite.frame` 是动画里的序号，不是图里的帧号），或者图里的帧号。key 从它的帧开始生效直到下一个 key；之前没有 key 时返回 null。返回的对象共用，不要修改。
 - 导出时漏了 `--list-tags` / `--list-slices`，用到 tag / slice 时会报错提示。仓库里提交导出好的 png + json，不需要每台机器都装 Aseprite。
 
+#### PNG 序列（TexturePacker）
+
+高清手绘的角色一般在 Spine、AE、Animate、PS 里做好，导出成 PNG 序列（`hero_attack_01.png` …），再用 TexturePacker 打包成 `atlas()`。这条路上的 JSON 里没有帧时长和命中帧，写在代码或数据里：
+
+<!-- example:texturepacker -->
+
+<!-- example:texturepacker#test -->
+
+- **同一个角色的所有序列用相同的画布尺寸导出**（攻击时武器挥出去的部分也要在画布里）。TexturePacker 开启 trim（裁掉透明边，省图集空间）：帧的尺寸仍是画布尺寸、以画布中心对齐，切换动作时角色不会跳。画布不一样大时，切换动作会跳一下。
+- TexturePacker 里关闭 rotation（不支持旋转打包，加载时报错）。数据格式选 JSON (Hash) 或 JSON (Array)。
+- 帧名带编号，`frames(prefix)` 按数字排序（`_2` 在 `_10` 之前，补零也可以）。**一套动画的前缀不要是另一套的前缀**：`hero_attack_` 也会匹配 `hero_attack_heavy_01.png`，改成 `hero_attack-heavy_01` 这类名字。
+- `durations` 的长度和帧数对不上时报错（`animation "attack" has 5 frames but 4 durations`）：美术加减了帧，记得改时长。
+
 ### 图块地图（TileMap）
 
 <!-- example:tilemap -->

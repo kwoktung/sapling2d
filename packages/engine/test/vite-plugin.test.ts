@@ -24,6 +24,17 @@ describe('findAssetReferences', () => {
     ])
   })
 
+  it('aseprite：检查第一个参数；函数名后面可以带类型参数', () => {
+    const code = "aseprite('hero.png', heroData); aseprite<'idle' | 'attack'>('boss.png', bossData)"
+    expect(findAssetReferences(code)).toEqual([
+      { fn: 'aseprite', path: 'hero.png', line: 1, column: 0 },
+      { fn: 'aseprite', path: 'boss.png', line: 1, column: 32 },
+    ])
+    // 格式化工具把长的联合类型拆成多行
+    const wrapped = ['const hero = aseprite<', "  | 'idle'", "  | 'attack'", ">('hero.png', heroData)"].join('\n')
+    expect(findAssetReferences(wrapped)).toEqual([{ fn: 'aseprite', path: 'hero.png', line: 1, column: 13 }])
+  })
+
   it('tileset：检查第一个参数（图集图片路径）', () => {
     expect(findAssetReferences("const T = tileset('tiles/ground.png', { tileSize: 16 })")).toEqual([{ fn: 'tileset', path: 'tiles/ground.png', line: 1, column: 10 }])
   })

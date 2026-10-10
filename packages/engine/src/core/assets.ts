@@ -3,6 +3,7 @@ import { AudioStream } from '../audio/AudioStream'
 import { Rect2 } from '../math/Rect2'
 import { Vector2 } from '../math/Vector2'
 import type { Platform } from '../platform/Platform'
+import type { AsepriteSheet } from './aseprite'
 import type { TiledMap } from './tiled'
 import type { TileSet } from './tileset'
 
@@ -159,9 +160,7 @@ export class SpriteSheet {
 
   /** 第 `start` 到第 `end` 帧（都包含）；不传参数时是全部帧。 */
   frames(start = 0, end = this.count - 1): Texture[] {
-    const out: Texture[] = []
-    for (let i = start; i <= end; i++) out.push(this.frame(i))
-    return out
+    return frameRange(`sheet('${this.texture.path}')`, start, end, (i) => this.frame(i))
   }
 
   /** @internal */
@@ -208,17 +207,8 @@ export class Atlas {
     readonly texture: Texture,
     data: AtlasData,
   ) {
-    const entries: [string, AtlasFrameData][] = Array.isArray(data.frames) ? data.frames.map((f) => [f.filename, f]) : Object.entries(data.frames)
-    for (const [name, f] of entries) {
-      if (f.rotated) throw new Error(`atlas('${texture.path}'): frame "${name}" is rotated. Export the atlas with rotation disabled.`)
-      const { x, y, w, h } = f.frame
-      const src = f.trimmed ? f.spriteSourceSize : undefined
-      const frame: TextureFrame = {
-        region: new Rect2(x, y, w, h),
-        width: src ? (f.sourceSize?.w ?? w) : w,
-        height: src ? (f.sourceSize?.h ?? h) : h,
-        trim: src ? new Vector2(src.x, src.y) : null,
-      }
+    for (const [name, f] of atlasEntries(data)) {
+      const frame = atlasFrame(`atlas('${texture.path}')`, name, f)
       this._frames.set(name, new Texture(`${texture.path}#${name}`, texture, () => frame))
     }
   }
@@ -260,6 +250,32 @@ export class Atlas {
   }
 }
 
+/** @internal 图集 JSON 的帧：JSON Array 和 JSON Hash 都整理成 [名字, 帧] 的列表，保持导出顺序。 */
+export function atlasEntries<F extends AtlasFrameData>(data: { frames: Record<string, F> | (F & { filename: string })[] }): [string, F][] {
+  return Array.isArray(data.frames) ? data.frames.map((f) => [f.filename, f]) : Object.entries(data.frames)
+}
+
+/** @internal 第 `start` 到第 `end` 帧（都包含）。`frame(i)` 负责检查越界；`start > end` 时报错，不返回空列表。 */
+export function frameRange(who: string, start: number, end: number, frame: (i: number) => Texture): Texture[] {
+  if (start > end) throw new Error(`${who}: frames(${start}, ${end}): start must not be greater than end.`)
+  const out: Texture[] = []
+  for (let i = start; i <= end; i++) out.push(frame(i))
+  return out
+}
+
+/** @internal 图集 JSON 里的一帧 → 子区域。`who` 用在错误信息里（如 `atlas('a.png')`）。 */
+export function atlasFrame(who: string, name: string, f: AtlasFrameData): TextureFrame {
+  if (f.rotated) throw new Error(`${who}: frame "${name}" is rotated. Export the atlas with rotation disabled.`)
+  const { x, y, w, h } = f.frame
+  const src = f.trimmed ? f.spriteSourceSize : undefined
+  return {
+    region: new Rect2(x, y, w, h),
+    width: src ? (f.sourceSize?.w ?? w) : w,
+    height: src ? (f.sourceSize?.h ?? h) : h,
+    trim: src ? new Vector2(src.x, src.y) : null,
+  }
+}
+
 /** 网格图集：把 `path` 这张图切成 `columns` × `rows` 个等大的格子。路径相对于资源目录。 */
 export function sheet(path: string, grid: { columns: number; rows: number }): SpriteSheet {
   return new SpriteSheet(tex(path), grid.columns, grid.rows)
@@ -289,15 +305,15 @@ function naturalCompare(a: string, b: string): number {
 
 // ---------------------------------------------------------------- 加载
 
-/** 场景的 `static assets` 声明：贴图（tex）、图集（sheet / atlas）、图块集（tileset）、Tiled 关卡（tiledMap）、音效（sfx）、音乐（music）。 */
-export type AssetMap = Record<string, Texture | SpriteSheet | Atlas | TileSet | TiledMap | AudioStream>
+/** 场景的 `static assets` 声明：贴图（tex）、图集（sheet / atlas / aseprite）、图块集（tileset）、Tiled 关卡（tiledMap）、音效（sfx）、音乐（music）。 */
+export type AssetMap = Record<string, Texture | SpriteSheet | Atlas | AsepriteSheet | TileSet | TiledMap | AudioStream>
 
 /** @internal 资源实际要加载 / 卸载的对象：图集和子区域归结到整张图。 */
 export function assetRoot(asset: AssetMap[string]): Texture | AudioStream | TiledMap {
   // Tiled 关卡自己负责加载（关卡文件 + 图块集图片）和卸载
   if (asset.kind === 'tiledmap') return asset
-  // TileSet 用 kind 判断：tileset.ts 在运行时依赖本文件（tex），这里再 import 它会形成循环依赖
-  if (asset instanceof SpriteSheet || asset instanceof Atlas || asset.kind === 'tileset') return asset.texture
+  // TileSet / AsepriteSheet 用 kind 判断：它们的文件在运行时依赖本文件（tex），这里再 import 会形成循环依赖
+  if (asset instanceof SpriteSheet || asset instanceof Atlas || asset.kind === 'tileset' || asset.kind === 'aseprite') return asset.texture
   if (asset instanceof Texture) return asset._base ?? asset
   return asset
 }

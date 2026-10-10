@@ -32,6 +32,7 @@ describe('sheet', () => {
   it('非法参数和越界帧号报错', () => {
     expect(() => sheet('anim-bad.png', { columns: 0, rows: 1 })).toThrow(/positive integers/)
     expect(() => sheet('anim-bad.png', { columns: 2, rows: 1 }).frame(2)).toThrow(/out of range \(0–1\)/)
+    expect(() => sheet('anim-bad.png', { columns: 2, rows: 1 }).frames(1, 0)).toThrow(/frames\(1, 0\): start must not be greater than end/)
   })
 })
 

@@ -336,6 +336,7 @@ export class PixiRenderer implements Renderer {
       c.zIndex = node.zIndex
       c.alpha = node.alpha
       c.tint = node.modulate // Pixi v8 的容器 tint 会乘到所有子对象上
+      c.blendMode = node.blendMode // 'inherit' 时跟随父容器：和 Pixi 的默认值一致，叠加作用到整棵子树
     }
     view.content?.sync(node, this._ctx, changed)
     return view

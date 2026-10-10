@@ -1,5 +1,6 @@
 import { Sprite2D, v } from 'sapling2d'
 import { ASSETS } from '../assets'
+import { Z } from '../config'
 import type { Enemy } from './Enemy'
 
 export type ProjectileKind = 'arrow' | 'fireball'
@@ -33,6 +34,9 @@ export class Projectile extends Sprite2D {
     this.texture = kind === 'arrow' ? ASSETS.arrow : ASSETS.glow
     this.selfModulate = kind === 'arrow' ? 0xffffff : 0xff8a30
     this.scale = kind === 'arrow' ? ONE : FIREBALL_SCALE
+    // 火球叠加发光，画在箭上面一层：同类挨在一起绘制，箭和火球交替出现时不会每个都打断合批
+    this.blendMode = kind === 'arrow' ? 'inherit' : 'add'
+    this.zIndex = kind === 'arrow' ? Z.projectile : Z.projectile + 1
     this.x = x
     this.y = y
     this.target = kind === 'arrow' ? target : null

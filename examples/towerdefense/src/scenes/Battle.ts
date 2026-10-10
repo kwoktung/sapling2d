@@ -1,4 +1,4 @@
-import { Camera2D, ColorRect, Ease, HitTester, Particles2D, rect, Scene, Sprite2D, type Tween, v, Vector2 } from 'sapling2d'
+import { Camera2D, ColorRect, Ease, HitTester, Node2D, Particles2D, rect, Scene, Sprite2D, type Tween, v, Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
 import { ENEMY, FEEL, FIELD, SLOTS, START, WAVE, Z } from '../config'
 import { Enemy } from '../nodes/Enemy'
@@ -43,6 +43,8 @@ export class Battle extends Scene implements HeroWorld {
   hud!: Hud
   camera!: Camera2D
   picker: UpgradePicker | null = null
+  /** 所有发光特效的父节点（叠加混合，设一次）：火花、爆炸光圈、刀光。挨在一起绘制，合成一批。 */
+  fx!: Node2D
   sparks!: Particles2D
   debris!: Particles2D
   /** 这一波还要生成几只、下一只还有多久。 */
@@ -71,12 +73,13 @@ export class Battle extends Scene implements HeroWorld {
         this.slots.push(slot)
       }
     }
-    const fx = { texture: ASSETS.spark, emitting: false, zIndex: Z.fx }
-    this.sparks = this.add(
-      new Particles2D({ name: 'Sparks', ...fx, amount: 300, lifetime: 0.25, lifetimeRandomness: 0.4, speedMin: 120, speedMax: 320, damping: 6, scaleStart: 1.2, scaleEnd: 0.2, alphaEnd: 0, selfModulate: 0xffe070 }),
-    )
+    // 碎片是怪物的碎块（普通混合），画在发光特效下面；火花在 fx 里叠加发光
     this.debris = this.add(
-      new Particles2D({ name: 'Debris', ...fx, amount: 400, lifetime: 0.6, lifetimeRandomness: 0.5, speedMin: 100, speedMax: 360, damping: 3, scaleStart: 1.8, scaleEnd: 0.3, alphaEnd: 0, selfModulate: 0xd0503c }),
+      new Particles2D({ name: 'Debris', texture: ASSETS.spark, emitting: false, zIndex: Z.fx - 1, amount: 400, lifetime: 0.6, lifetimeRandomness: 0.5, speedMin: 100, speedMax: 360, damping: 3, scaleStart: 1.8, scaleEnd: 0.3, alphaEnd: 0, selfModulate: 0xd0503c }),
+    )
+    this.fx = this.add(new Node2D({ name: 'Fx', zIndex: Z.fx, blendMode: 'add' }))
+    this.sparks = this.fx.add(
+      new Particles2D({ name: 'Sparks', texture: ASSETS.spark, emitting: false, amount: 300, lifetime: 0.25, lifetimeRandomness: 0.4, speedMin: 120, speedMax: 320, damping: 6, scaleStart: 1.2, scaleEnd: 0.2, alphaEnd: 0, selfModulate: 0xffe070 }),
     )
     this.camera = this.add(new Camera2D({ position: v(375, 667) }))
     this.hud = this.add(new Hud())
@@ -232,7 +235,6 @@ export class Battle extends Scene implements HeroWorld {
     let p = this._projectiles.find((q) => !q.active)
     if (!p) {
       p = this.add(new Projectile())
-      p.zIndex = Z.projectile
       p.onArrive = this._onArrive
       this._projectiles.push(p)
     }
@@ -272,17 +274,16 @@ export class Battle extends Scene implements HeroWorld {
       da = Math.atan2(Math.sin(da), Math.cos(da))
       if (Math.abs(da) <= half || e === target) this.damage(e, s.damage)
     }
-    // 刀光：贴图是 120° 的弧，按扇形角度缩放宽度不准确，灰盒里只按距离缩放
-    // 引擎缺口（验证清单 additive）：刀光是普通混合，叠在怪物上发灰，不发亮
+    // 刀光（在 fx 里，叠加发光）：贴图是 120° 的弧，按扇形角度缩放宽度不准确，灰盒里只按距离缩放
     const scale = (s.range * 2) / 200
-    const fx = this.add(new Sprite2D({ texture: ASSETS.slash, position: hero.position, rotation: angle, scale: v(scale * 0.8, scale * 0.8), zIndex: Z.fx, selfModulate: 0xd8e8ff }))
+    const fx = this.fx.add(new Sprite2D({ texture: ASSETS.slash, position: hero.position, rotation: angle, scale: v(scale * 0.8, scale * 0.8), selfModulate: 0xa8c8ff }))
     fx.createTween().to(fx, { scale: v(scale, scale), alpha: 0 }, 0.18, Ease.QuadOut).call(() => fx.queueFree())
   }
 
-  /** 爆炸特效：一个放大淡出的光圈 + 火花（引擎缺口：没有 additive，光圈不够亮）。 */
+  /** 爆炸特效：一个放大淡出的光圈 + 火花（都在 fx 里，叠加发光）。 */
   private _burst(x: number, y: number, radius: number) {
     const s = (radius * 2) / 64
-    const fx = this.add(new Sprite2D({ texture: ASSETS.glow, position: v(x, y), scale: v(s * 0.4, s * 0.4), zIndex: Z.fx, selfModulate: 0xff9030 }))
+    const fx = this.fx.add(new Sprite2D({ texture: ASSETS.glow, position: v(x, y), scale: v(s * 0.4, s * 0.4), selfModulate: 0xff8030 }))
     fx.createTween().to(fx, { scale: v(s, s), alpha: 0 }, 0.3, Ease.QuadOut).call(() => fx.queueFree())
     this.sparks.position = v(x, y)
     this.sparks.emit(FEEL.sparks * 2)

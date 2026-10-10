@@ -120,6 +120,16 @@
 - 图集的帧就是 `Texture`，可以给任何 `Sprite2D`；同一张图的帧共用一份显存，绘制时能合批。`static assets` 里放 `sheet` / `atlas`，切换场景时按整张图判断是否卸载。
 - `AnimatedSprite2D`：`frames` + `fps`（默认 10）+ `loop`（默认 true），或 `animations: { 名字: { frames, fps, loop } }`。`play(name?)` / `pause()` / `stop()`（回到第 0 帧）、`frame`（可赋值）、`frameCount`、`speedScale`、`isPlaying`、`animation`；信号 `frameChanged`、`animationFinished`（不循环的动画播完，参数是动画名）。`texture` 由动画控制，不要直接赋值。
 
+#### 每帧时长（攻击动作的节奏）
+
+<!-- example:animation-timing -->
+
+<!-- example:animation-timing#test -->
+
+- `durations: number[]`（秒）代替 `fps`，让帧长短不一：长度和 `frames` 相同、每个值 > 0；和 `fps` 只能二选一。只有一套动画时的简写也能用（`frames` + `durations`）。
+- `getAnimationDuration(name?)`：一轮的总秒数；`getFrameTime(name, frame)`：这一帧开始的时间点。两者都**不算** `speedScale`，实际时间要除以它。
+- 命中帧在 `frameChanged` 里按 `frame` 判断：一次推进跨过好几帧时（`speedScale` 很大、帧很短），每一帧都会触发，不会被跳过。
+
 ### 图块地图（TileMap）
 
 <!-- example:tilemap -->

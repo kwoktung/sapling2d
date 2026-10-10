@@ -6,8 +6,10 @@ import { Sprite2D, type Sprite2DOptions } from './Sprite2D'
 export interface SpriteAnimation {
   /** 帧序列，至少一帧。通常来自 `sheet().frames()` 或 `atlas().frames(prefix)`。 */
   frames: readonly Texture[]
-  /** 每秒帧数，默认 10。 */
+  /** 每秒帧数，默认 10。与 `durations` 二选一。 */
   fps?: number
+  /** 每一帧显示的秒数（长度和 `frames` 相同，都 > 0），让帧长短不一，例如攻击的前摇停得久、出手帧很短。与 `fps` 二选一。 */
+  durations?: readonly number[]
   /** 播到最后一帧后从头循环，默认 true。不循环时停在最后一帧并触发 `animationFinished`。 */
   loop?: boolean
 }
@@ -15,9 +17,10 @@ export interface SpriteAnimation {
 export interface AnimatedSprite2DOptions<A extends string = string> extends Omit<Sprite2DOptions, 'texture'> {
   /** 多套动画：名字 → 动画。与 `frames` 二选一。 */
   animations?: Record<A, SpriteAnimation>
-  /** 只有一套动画时的简写，等价于 `animations: { default: { frames, fps, loop } }`。 */
+  /** 只有一套动画时的简写，等价于 `animations: { default: { frames, fps, durations, loop } }`。 */
   frames?: readonly Texture[]
   fps?: number
+  durations?: readonly number[]
   loop?: boolean
   /** 初始动画，默认是第一套。 */
   animation?: NoInfer<A>
@@ -29,12 +32,15 @@ export interface AnimatedSprite2DOptions<A extends string = string> extends Omit
 
 interface ResolvedAnimation {
   frames: readonly Texture[]
-  fps: number
+  /** 每帧秒数。 */
+  durations: readonly number[]
+  /** 每帧开始的时间点，最后多一项是总时长。 */
+  starts: readonly number[]
   loop: boolean
 }
 
 /**
- * 帧动画精灵：按固定帧率轮流显示一组贴图。继承 Sprite2D，`centered`、`flipH`、`modulate`、`alpha` 等照常可用；
+ * 帧动画精灵：按帧率（或每帧各自的时长）轮流显示一组贴图。继承 Sprite2D，`centered`、`flipH`、`modulate`、`alpha` 等照常可用；
  * `texture` 由动画控制，不要直接赋值。
  *
  * ```ts
@@ -48,9 +54,12 @@ interface ResolvedAnimation {
  *   autoplay: true,
  * })
  * player.play('hurt')
+ *
+ * // 帧长短不一：前摇 0.2 秒，出手帧 0.04 秒
+ * const hero = new AnimatedSprite2D({ frames: atkFrames, durations: [0.1, 0.2, 0.04, 0.15], loop: false })
  * ```
  *
- * 按帧时间推进（暂停时停止），无头测试里结果确定。
+ * 按帧时间推进（暂停时停止），无头测试里结果确定。一次推进跨过好几帧时（`speedScale` 很大），每一帧都会触发 `frameChanged`。
  */
 export class AnimatedSprite2D<A extends string = string> extends Sprite2D {
   /** 显示的帧变了（播放推进、切换动画、给 `frame` 赋值、stop）。 */
@@ -71,19 +80,14 @@ export class AnimatedSprite2D<A extends string = string> extends Sprite2D {
     const defs: [string, SpriteAnimation][] = options.animations
       ? Object.entries<SpriteAnimation>(options.animations)
       : options.frames
-        ? [['default', { frames: options.frames, fps: options.fps, loop: options.loop }]]
+        ? [['default', { frames: options.frames, fps: options.fps, durations: options.durations, loop: options.loop }]]
         : []
     if (!defs.length) throw new Error('AnimatedSprite2D: pass `frames` or `animations`.')
     const map = new Map<A, ResolvedAnimation>()
-    for (const [name, def] of defs) {
-      const fps = def.fps ?? 10
-      if (!def.frames.length) throw new Error(`AnimatedSprite2D: animation "${name}" has no frames.`)
-      if (!(fps > 0)) throw new Error(`AnimatedSprite2D: animation "${name}" fps must be > 0, got ${fps}.`)
-      map.set(name as A, { frames: [...def.frames], fps, loop: def.loop ?? true })
-    }
+    for (const [name, def] of defs) map.set(name as A, resolveAnimation(name, def))
     this._animations = map
     this._animation = options.animation ?? (defs[0]![0] as A)
-    this._resolve(this._animation)
+    this._get(this._animation)
     this._playing = options.autoplay ?? false
     this._speedScale = Math.max(0, options.speedScale ?? 1)
     this.texture = this._current.frames[0]!
@@ -119,6 +123,21 @@ export class AnimatedSprite2D<A extends string = string> extends Sprite2D {
     return this._playing
   }
 
+  /** 一轮播放的总秒数（不算 `speedScale`）。不传名字时是当前动画。 */
+  getAnimationDuration(name: A = this._animation): number {
+    const anim = this._get(name)
+    return anim.starts[anim.frames.length]!
+  }
+
+  /** 第 `frame` 帧开始的时间点（秒，不算 `speedScale`），例如出手帧在攻击动画里的时刻。 */
+  getFrameTime(name: A, frame: number): number {
+    const anim = this._get(name)
+    if (!Number.isInteger(frame) || frame < 0 || frame >= anim.frames.length) {
+      throw new Error(`AnimatedSprite2D: frame ${frame} out of range for animation "${name}" (0–${anim.frames.length - 1}).`)
+    }
+    return anim.starts[frame]!
+  }
+
   /** 播放倍速（≥ 0）。 */
   get speedScale(): number {
     return this._speedScale
@@ -134,7 +153,7 @@ export class AnimatedSprite2D<A extends string = string> extends Sprite2D {
    */
   play(name?: A): void {
     if (name !== undefined && name !== this._animation) {
-      this._resolve(name)
+      this._get(name)
       this._animation = name
       this._elapsed = 0
       this._finished = false
@@ -160,10 +179,10 @@ export class AnimatedSprite2D<A extends string = string> extends Sprite2D {
   override _internalProcess(dt: number): void {
     if (!this._playing) return
     const anim = this._current
-    const spf = 1 / anim.fps
+    const durations = anim.durations
     this._elapsed += dt * this._speedScale
-    while (this._playing && this._elapsed >= spf - EPSILON) {
-      this._elapsed -= spf
+    while (this._playing && this._elapsed >= durations[this._frame]! - EPSILON) {
+      this._elapsed -= durations[this._frame]!
       if (this._frame + 1 < anim.frames.length) this._show(this._frame + 1)
       else if (anim.loop) this._show(0)
       else {
@@ -179,10 +198,10 @@ export class AnimatedSprite2D<A extends string = string> extends Sprite2D {
     return this._animations.get(this._animation)!
   }
 
-  private _resolve(name: A): void {
-    if (!this._animations.has(name)) {
-      throw new Error(`AnimatedSprite2D: unknown animation "${name}". Animations: ${this.animationNames.join(', ')}.`)
-    }
+  private _get(name: A): ResolvedAnimation {
+    const anim = this._animations.get(name)
+    if (!anim) throw new Error(`AnimatedSprite2D: unknown animation "${name}". Animations: ${this.animationNames.join(', ')}.`)
+    return anim
   }
 
   private _show(index: number, force = false): void {
@@ -203,3 +222,25 @@ export class AnimatedSprite2D<A extends string = string> extends Sprite2D {
 }
 
 const EPSILON = 1e-9
+
+function resolveAnimation(name: string, def: SpriteAnimation): ResolvedAnimation {
+  const n = def.frames.length
+  if (!n) throw new Error(`AnimatedSprite2D: animation "${name}" has no frames.`)
+  let durations: number[]
+  if (def.durations) {
+    if (def.fps !== undefined) throw new Error(`AnimatedSprite2D: animation "${name}": pass either \`fps\` or \`durations\`, not both.`)
+    if (def.durations.length !== n) {
+      throw new Error(`AnimatedSprite2D: animation "${name}" has ${n} frames but ${def.durations.length} durations.`)
+    }
+    durations = [...def.durations]
+    const bad = durations.findIndex((d) => !(d > 0 && Number.isFinite(d)))
+    if (bad >= 0) throw new Error(`AnimatedSprite2D: animation "${name}" duration of frame ${bad} must be > 0, got ${durations[bad]}.`)
+  } else {
+    const fps = def.fps ?? 10
+    if (!(fps > 0)) throw new Error(`AnimatedSprite2D: animation "${name}" fps must be > 0, got ${fps}.`)
+    durations = new Array<number>(n).fill(1 / fps)
+  }
+  const starts = [0]
+  for (let i = 0; i < n; i++) starts.push(starts[i]! + durations[i]!)
+  return { frames: [...def.frames], durations, starts, loop: def.loop ?? true }
+}

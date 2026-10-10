@@ -1,4 +1,4 @@
-import { CanvasLayer, ColorRect, Label, v } from 'sapling2d'
+import { CanvasLayer, ColorRect, Label, Rect2, Signal, v } from 'sapling2d'
 
 const XP_W = 300
 const XP_H = 14
@@ -20,8 +20,26 @@ export class Hud extends CanvasLayer {
   readonly bossBack = new ColorRect({ name: 'BossBack', size: v(BOSS_W, BOSS_H), color: 0x2a1010, alpha: BOSS_ALPHA, visible: false })
   readonly bossFill = new ColorRect({ name: 'BossFill', size: v(BOSS_W, BOSS_H), color: 0xe04040 })
 
+  /** 右上角的音乐 / 音效开关：点一下发出 `toggle`（Battle 切换静音并存档）。 */
+  readonly toggle = new Signal<[bus: 'Music' | 'SFX']>()
+  readonly musicToggle = this._toggleLabel('MusicToggle')
+  readonly sfxToggle = this._toggleLabel('SfxToggle')
+
   constructor() {
     super({ name: 'Hud', layer: 10 })
+  }
+
+  private _toggleLabel(name: string): Label {
+    // 点击区域比字大一圈（右对齐：原点在右边）
+    return new Label({ name, text: '', fontSize: 24, color: 0xffffff, align: 'right', stroke: { color: 0x000000, width: 4 }, inputPickable: true, hitArea: new Rect2(-110, -12, 124, 56) })
+  }
+
+  /** 开关上的字：关掉的显示“关”、变灰。 */
+  showMute(music: boolean, sfx: boolean): void {
+    this.musicToggle.text = `音乐 ${music ? '关' : '开'}`
+    this.musicToggle.color = music ? 0x9a9a9a : 0xffffff
+    this.sfxToggle.text = `音效 ${sfx ? '关' : '开'}`
+    this.sfxToggle.color = sfx ? 0x9a9a9a : 0xffffff
   }
 
   override ready() {
@@ -31,6 +49,10 @@ export class Hud extends CanvasLayer {
     this.add(this.level)
     this.add(this.xpBack)
     this.xpBack.add(this.xpFill)
+    this.add(this.musicToggle)
+    this.add(this.sfxToggle)
+    this.musicToggle.clicked.connect(() => this.toggle.emit('Music'), this)
+    this.sfxToggle.clicked.connect(() => this.toggle.emit('SFX'), this)
     this.add(this.bossName)
     this.add(this.bossBack)
     this.bossBack.add(this.bossFill)
@@ -69,6 +91,8 @@ export class Hud extends CanvasLayer {
     this.lives.position = v(r.left + 24, r.top + 24)
     this.wave.position = v(r.right - 24, r.top + 24)
     this.level.position = v(r.left + 24, r.top + 92)
+    this.sfxToggle.position = v(r.right - 24, r.top + 80)
+    this.musicToggle.position = v(r.right - 150, r.top + 80)
     this.xpBack.position = v(r.left + 100, r.top + 92 - XP_H / 2)
     const cx = (r.left + r.right) / 2
     this.bossName.position = v(cx, r.top + 130)

@@ -1,4 +1,4 @@
-import { Camera2D, Ease, HitTester, Node2D, Particles2D, Scene, Sprite2D, type Curve2D, type PointerEvent2D, type Tween, v, Vector2 } from 'sapling2d'
+import { AudioStreamPlayer, Camera2D, Ease, HitTester, Node2D, Particles2D, Scene, Sprite2D, type Curve2D, type PointerEvent2D, type Tween, v, Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
 import { FEEL, FIELD, PATH, SLOTS, START, ULT, Z } from '../config'
 import { ENEMIES, enemyHp, type EnemyKind } from '../data/enemies'
@@ -41,6 +41,7 @@ import { AimRing, MeteorStrike, RainZone, UltBar } from '../nodes/Ultimates'
 import { UpgradePicker } from '../nodes/UpgradePicker'
 import { Slot } from '../nodes/Slot'
 import { randomPath } from '../path'
+import { BGM, BGM_VOLUME, playSound, SOUND_ASSETS, type SoundName } from '../sounds'
 
 /** 特效贴图里图案的半径（像素，贴图按 2 倍存）：按它把特效缩放到想要的范围。 */
 const SLASH_R = 149
@@ -106,7 +107,7 @@ interface Spawner {
  * 场景的 process 先于子节点：这里先出怪、处理上一帧越过底线的怪、清掉死怪、推进波次，然后怪物前进、英雄攻击。
  */
 export class Battle extends Scene implements HeroWorld {
-  static override assets = ASSETS
+  static override assets = { ...ASSETS, ...SOUND_ASSETS }
   state: BattleState = 'choosing'
   lives = START.lives
   wave = 0
@@ -151,6 +152,7 @@ export class Battle extends Scene implements HeroWorld {
   sparks!: Particles2D
   debris!: Particles2D
   background!: Sprite2D
+  music!: AudioStreamPlayer
   /** 测试用：不自动出怪、不自动推进波次（见 stopSpawning）。 */
   manual = false
   private _spawners: Spawner[] = []
@@ -166,6 +168,7 @@ export class Battle extends Scene implements HeroWorld {
   private _drag: { hero: Hero; dx: number; dy: number } | null = null
 
   override ready() {
+    this.music = this.add(new AudioStreamPlayer({ name: 'Music', stream: BGM, loop: true, volume: BGM_VOLUME, autoplay: true }))
     this.background = this.add(new Sprite2D({ name: 'Background', texture: ASSETS.bg, zIndex: Z.background }))
     this._layoutBackground()
     this.tree.viewport.resized.connect(() => this._layoutBackground(), this)
@@ -186,6 +189,13 @@ export class Battle extends Scene implements HeroWorld {
     )
     this.camera = this.add(new Camera2D({ position: v(375, 667) }))
     this.hud = this.add(new Hud())
+    this._applyMute()
+    this.hud.toggle.connect((bus) => {
+      const key = bus === 'Music' ? 'musicMuted' : 'sfxMuted'
+      this.tree.storage.set(key, !this.tree.storage.get(key, false))
+      this._applyMute()
+      this.sound('button')
+    }, this)
     this.aimRing = this.add(new AimRing())
     this.ultBar = this.add(new UltBar())
     this.ultBar.aimMove.connect((kind, at) => this._aimAt(kind, at), this)
@@ -227,6 +237,7 @@ export class Battle extends Scene implements HeroWorld {
 
   /** 选好了英雄：进入放置，空槽位高亮、可以点。 */
   choose(kind: HeroKind): void {
+    this.sound('pick')
     this.heroPicker = null
     this.placing = kind
     this.state = 'placing'
@@ -388,7 +399,22 @@ export class Battle extends Scene implements HeroWorld {
     return this.tree.rng.randf()
   }
 
+  /** 按存档里的设置静音音乐 / 音效总线，更新 HUD 上的开关。 */
+  private _applyMute() {
+    const music = this.tree.storage.get('musicMuted', false)
+    const sfx = this.tree.storage.get('sfxMuted', false)
+    this.tree.audio.setBusMute('Music', music)
+    this.tree.audio.setBusMute('SFX', sfx)
+    this.hud.showMute(music, sfx)
+  }
+
+  /** 播一个音效（音量和并发上限在 sounds.ts）。 */
+  sound(name: SoundName): void {
+    playSound(this.tree.audio, name)
+  }
+
   shootArrow(x: number, y: number, target: Enemy, shot: Shot, range: number): void {
+    this.sound('shoot')
     let a: Arrow | undefined
     for (let i = 0; i < this._arrows.length; i++) {
       if (!this._arrows[i]!.active) {
@@ -426,6 +452,7 @@ export class Battle extends Scene implements HeroWorld {
   }
 
   private _arrowHit(e: Enemy, shot: Shot) {
+    this.sound('arrow_hit')
     if (shot.poison) this.poison(e, shot.poison.dps, shot.poison.time, shot.poison.maxStacks, 1)
     this.damage(e, shot.damage, { crit: shot.crit || shot.headshot, arrow: true, ignoreArmor: shot.headshot, source: 'archer' })
   }
@@ -433,6 +460,7 @@ export class Battle extends Scene implements HeroWorld {
   // ---------------------------------------------------------------- 法师
 
   castFireball(x: number, y: number, target: Enemy, blast: Blast): void {
+    this.sound('fireball')
     let f = this._fireballs.find((q) => !q.active)
     if (!f) {
       f = this.fx.add(new Fireball())
@@ -455,7 +483,9 @@ export class Battle extends Scene implements HeroWorld {
       this.damage(e, b.damage, { source: 'mage' })
     }
     if (b.burnGround) this.burns.push(this.add(new BurnZone(f.x, f.y + 20, b.radius, BURN_TIME)))
-    this._burst(f.x, f.y, b.radius, b.slowPct > 0 || b.freeze ? 'ice' : 'fire')
+    const ice = b.slowPct > 0 || b.freeze
+    this._burst(f.x, f.y, b.radius, ice ? 'ice' : 'fire')
+    this.sound(ice ? 'freeze' : 'explode')
   }
 
   chainLightning(x: number, y: number, first: Enemy, damage: number, jumps: number, falloff: number): void {
@@ -464,6 +494,7 @@ export class Battle extends Scene implements HeroWorld {
     let fromY = y
     let t: Enemy | null = first
     let dmg = damage
+    this.sound('lightning')
     for (let k = 0; k <= jumps && t; k++) {
       hit.add(t)
       this.add(new Bolt(fromX, fromY, t.x, t.y - 24, k % 2 === 1))
@@ -494,6 +525,7 @@ export class Battle extends Scene implements HeroWorld {
    */
   slash(hero: Hero, target: Enemy, s: Slash): void {
     const angle = Math.atan2(target.x - hero.x, -(target.y - hero.y)) // 0 = 正上方，和刀光贴图一致
+    this.sound('slash')
     const reach = s.range + 26 // 加上怪物身体的半径
     const half = s.arc / 2
     const hit: Enemy[] = []
@@ -506,6 +538,7 @@ export class Battle extends Scene implements HeroWorld {
       da = Math.atan2(Math.sin(da), Math.cos(da))
       if (s.whirl || Math.abs(da) <= half || e === target) hit.push(e)
     }
+    if (hit.length) this.sound('knockback')
     for (const e of hit) {
       if (this.controllable(e)) {
         e.pushBack(s.knockback)
@@ -586,6 +619,7 @@ export class Battle extends Scene implements HeroWorld {
     }
     if (++e.frostHits >= FREEZE_HITS) {
       e.frozenLeft = FREEZE_TIME
+      this.sound('freeze')
       const ice = this.fx.add(new Sprite2D({ texture: ASSETS.fx.get('fx_ice'), position: v(e.x, e.y - 24), scale: v(0.2, 0.2) }))
       ice.createTween().to(ice, { scale: v(0.45, 0.45), alpha: 0 }, 0.4, Ease.QuadOut).call(() => ice.queueFree())
       e.frostHits = 0
@@ -751,6 +785,7 @@ export class Battle extends Scene implements HeroWorld {
     if (ENEMIES[kind].boss) {
       this.boss = e
       this.hud.flash(`${ENEMIES[kind].name} 出现！`, 1.6)
+      this.sound('boss')
       this.shake(FEEL.shake * 1.4, FEEL.shakeTime * 1.6)
     }
     return e
@@ -777,6 +812,7 @@ export class Battle extends Scene implements HeroWorld {
       return
     }
     this.kills++
+    this.sound('die')
     this.debris.position = v(e.x, e.y - 24)
     this.debris.emit(FEEL.debris)
     e.queueFree()
@@ -861,6 +897,7 @@ export class Battle extends Scene implements HeroWorld {
     const archer = this.heroOf('archer')
     if (!archer || !this.canUlt('archer')) return false
     this._consume('archer')
+    this.sound('ult_archer')
     const damage = archer.stats.damage * ULT.rain.mul
     this.add(
       new RainZone(x, y, ULT.rain.radius, (cx, cy, r) => {
@@ -875,12 +912,14 @@ export class Battle extends Scene implements HeroWorld {
     const mage = this.heroOf('mage')
     if (!mage || !this.canUlt('mage')) return false
     this._consume('mage')
+    this.sound('ult_mage')
     const damage = mage.stats.damage * ULT.meteor.mul
     this.add(
       new MeteorStrike(x, y, ULT.meteor.radius, (cx, cy) => {
         const r2 = ULT.meteor.radius ** 2
         for (const e of this.enemies) if (!e.dead && (e.x - cx) ** 2 + (e.y - cy) ** 2 <= r2) this.damage(e, damage)
         this._burst(cx, cy, ULT.meteor.radius, 'fire')
+        this.sound('meteor')
         this.shake(FEEL.shake * 1.6, FEEL.shakeTime * 1.4)
         this.hitStop(ULT.meteor.hitStop)
       }),
@@ -893,6 +932,7 @@ export class Battle extends Scene implements HeroWorld {
     const knight = this.heroOf('knight') as Knight | null
     if (!knight || !this.canUlt('knight')) return false
     this._consume('knight')
+    this.sound('ult_knight')
     this._charged.clear()
     knight.charge(ULT.charge.topY, ULT.charge.time, () => this._charged.clear())
     return true
@@ -905,6 +945,7 @@ export class Battle extends Scene implements HeroWorld {
     for (const e of this.enemies) {
       if (e.dead || this._charged.has(e) || Math.abs(e.x - knight.x) > half || e.y < lo || e.y > hi) continue
       this._charged.add(e)
+      this.sound('knockback')
       if (this.controllable(e)) {
         e.pushBack(ULT.charge.knockback)
         this.stun(e, ULT.charge.stun)
@@ -926,6 +967,7 @@ export class Battle extends Scene implements HeroWorld {
     const level = this.level - this.pendingLevels + 1
     this.pendingLevels--
     if (!offers.length) return
+    this.sound('level_up')
     this.tree.paused = true
     this.picker = this.add(new UpgradePicker(offers, level))
     this.picker.picked.connect((offer) => this.applyOffer(offer), this)
@@ -933,6 +975,7 @@ export class Battle extends Scene implements HeroWorld {
 
   /** 选了三选一里的一个：技能节点或通用选项。 */
   applyOffer(offer: Offer): void {
+    this.sound('pick')
     if (isGeneric(offer)) this.applyGeneric(offer)
     else this.applySkill(offer)
   }
@@ -1044,6 +1087,7 @@ export class Battle extends Scene implements HeroWorld {
   loseLives(n: number): void {
     if (this.state === 'lost' || this.state === 'won') return
     this.lives = Math.max(0, this.lives - n)
+    this.sound('leak')
     this.shake(FEEL.shake, FEEL.shakeTime)
     if (this.lives > 0) return
     this.state = 'lost'
@@ -1058,11 +1102,14 @@ export class Battle extends Scene implements HeroWorld {
     storage.set('bestWave', bestWave)
     storage.set('wins', wins)
     this.ultBar.cancelAim()
+    this.music.stop()
+    this.sound(won ? 'win' : 'lose')
     this.result = this.add(new ResultPanel({ won, wave: this.wave, kills: this.kills, time: this.runTime, bestWave, wins, taken: this.taken }))
     this.result.restart.connect(() => this.restart(), this)
   }
 
   restart(): void {
+    this.sound('button')
     void this.tree.changeScene(Battle)
   }
 

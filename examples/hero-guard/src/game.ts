@@ -9,6 +9,9 @@ declare module 'sapling2d' {
     /** 到过的最高波次、胜利次数。 */
     bestWave: number
     wins: number
+    /** 设置：关掉音乐 / 音效（HUD 右上角的开关）。 */
+    musicMuted: boolean
+    sfxMuted: boolean
   }
 }
 

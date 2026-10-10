@@ -19,11 +19,23 @@ export interface Node2DOptions extends NodeOptions {
   modulate?: number
   /** 颜色乘子（0xRRGGBB），只作用于自己的贴图 / 文字，不影响子节点。默认 0xffffff。 */
   selfModulate?: number
+  /** 混合模式，作用于自己和子节点（子节点可以再设回 `'normal'`）。默认 `'inherit'`（跟随父节点）。 */
+  blendMode?: BlendMode
   /** 是否接收指针事件（pointerDown 等信号）。默认 false。 */
   inputPickable?: boolean
   /** 点击区域（局部坐标）。不设置时，Sprite2D 用贴图范围，其他节点无法被点中。 */
   hitArea?: Rect2 | CircleHitArea | null
 }
+
+/**
+ * 混合模式：节点画到画面上时怎样和下面已有的颜色合成。
+ * - `'inherit'`（默认）：跟随父节点，一直到根都没设置就是 `'normal'`；
+ * - `'normal'`：普通的透明度混合；
+ * - `'add'`：叠加（颜色相加，只会变亮），用于火光、爆炸、刀光、魔法这类发光的特效。`alpha` 照常起作用：淡出时光也跟着变弱。
+ */
+export type BlendMode = 'inherit' | 'normal' | 'add'
+
+const BLEND_MODES: readonly BlendMode[] = ['inherit', 'normal', 'add']
 
 /**
  * 带 2D 变换的节点。变换数据由节点自己持有（见 ADR 0002），渲染层每帧把有变化的节点同步给渲染器。
@@ -42,6 +54,7 @@ export class Node2D extends Node {
   private _alpha: number
   private _modulate: number
   private _selfModulate: number
+  private _blendMode: BlendMode
   private _pointerDown: Signal<[event: PointerEvent2D]> | null = null
   private _pointerMove: Signal<[event: PointerEvent2D]> | null = null
   private _pointerUp: Signal<[event: PointerEvent2D]> | null = null
@@ -74,6 +87,7 @@ export class Node2D extends Node {
     this._alpha = clampAlpha(options.alpha ?? 1)
     this._modulate = clampColor(options.modulate ?? WHITE)
     this._selfModulate = clampColor(options.selfModulate ?? WHITE)
+    this._blendMode = checkBlendMode(options.blendMode ?? 'inherit')
     this.inputPickable = options.inputPickable ?? false
     this.hitArea = options.hitArea ?? null
   }
@@ -197,6 +211,21 @@ export class Node2D extends Node {
 
   set selfModulate(value: number) {
     this._selfModulate = clampColor(value)
+    this._version++
+  }
+
+  /**
+   * 混合模式，作用于自己和所有子节点（和 `modulate` 一样），子节点可以设成 `'normal'` 退出；不传进 CanvasLayer。
+   * `'add'` 是叠加发光：火光、爆炸、刀光叠在别的东西上会变亮，而不是盖住它。
+   * 混合模式不同的节点不能合批：同屏很多发光特效时，让它们在绘制顺序上挨在一起（同一个父节点、相近的 zIndex）。
+   */
+  get blendMode(): BlendMode {
+    return this._blendMode
+  }
+
+  set blendMode(value: BlendMode) {
+    if (value === this._blendMode) return // 对象池里反复设同一个值时不触发重新同步
+    this._blendMode = checkBlendMode(value)
     this._version++
   }
 
@@ -351,12 +380,18 @@ export class Node2D extends Node {
       alpha: this._alpha !== 1 ? Math.round(this._alpha * 100) / 100 : undefined,
       modulate: this._modulate !== WHITE ? hex(this._modulate) : undefined,
       selfModulate: this._selfModulate !== WHITE ? hex(this._selfModulate) : undefined,
+      blendMode: this._blendMode !== 'inherit' ? this._blendMode : undefined,
     }
   }
 }
 
 const WHITE = 0xffffff
 const COLOR_PROPS: ReadonlySet<string> = new Set(['modulate', 'selfModulate'])
+
+function checkBlendMode(value: BlendMode): BlendMode {
+  if (!BLEND_MODES.includes(value)) throw new Error(`Node2D: unknown blendMode "${String(value)}". Expected: ${BLEND_MODES.join(', ')}.`)
+  return value
+}
 
 function clampAlpha(value: number): number {
   return Math.min(1, Math.max(0, value))

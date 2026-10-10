@@ -22,7 +22,7 @@
 - **生命周期**：`enterTree()`（父先于子）→ `ready()`（子先于父，一生一次）→ 每帧 `process(dt)` / 固定 60Hz 的 `physicsProcess(dt)` → `exitTree()`（子先于父）。覆写时不需要调用 `super`。
 - **场景**：`Scene` 是树的根，同一时间一个。`static assets` 声明的资源在 `ready()` 之前加载完成；场景参数通过构造函数声明，用 `this.tree.changeScene(Cls, params)` 切换。
 - **场景树**：`this.tree` 提供 `input`、`audio`、`storage`、`physics`、`viewport`、`rng`、`paused`、`timeScale`、`createTween()`、`createTimer()`、`getNodesInGroup()`、`autoload()`、`changeScene()`、`dump()`；时间：`time`（游戏时间，秒，按物理步累计；暂停时和 `timeScale` 为 0 时都不走，适合做冷却和时间点）、`physicsFrames`（物理步数，暂停时也计数）、`processFrames`。节点不在树里时访问 `this.tree` 会抛错（构造函数里不要用）。
-- **构造参数**：每个节点的构造函数接受一个选项对象，键就是它可写的属性：通用的 `name`、`groups`、`processMode`；`Node2D` 的 `position`、`rotation`、`scale`、`visible`、`zIndex`、`alpha`、`modulate`、`selfModulate`、`inputPickable`、`hitArea`；再加各节点自己的属性（如 `Label` 的 `text`（默认 `''`）、`fontSize`，`RigidBody2D` 的 `mass`、`bounce`）。
+- **构造参数**：每个节点的构造函数接受一个选项对象，键就是它可写的属性：通用的 `name`、`groups`、`processMode`；`Node2D` 的 `position`、`rotation`、`scale`、`visible`、`zIndex`、`alpha`、`modulate`、`selfModulate`、`blendMode`、`inputPickable`、`hitArea`；再加各节点自己的属性（如 `Label` 的 `text`（默认 `''`）、`fontSize`，`RigidBody2D` 的 `mass`、`bounce`）。
 - **单位与坐标**：像素、y 轴向下、弧度（另有 `rotationDegrees`）、重力 px/s²。游戏坐标是设计分辨率（默认 750×1334）；`expand` 模式下屏幕多出来的部分向两侧对称扩展，贴边的 UI 用 `this.tree.viewport.visibleRect` / `safeRect`。
 - **每帧顺序**：处理输入队列（指针信号在这里触发）→ 若干次物理步（每步：所有节点的 `physicsProcess`，再推进物理世界、写回刚体位置、派发接触信号）→ `process` → Tween / Timer → `callDeferred` → `queueFree`。每帧最多补 2 个物理步。
 
@@ -307,7 +307,7 @@ pop() {
 
 ## 透明度与颜色
 
-`Node2D` 有三个外观属性，都可以写在构造参数里、也都可以补间：
+`Node2D` 有三个颜色属性，都可以写在构造参数里、也都可以补间；另有混合模式 `blendMode`（见下面“叠加发光”）：
 
 | 属性 | 默认 | 作用范围 | 说明 |
 |---|---|---|---|
@@ -323,12 +323,23 @@ enemy.createTween().to(enemy, { modulate: 0xffffff }, 0.2)
 fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 ```
 
+### 叠加发光（blendMode）
+
+<!-- example:blend-mode -->
+
+<!-- example:blend-mode#test -->
+
+- `blendMode`：`'inherit'`（默认，跟随父节点；一直到根都没设就是普通混合）、`'normal'`、`'add'`（叠加：颜色相加，只会变亮）。和 `modulate` 一样作用于自己和整棵子树，子节点可以设回 `'normal'`；也和 `modulate` 一样**不传进 `CanvasLayer`**（界面层自成一层，要发光就在层里面的节点上设）。贴图、`ColorRect`、文字、粒子、图块地图都按它绘制。
+- 火光、爆炸、刀光、魔法、闪光这类发光的特效用 `'add'`：叠在别的东西上会把它照亮；普通混合只会盖上一层颜色，看起来发灰。`alpha` 照常起作用（淡出时光也变弱），`selfModulate` 给光染色。发光贴图做成**白色、黑底或透明底、中心亮边缘暗**的样子，颜色交给 `selfModulate`。
+- 叠加在亮的背景上容易变成一片白：背景越暗效果越好，同一处叠太多层会过曝。
+- 混合模式不同的相邻节点不能合批，每切换一次多一次绘制调用：同屏很多发光特效时，把它们放在同一个父节点下（像示例的 `fx`），在绘制顺序上挨在一起。
+
 ## 节点清单
 
 | 节点 | 用途 | 关键成员 |
 |---|---|---|
 | `Node` | 基类 | `add` `remove` `queueFree` `callDeferred` `addToGroup` `createTween` `processMode` `tree` |
-| `Node2D` | 带变换 | `position` `x` `y` `rotation` `scale` `visible` `zIndex` `alpha` `modulate` `selfModulate` `globalPosition` `toLocal` `toGlobal`；`inputPickable` `hitArea` + 信号 `pointerDown` `pointerMove` `pointerUp` `clicked` |
+| `Node2D` | 带变换 | `position` `x` `y` `rotation` `scale` `visible` `zIndex` `alpha` `modulate` `selfModulate` `blendMode` `globalPosition` `toLocal` `toGlobal`；`inputPickable` `hitArea` + 信号 `pointerDown` `pointerMove` `pointerUp` `clicked` |
 | `Scene` | 场景根 | `static assets` |
 | `Sprite2D` | 贴图 | `texture` `centered`（默认 true）`offset` `flipH` `flipV` |
 | `AnimatedSprite2D` | 帧动画（继承 Sprite2D） | `frames` / `animations` `fps` `loop` `autoplay` `play()` `pause()` `stop()` `frame` `speedScale` `isPlaying` `animation`；信号 `frameChanged` `animationFinished` |
@@ -374,7 +385,7 @@ const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, au
 | 节点 | 属性 |
 |---|---|
 | 所有节点 | `groups`、`processMode` |
-| `Node2D` 及子类 | `position`（总是显示）、`rotationDegrees`、`scale`、`visible`、`zIndex`、`alpha`、`modulate` / `selfModulate`（`#ff6666` 形式） |
+| `Node2D` 及子类 | `position`（总是显示）、`rotationDegrees`、`scale`、`visible`、`zIndex`、`alpha`、`modulate` / `selfModulate`（`#ff6666` 形式）、`blendMode` |
 | `Sprite2D` | `texture`（路径；图集的帧是 `sprites.png#enemy_red` / `explosion.png#3`）、`centered`、`offset`、`flipH`、`flipV` |
 | `AnimatedSprite2D` | 同 Sprite2D，加 `animation`（有多套时）、`frame`（总是显示）、`playing` |
 | `Label` | `text`（总是显示，含空格时加引号）、`fontSize`、`align` |

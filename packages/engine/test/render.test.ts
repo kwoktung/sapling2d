@@ -1,6 +1,6 @@
 import type { Container, Sprite, Text } from 'pixi.js'
 import { describe, expect, it } from 'vitest'
-import { Label, Node, Node2D, Scene, sheet, Sprite2D, tex, v } from 'sapling2d'
+import { ColorRect, Label, Node, Node2D, Particles2D, Scene, sheet, Sprite2D, tex, v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { PixiRenderer } from '../src/render/PixiRenderer'
 
@@ -160,6 +160,42 @@ describe('render sync', () => {
     s.selfModulate = 0x808080
     sync()
     expect([c.alpha, sprite.tint]).toEqual([1, 0x808080])
+  })
+})
+
+describe('blendMode', () => {
+  it('写到节点容器上：inherit 跟随父容器（Pixi 的默认值），add 作用于整棵子树，子节点可以设回 normal', async () => {
+    const g = await createTestGame({ main: Scene })
+    const r = PixiRenderer._createForSyncTests()
+    const fx = g.scene.add(new Node2D({ name: 'Fx', blendMode: 'add' }))
+    const glow = fx.add(new Sprite2D({ name: 'Glow', texture: tex('blend-glow.png') }))
+    const ui = fx.add(new Label({ name: 'Ui', text: 'x', blendMode: 'normal' }))
+    r.sync(g.tree)
+    expect([view(fx)!.blendMode, view(glow)!.blendMode, view(ui)!.blendMode]).toEqual(['add', 'inherit', 'normal'])
+    expect((view(glow)!.children[0] as Sprite).blendMode).toBe('inherit') // 内容层跟随节点容器
+
+    // 其他有内容的节点：节点容器和内容层（ParticleContainer 等）都不自己覆盖混合模式，靠 Pixi 的 groupBlendMode 继承
+    const rect = fx.add(new ColorRect({ size: v(10, 10) }))
+    const sparks = fx.add(new Particles2D({ texture: tex('blend-spark.png') }))
+    r.sync(g.tree)
+    for (const n of [rect, sparks]) expect([view(n)!.blendMode, view(n)!.children[0]!.blendMode]).toEqual(['inherit', 'inherit'])
+
+    fx.blendMode = 'normal'
+    r.sync(g.tree)
+    expect(view(fx)!.blendMode).toBe('normal')
+  })
+
+  it('默认 inherit；不是默认值时出现在 dump 里；未知值报错', async () => {
+    const g = await createTestGame({ main: Scene })
+    const n = g.scene.add(new Node2D({ name: 'N' }))
+    expect(n.blendMode).toBe('inherit')
+    n.blendMode = 'add'
+    expect(g.dump()).toContain('N (Node2D) position=(0, 0) blendMode=add')
+    const version = n._version
+    n.blendMode = 'add' // 同一个值：不触发重新同步
+    expect(n._version).toBe(version)
+    // @ts-expect-error 不存在的混合模式
+    expect(() => (n.blendMode = 'screen')).toThrow(/unknown blendMode "screen". Expected: inherit, normal, add/)
   })
 })
 

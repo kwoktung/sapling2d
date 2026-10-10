@@ -1,5 +1,5 @@
 export { Node, type NodeOptions, type DumpNode, type ProcessMode } from './core/Node'
-export { Node2D, type Node2DOptions } from './core/Node2D'
+export { Node2D, type Node2DOptions, type BlendMode } from './core/Node2D'
 export { Scene, type SceneClass, type SceneConstructor } from './core/Scene'
 export { SceneTree, type SceneTreeOptions, type DumpOptions, type NodeClass } from './core/SceneTree'
 export { Vector2, v } from './math/Vector2'

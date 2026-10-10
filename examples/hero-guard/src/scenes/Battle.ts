@@ -8,12 +8,16 @@ import {
   BURN_DPS,
   BURN_TIME,
   CHAIN_RANGE,
+  COLLIDE_MUL,
+  COLLIDE_RADIUS,
   drawOffers,
   FREEZE_HITS,
   FREEZE_TIME,
   FREEZE_WINDOW,
   POISON_CLOUD_RADIUS,
   POISON_CLOUD_STACKS,
+  TAUNT_RADIUS,
+  TAUNT_TIME,
   xpToNext,
   type BranchLevels,
   type SkillNode,
@@ -23,7 +27,7 @@ import { Arrow, PIERCE_RADIUS, type Shot } from '../nodes/Arrow'
 import { BurnZone, Bolt, Fireball, type Blast } from '../nodes/Effects'
 import { Enemy, type EnemyLook } from '../nodes/Enemy'
 import { FloatText } from '../nodes/FloatText'
-import { Archer, Mage, type Hero, type HeroWorld } from '../nodes/Hero'
+import { Archer, Knight, Mage, type Hero, type HeroWorld, type Slash } from '../nodes/Hero'
 import { HeroPicker } from '../nodes/HeroPicker'
 import { Hud } from '../nodes/Hud'
 import { PathPreview } from '../nodes/PathPreview'
@@ -34,8 +38,8 @@ import { randomPath } from '../path'
 /** `choosing` 选英雄、`placing` 点槽位放下选好的英雄、`wave` 出怪中、`gap` 两波之间。 */
 export type BattleState = 'choosing' | 'placing' | 'wave' | 'gap' | 'won' | 'lost'
 
-/** 已经实现的英雄（骑士在 07 加）；没实现的在选英雄画面里显示“敬请期待”。 */
-export const IMPLEMENTED: ReadonlySet<HeroKind> = new Set(['archer', 'mage'])
+/** 已经实现的英雄；没实现的在选英雄画面里显示“敬请期待”。 */
+export const IMPLEMENTED: ReadonlySet<HeroKind> = new Set(['archer', 'mage', 'knight'])
 
 /** 这几波开始前再选一个英雄上场。 */
 export const UNLOCK_WAVES: readonly number[] = [3, 6]
@@ -184,7 +188,7 @@ export class Battle extends Scene implements HeroWorld {
   placeHero(kind: HeroKind, slot: Slot): Hero {
     if (slot.hero) throw new Error(`slot ${slot.index} is taken`)
     if (!IMPLEMENTED.has(kind)) throw new Error(`hero ${kind} is not implemented yet`)
-    const hero = this.add(kind === 'archer' ? new Archer(this, slot.position) : new Mage(this, slot.position))
+    const hero = this.add(kind === 'archer' ? new Archer(this, slot.position) : kind === 'mage' ? new Mage(this, slot.position) : new Knight(this, slot.position))
     slot.hero = hero
     this.heroes.push(hero)
     hero.pointerDown.connect((e) => this._beginDrag(hero, e), this)
@@ -400,6 +404,72 @@ export class Battle extends Scene implements HeroWorld {
     }
   }
 
+  // ---------------------------------------------------------------- 骑士
+
+  /**
+   * 斩击：以骑士脚底为圆心，半径内、朝目标方向的扇形里（`whirl` 时 360°）的敌人都受伤；
+   * 击退（沿各自的路线往回推）、几率眩晕；撞人质变时，被击退的敌人新位置附近的其他敌人受一半伤害。
+   */
+  slash(hero: Hero, target: Enemy, s: Slash): void {
+    const angle = Math.atan2(target.x - hero.x, -(target.y - hero.y)) // 0 = 正上方，和刀光贴图一致
+    const reach = s.range + 26 // 加上怪物身体的半径
+    const half = s.arc / 2
+    const hit: Enemy[] = []
+    for (const e of this.enemies) {
+      if (e.dead) continue
+      const dx = e.x - hero.x
+      const dy = e.y - hero.y
+      if (dx * dx + dy * dy > reach * reach) continue
+      let da = Math.atan2(dx, -dy) - angle
+      da = Math.atan2(Math.sin(da), Math.cos(da))
+      if (s.whirl || Math.abs(da) <= half || e === target) hit.push(e)
+    }
+    for (const e of hit) {
+      if (this.controllable(e)) {
+        e.pushBack(s.knockback)
+        if (s.stunChance > 0 && this.tree.rng.randf() < s.stunChance) this.stun(e, s.stunTime)
+      }
+      this.damage(e, s.damage)
+    }
+    if (s.collide) {
+      for (const e of hit) {
+        if (e.dead || !this.controllable(e)) continue
+        for (const o of this.enemies) {
+          if (o === e || o.dead || hit.includes(o)) continue
+          if ((o.x - e.x) ** 2 + (o.y - e.y) ** 2 <= COLLIDE_RADIUS ** 2) this.damage(o, s.damage * COLLIDE_MUL)
+        }
+      }
+    }
+    this._slashFx(hero, angle, s)
+  }
+
+  /** 刀光：120° 的弧，叠加发光、按距离缩放；360° 时三片拼成一圈。 */
+  private _slashFx(hero: Hero, angle: number, s: Slash) {
+    const scale = ((s.range + 26) * 2) / 200
+    const pieces = s.whirl ? [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3] : [0]
+    for (const p of pieces) {
+      const fx = this.fx.add(new Sprite2D({ texture: ASSETS.slash, position: v(hero.x, hero.y - 30), rotation: angle + p, scale: v(scale * 0.8, scale * 0.8), selfModulate: 0xb8d8ff }))
+      fx.createTween().to(fx, { scale: v(scale, scale), alpha: 0 }, 0.2, Ease.QuadOut).call(() => fx.queueFree())
+    }
+  }
+
+  tauntAura(x: number, y: number): void {
+    for (const e of this.enemies) {
+      if (e.dead || !this.controllable(e) || (e.x - x) ** 2 + (e.y - y) ** 2 > TAUNT_RADIUS ** 2) continue
+      e.tauntLeft = Math.max(e.tauntLeft, TAUNT_TIME)
+      this._tint(e)
+    }
+    const s = (TAUNT_RADIUS * 2) / 256
+    const ring = this.fx.add(new Sprite2D({ texture: ASSETS.range, position: v(x, y - 20), scale: v(s * 0.3, s * 0.3), selfModulate: 0xffc060 }))
+    ring.createTween().to(ring, { scale: v(s, s), alpha: 0 }, 0.4, Ease.QuadOut).call(() => ring.queueFree())
+  }
+
+  stun(e: Enemy, time: number): void {
+    if (e.dead || !this.controllable(e)) return
+    e.stunLeft = Math.max(e.stunLeft, time)
+    this._tint(e)
+  }
+
   /** 爆炸特效：放大淡出的光圈（叠加发光）+ 火花。 */
   private _burst(x: number, y: number, radius: number, color: number) {
     const s = (radius * 2) / 64
@@ -440,9 +510,10 @@ export class Battle extends Scene implements HeroWorld {
     }
   }
 
-  /** 身上状态的颜色：冰冻 > 减速 > 中毒。 */
+  /** 身上状态的颜色：冰冻 > 眩晕 > 嘲讽 > 减速 > 中毒。 */
   private _tint(e: Enemy) {
-    e.body.selfModulate = e.frozenLeft > 0 ? 0x80c0ff : e.slowPct > 0 ? 0xbfe0ff : e.poisonStacks > 0 ? 0xb0ff90 : 0xffffff
+    e.body.selfModulate =
+      e.frozenLeft > 0 ? 0x80c0ff : e.stunLeft > 0 ? 0xfff080 : e.tauntLeft > 0 ? 0xffb070 : e.slowPct > 0 ? 0xbfe0ff : e.poisonStacks > 0 ? 0xb0ff90 : 0xffffff
   }
 
   /** 加 `stacks` 层毒（不超过上限），刷新持续时间；伤害按最强的那一份毒算。 */
@@ -464,6 +535,14 @@ export class Battle extends Scene implements HeroWorld {
       let changed = false
       if (e.frozenLeft > 0 && (e.frozenLeft -= dt) <= 0) {
         e.frozenLeft = 0
+        changed = true
+      }
+      if (e.stunLeft > 0 && (e.stunLeft -= dt) <= 0) {
+        e.stunLeft = 0
+        changed = true
+      }
+      if (e.tauntLeft > 0 && (e.tauntLeft -= dt) <= 0) {
+        e.tauntLeft = 0
         changed = true
       }
       if (e.slowLeft > 0 && (e.slowLeft -= dt) <= 0) {

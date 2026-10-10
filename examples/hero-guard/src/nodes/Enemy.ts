@@ -31,6 +31,9 @@ export class Enemy extends Node2D {
   frozenLeft = 0
   frostHits = 0
   frostWindowStart = -1
+  /** 眩晕、嘲讽（骑士）：剩余时间，期间停下。 */
+  stunLeft = 0
+  tauntLeft = 0
   /** 越过底线了（Battle 扣命后移除）。 */
   leaked = false
   private _flashLeft = 0
@@ -59,9 +62,14 @@ export class Enemy extends Node2D {
     this._move(0)
   }
 
-  /** 当前速度：冰冻时 0，减速时打折。 */
+  /** 停下了（冰冻、眩晕、嘲讽）。 */
+  get held(): boolean {
+    return this.frozenLeft > 0 || this.stunLeft > 0 || this.tauntLeft > 0
+  }
+
+  /** 当前速度：停下时 0，减速时打折。 */
   get speed(): number {
-    if (this.frozenLeft > 0) return 0
+    if (this.held) return 0
     return ENEMIES[this.kind].speed * (1 - this.slowPct)
   }
 
@@ -73,7 +81,7 @@ export class Enemy extends Node2D {
     if (this.dead) return
     this._move(this.speed * dt)
     // 弹跳：|sin| 的一拍是一下，落地（接近 0）时压扁；冰冻时停住，减速时跳得慢
-    if (this.frozenLeft <= 0) this._hop += dt * ENEMY_FEEL.hopRate * Math.PI * (1 - this.slowPct)
+    if (!this.held) this._hop += dt * ENEMY_FEEL.hopRate * Math.PI * (1 - this.slowPct)
     const s = Math.abs(Math.sin(this._hop))
     const squash = (1 - s) * ENEMY_FEEL.squash
     const k = ENEMIES[this.kind].scale
@@ -84,6 +92,11 @@ export class Enemy extends Node2D {
       this.body.flash = this._flashLeft / ENEMY_FEEL.flashTime
     }
     if (this.dist >= this.path.length) this.leaked = true
+  }
+
+  /** 沿路线往回推 `d` 像素（击退），位置马上更新（撞人判定要用新位置）。 */
+  pushBack(d: number): void {
+    this._move(-d)
   }
 
   /** 扣血；返回是否被这一下打死。 */

@@ -1,5 +1,5 @@
 // 生成骨架阶段的占位图：node scripts/gen-placeholders.mjs（美术到位后由 scripts/art/ 的管线替换）
-// - 怪物、槽位、箭、火花、光晕、路线虚线的点、射程圈（英雄已经换成美术管线生成的图集）
+// - 怪物、槽位、箭、火花、光晕、路线虚线的点、射程圈、刀光（英雄已经换成美术管线生成的图集）
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 
@@ -102,4 +102,18 @@ save('glow.png', softCircle(64, 0.3))
 save('spark.png', softCircle(12, 0.4))
 save('dot.png', softCircle(14, 0.6))
 save('range.png', ring(256, 4, 160))
+
+// 刀光：上方 120° 的弧（白色，边缘淡出），圆心在图中心；游戏里叠加发光、染色、按射程缩放
+const slash = canvas(200, 200)
+for (let y = 0; y < 200; y++) {
+  for (let x = 0; x < 200; x++) {
+    const dx = x + 0.5 - 100, dy = y + 0.5 - 100
+    const d = Math.hypot(dx, dy)
+    const angle = Math.atan2(dx, -dy) // 0 = 正上方
+    if (d > 98 || d < 60 || Math.abs(angle) > Math.PI / 3) continue
+    const edge = Math.min(1, (98 - d) / 8, (d - 60) / 20, (Math.PI / 3 - Math.abs(angle)) / 0.3)
+    setPx(slash, x, y, 0xffffff, Math.round(230 * edge))
+  }
+}
+save('slash.png', slash)
 console.log('placeholders written to public/assets/')

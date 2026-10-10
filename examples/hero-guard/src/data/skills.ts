@@ -47,11 +47,44 @@ export function mageMods(): MageMods {
   return { damageMul: 1, blastMul: 1, burnGround: false, slowPct: 0, slowTime: 1.5, freeze: false, chainEvery: 0, chainJumps: 2, chainFalloff: 0.6 }
 }
 
-/** 各英雄的修正值类型（骑士在 07 加）。 */
+/** 骑士这一局的修正值。 */
+export interface KnightMods {
+  damageMul: number
+  knockbackMul: number
+  /** 质变：被击退的敌人撞到身后的敌人，造成伤害。 */
+  collide: boolean
+  /** 斩击角度（弧度）、攻击距离倍率、攻击间隔倍率。 */
+  arc: number
+  rangeMul: number
+  intervalMul: number
+  /** 质变：360° 旋风斩。 */
+  whirl: boolean
+  /** 眩晕几率和时间；0 表示没有。 */
+  stunChance: number
+  stunTime: number
+  /** 质变：嘲讽光环。 */
+  taunt: boolean
+}
+
+export function knightMods(): KnightMods {
+  return { damageMul: 1, knockbackMul: 1, collide: false, arc: (100 * Math.PI) / 180, rangeMul: 1, intervalMul: 1, whirl: false, stunChance: 0, stunTime: 0.6, taunt: false }
+}
+
+/** 各英雄的修正值类型。 */
 export interface HeroMods {
   archer: ArcherMods
   mage: MageMods
+  knight: KnightMods
 }
+
+export const KNOCKBACK = 12
+/** 击退撞人：被击退的敌人新位置周围这么远的敌人受伤，伤害是斩击的一半。 */
+export const COLLIDE_RADIUS = 45
+export const COLLIDE_MUL = 0.5
+/** 嘲讽光环：每隔几秒、半径、让敌人停多久。 */
+export const TAUNT_EVERY = 4
+export const TAUNT_RADIUS = 120
+export const TAUNT_TIME = 1
 
 export const BURN_TIME = 2
 export const BURN_DPS = 8
@@ -125,6 +158,24 @@ export const BRANCHES: Branch[] = [
     ['减速提高到 45%', (m) => (m.slowPct = 0.45)],
     ['减速持续 2.5 秒', (m) => (m.slowTime = 2.5)],
     ['质变：2 秒内被打 3 次就冰冻 1.5 秒', (m) => (m.freeze = true)],
+  ]),
+  branch('knight', 'smash', '重击', [
+    ['斩击伤害 +30%', (m) => (m.damageMul *= 1.3)],
+    ['击退距离翻倍', (m) => (m.knockbackMul *= 2)],
+    ['斩击伤害 +30%', (m) => (m.damageMul *= 1.3)],
+    ['质变：被击退的敌人撞到身后的敌人，造成一半伤害', (m) => (m.collide = true)],
+  ]),
+  branch('knight', 'whirl', '旋风', [
+    ['斩击角度 +40°', (m) => (m.arc += (40 * Math.PI) / 180)],
+    ['攻击距离 +25%', (m) => (m.rangeMul *= 1.25)],
+    ['攻击间隔 −20%', (m) => (m.intervalMul *= 0.8)],
+    ['质变：360° 旋风斩', (m) => (m.whirl = true)],
+  ]),
+  branch('knight', 'guard', '守护', [
+    ['20% 几率眩晕 0.6 秒', (m) => (m.stunChance = 0.2)],
+    ['眩晕几率提高到 35%', (m) => (m.stunChance = 0.35)],
+    ['眩晕 1 秒', (m) => (m.stunTime = 1)],
+    ['质变：嘲讽光环，每 4 秒让半径 120 内的敌人停 1 秒', (m) => (m.taunt = true)],
   ]),
   branch('mage', 'lightning', '雷电', [
     ['每第 3 次攻击额外放连锁闪电（跳 2 次，每跳 60%）', (m) => (m.chainEvery = 3)],

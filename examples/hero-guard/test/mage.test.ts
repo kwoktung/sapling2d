@@ -27,7 +27,7 @@ async function withMage() {
 }
 
 describe('选英雄和解锁', () => {
-  it('开局弹出 3 张英雄卡（骑士敬请期待）；点卡片再点空槽位放下，然后开始第 1 波', async () => {
+  it('开局弹出 3 张英雄卡；点卡片再点空槽位放下，然后开始第 1 波', async () => {
     const g = await createTestGame({ ...gameOptions, seed: 1 })
     const battle = g.scene as Battle
     g.step(30)
@@ -36,7 +36,7 @@ describe('选英雄和解锁', () => {
     expect(cards.map((c) => [c.kind, c.enabled])).toEqual([
       ['archer', true],
       ['mage', true],
-      ['knight', false],
+      ['knight', true],
     ])
     g.tap(cards[1]!.x + 300, cards[1]!.y + 100) // 法师
     expect([battle.state, battle.placing]).toEqual(['placing', 'mage'])
@@ -49,7 +49,7 @@ describe('选英雄和解锁', () => {
     expect([battle.state, battle.wave]).toEqual(['wave', 1])
   })
 
-  it('第 3 波前从剩下的英雄里再选一个；第 6 波只剩没实现的骑士时不弹', async () => {
+  it('第 3 波前从剩下的英雄里再选一个；第 6 波前再选最后一个；3 个都上场后不再弹', async () => {
     const g = await createTestGame({ ...gameOptions, seed: 1 })
     const battle = g.scene as Battle
     battle.startWith('archer', 1)
@@ -69,8 +69,17 @@ describe('选英雄和解锁', () => {
     battle.wave = 5
     battle.state = 'gap'
     g.step(2)
+    expect(battle.heroPicker!.cards.map((c) => c.kind)).toEqual(['knight'])
+    battle.heroPicker!.cards[0]!.clicked.emit(click)
+    battle.slots[5]!.clicked.emit(click)
+    g.stepSeconds(1)
+    expect([battle.heroes.map((h) => h.kind), battle.wave]).toEqual([['archer', 'mage', 'knight'], 6])
+    for (const e of battle.enemies) e.queueFree()
+    battle.wave = 8
+    battle.state = 'gap'
+    g.step(2)
     g.stepSeconds(2.5)
-    expect([battle.heroPicker, battle.wave]).toEqual([null, 6])
+    expect([battle.heroPicker, battle.wave]).toEqual([null, 9])
   })
 
   it('三选一只出已上场英雄的技能', async () => {

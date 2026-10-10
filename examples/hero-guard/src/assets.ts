@@ -16,6 +16,7 @@ export const ASSETS = {
   spark: tex('spark.png'),
   dot: tex('dot.png'),
   range: tex('range.png'),
+  slash: tex('slash.png'),
 }
 
 /** 图集里的精灵是显示尺寸的 2 倍（高分屏清晰），显示时乘这个缩放。 */

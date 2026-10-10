@@ -1,7 +1,7 @@
 import { Ease, Node2D, rect, Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
 import { ART_SCALE, ASSETS } from '../assets'
 import { HEROES, RIG, type HeroKind } from '../data/heroes'
-import { archerMods, HEADSHOT_EVERY, HEADSHOT_MUL, mageMods, type ArcherMods, type MageMods } from '../data/skills'
+import { archerMods, HEADSHOT_EVERY, HEADSHOT_MUL, KNOCKBACK, knightMods, mageMods, TAUNT_EVERY, type ArcherMods, type KnightMods, type MageMods } from '../data/skills'
 import type { Shot } from './Arrow'
 import type { Blast } from './Effects'
 import type { Enemy } from './Enemy'
@@ -18,8 +18,24 @@ export interface HeroWorld {
   castFireball(x: number, y: number, target: Enemy, blast: Blast): void
   /** 从 (x, y) 放连锁闪电：先打 `first`，再跳 `jumps` 次（每次跳到最近的没打过的敌人），每跳伤害乘 `falloff`。 */
   chainLightning(x: number, y: number, first: Enemy, damage: number, jumps: number, falloff: number): void
+  /** 骑士斩击：以 (x, y) 为圆心、朝 `angle`（0 朝上）的扇形（`whirl` 时 360°），打中范围内所有敌人。 */
+  slash(hero: Hero, target: Enemy, s: Slash): void
+  /** 嘲讽光环：半径内的敌人停下。 */
+  tauntAura(x: number, y: number): void
   /** [0, 1) 的随机数（tree.rng，测试可复现）。 */
   random(): number
+}
+
+/** 一次斩击的效果（骑士出手时算好）。 */
+export interface Slash {
+  damage: number
+  range: number
+  arc: number
+  whirl: boolean
+  knockback: number
+  collide: boolean
+  stunChance: number
+  stunTime: number
 }
 
 /** 英雄这一局的数值：基础数值乘上技能的修正（`refreshStats()` 重新算）。 */
@@ -86,6 +102,11 @@ export abstract class Hero extends Node2D {
   /** 出手：发射箭 / 火球 / 斩击。`target` 已确认还活着、在射程内（略放宽）。 */
   protected abstract release(target: Enemy): void
 
+  /** 武器在出手前后的角度：默认一直对准目标（`aim`）；骑士覆写成挥砍。 */
+  protected weaponAngle(_phase: 'windup' | 'release' | 'rest', aim: number): number {
+    return aim
+  }
+
   /** 武器在出手前后的姿势（相对静止姿势的偏移）：子类按武器的样子覆写。 */
   protected weaponPose(phase: 'windup' | 'release' | 'rest'): { dx: number; dy: number } {
     if (phase === 'windup') return { dx: -6, dy: 4 }
@@ -102,8 +123,8 @@ export abstract class Hero extends Node2D {
     this.facing = target.x < this.x ? -1 : 1
     this.scale = v(this.facing, 1)
     // 武器朝目标转过去（贴图朝上；节点翻转后在镜像的坐标里算，所以用 |dx|），限制在 ±70°
-    const aim = Math.atan2(Math.abs(target.x - this.x), -(target.y - (this.y + rig.weaponY)))
-    this.weapon.rotation = Math.min(1.2, aim)
+    const aim = Math.min(1.2, Math.atan2(Math.abs(target.x - this.x), -(target.y - (this.y + rig.weaponY))))
+    this.weapon.rotation = this.weaponAngle('rest', aim)
     const pose = (p: 'windup' | 'release' | 'rest') => {
       const o = this.weaponPose(p)
       return v(rig.weaponX + o.dx, rig.weaponY + o.dy)
@@ -112,14 +133,14 @@ export abstract class Hero extends Node2D {
     this._anim = this.createTween()
       .to(this.body, { scale: bodyScale(this.kind, 1.12, 0.86) }, windup, Ease.QuadOut)
       .parallel()
-      .to(this.weapon, { position: pose('windup') }, windup, Ease.QuadOut)
+      .to(this.weapon, { position: pose('windup'), rotation: this.weaponAngle('windup', aim) }, windup, Ease.QuadOut)
       .call(() => this._release(target))
       .to(this.body, { scale: bodyScale(this.kind, 0.92, 1.1) }, recover * 0.35, Ease.QuadOut)
       .parallel()
-      .to(this.weapon, { position: pose('release') }, recover * 0.35, Ease.QuadOut)
+      .to(this.weapon, { position: pose('release'), rotation: this.weaponAngle('release', aim) }, recover * 0.35, Ease.QuadOut)
       .to(this.body, { scale: bodyScale(this.kind, 1, 1) }, recover * 0.65, Ease.BackOut)
       .parallel()
-      .to(this.weapon, { position: pose('rest') }, recover * 0.65, Ease.QuadOut)
+      .to(this.weapon, { position: pose('rest'), rotation: this.weaponAngle('rest', aim) }, recover * 0.65, Ease.QuadOut)
       .call(() => (this._attacking = false))
   }
 
@@ -242,6 +263,65 @@ export class Mage extends Hero {
     // 举起法杖，出手时往前送
     if (phase === 'windup') return { dx: -4, dy: -10 }
     if (phase === 'release') return { dx: 8, dy: 2 }
+    return { dx: 0, dy: 0 }
+  }
+}
+
+/** 骑士的斩击角度（技能前）。 */
+export const KNIGHT_ARC = (100 * Math.PI) / 180
+
+/**
+ * 骑士：前方扇形斩击，击退。技能（`mods`）：重击（伤害、击退，质变撞人）、旋风（角度、距离、攻速，质变 360°）、
+ * 守护（眩晕，质变每 4 秒嘲讽光环）。剑的动作是挥砍：往后举起 → 挥过去 → 收回。
+ */
+export class Knight extends Hero {
+  override readonly mods: KnightMods = knightMods()
+  private _tauntIn = TAUNT_EVERY
+
+  constructor(world: HeroWorld, position: Vector2) {
+    super(world, 'knight', position)
+  }
+
+  override refreshStats(): void {
+    const base = HEROES.knight
+    this.stats.damage = base.damage * this.mods.damageMul
+    this.stats.range = base.range * this.mods.rangeMul
+    this.stats.interval = base.interval * this.mods.intervalMul
+  }
+
+  override process(dt: number) {
+    super.process(dt)
+    if (!this.mods.taunt || this.dragging) return
+    this._tauntIn -= dt
+    if (this._tauntIn <= 0) {
+      this._tauntIn += TAUNT_EVERY
+      this.world.tauntAura(this.x, this.y)
+    }
+  }
+
+  protected override release(target: Enemy): void {
+    const m = this.mods
+    this.world.slash(this, target, {
+      damage: this.stats.damage,
+      range: this.stats.range,
+      arc: m.arc,
+      whirl: m.whirl,
+      knockback: KNOCKBACK * m.knockbackMul,
+      collide: m.collide,
+      stunChance: m.stunChance,
+      stunTime: m.stunTime,
+    })
+  }
+
+  protected override weaponAngle(phase: 'windup' | 'release' | 'rest', aim: number): number {
+    if (phase === 'windup') return aim - 1.4 // 往后举
+    if (phase === 'release') return aim + 1 // 挥过去
+    return 0
+  }
+
+  protected override weaponPose(phase: 'windup' | 'release' | 'rest'): { dx: number; dy: number } {
+    if (phase === 'windup') return { dx: -6, dy: -4 }
+    if (phase === 'release') return { dx: 10, dy: 0 }
     return { dx: 0, dy: 0 }
   }
 }

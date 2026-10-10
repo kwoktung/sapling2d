@@ -290,6 +290,8 @@ shake(camera: Camera2D, strength: number, duration: number) {
 
 <!-- example:audio#test -->
 
+- `tree.audio.play(stream, { volume, loop, bus, maxVoices })`：`maxVoices` 限制同一个声音同时播放的数量，超过时这次不播（返回的 Voice `playing` 为 false）。命中、爆炸这类可能一帧触发几十次的音效都应该设。
+
 ### 暂停
 
 <!-- example:pause -->

@@ -37,6 +37,23 @@ describe('tree.audio', () => {
     expect(g.tree.audio.voiceCount).toBe(3)
   })
 
+  it('maxVoices：同一个声音已经有这么多个在播时不再播放（返回已停止的 Voice），播完一个又能播', async () => {
+    class Main extends Scene {
+      static override assets = { pop: POP }
+    }
+    const g = await createTestGame({ main: Main })
+    const audio = g.tree.audio
+    const voices = Array.from({ length: 5 }, () => audio.play(POP, { maxVoices: 2 }))
+    expect(voices.map((v) => v.playing)).toEqual([true, true, false, false, false])
+    expect(g.audio.log.length).toBe(2)
+    audio.play(BGM, { maxVoices: 2 }) // 别的声音不受影响
+    expect(audio.voiceCount).toBe(3)
+    voices[0]!.stop()
+    expect(audio.play(POP, { maxVoices: 2 }).playing).toBe(true)
+    expect(audio.play(POP).playing).toBe(true) // 不传就不限
+    expect(() => audio.play(POP, { maxVoices: -1 })).toThrow('maxVoices')
+  })
+
   it('总线音量：实际音量 = 声音 × 总线 × Master，立即作用于正在播放的声音；静音为 0', async () => {
     class Main extends Scene {
       static override assets = { pop: POP }

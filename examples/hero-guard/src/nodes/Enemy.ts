@@ -64,6 +64,9 @@ export class Enemy extends Node2D {
   /** 身体的半径（像素，按显示的宽度算）：近战够得着的距离 = 英雄半径 + 它。 */
   readonly radius: number
   private _lunge: Tween | null = null
+  /** 从传送门出现：还剩几秒长全（期间不走，整个节点从小放大）。 */
+  emergeLeft = 0
+  private _emergeTime = 0
   /** 精英脚下的暗环（不是精英时为 null）。 */
   readonly eliteRing: Sprite2D | null = null
   private _flashLeft = 0
@@ -152,8 +155,20 @@ export class Enemy extends Node2D {
     return !!t && !t.dead && (t.x - this.x) ** 2 + (t.y - this.y) ** 2 <= (this.reach + 1) ** 2
   }
 
+  /** 由小变大地出现：`time` 秒内整个节点从 0.1 倍放大到 1 倍（带回弹），期间不走。 */
+  emerge(time: number): void {
+    this.emergeLeft = this._emergeTime = time
+    this.scale = v(0.1, 0.1)
+  }
+
   override process(dt: number) {
     if (this.dead) return
+    if (this.emergeLeft > 0) {
+      this.emergeLeft = Math.max(0, this.emergeLeft - dt)
+      const s = Ease.BackOut(1 - this.emergeLeft / this._emergeTime)
+      this.scale = v(0.1 + 0.9 * s, 0.1 + 0.9 * s)
+      return
+    }
     const step = this.speed * dt
     const t = this.target
     if (t && !t.dead) this._chase(t, step)

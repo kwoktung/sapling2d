@@ -4,7 +4,7 @@ export const FIELD = {
   /** 怪物路线的横向范围。 */
   left: 80,
   right: 670,
-  /** 出生的高度（屏幕上方之外）和底线：越过底线扣命。 */
+  /** 场地的顶（算英雄区域比例用）和底线：越过底线扣命。怪物从背景里的传送门出来（见 `PORTAL`）。 */
   spawnY: -40,
   baseY: 1130,
 }
@@ -75,6 +75,9 @@ export const PATH = {
   previewTime: 0.8,
   previewFade: 0.4,
 }
+
+/** 传送门：怪物从中心由小变大地出现（`emerge` 秒，带回弹），长全了再出发；出生点在中心附近随机偏一点（`jitter`）。 */
+export const PORTAL = { emerge: 0.6, jitter: 14 }
 
 export const START = { lives: 20 }
 

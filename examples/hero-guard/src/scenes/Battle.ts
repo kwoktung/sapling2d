@@ -1,6 +1,6 @@
 import { AudioStreamPlayer, Camera2D, Ease, HitTester, Node2D, Particles2D, Scene, Sprite2D, type Curve2D, type PointerEvent2D, type Tween, v, Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
-import { AGGRO, FEEL, FIELD, PATH, START, ULT, Z, ZONES } from '../config'
+import { AGGRO, FEEL, FIELD, PATH, PORTAL, START, ULT, Z, ZONES } from '../config'
 import { ELITE, ENEMIES, enemyHp, type EnemyKind } from '../data/enemies'
 import { HERO_KINDS, HEROES, type HeroKind } from '../data/heroes'
 import {
@@ -50,6 +50,8 @@ const POISON_R = 84
 const BG_W = 1500
 const BG_H = 2688
 const BG_WALL_Y = 2300
+/** 背景贴图里传送门（黑洞）的中心（像素）。 */
+const BG_PORTAL = { x: 745, y: 218 }
 /** 刀光贴图的弧顶朝下偏右 160°：转回朝上（和 `angle` 的约定一致）。 */
 const SLASH_TURN = (-160 * Math.PI) / 180
 
@@ -145,6 +147,8 @@ export class Battle extends Scene implements HeroWorld {
   sparks!: Particles2D
   debris!: Particles2D
   background!: Sprite2D
+  /** 传送门（背景里的黑洞）中心的世界坐标：怪物从这里出现（随背景布局变）。 */
+  portal = v(375, 0)
   music!: AudioStreamPlayer
   /** 测试用：不自动出怪、不自动推进波次（见 stopSpawning）。 */
   manual = false
@@ -199,6 +203,7 @@ export class Battle extends Scene implements HeroWorld {
     const k = Math.max(r.width / BG_W, (wall - r.top) / BG_WALL_Y) * 1.04
     this.background.scale = v(k, k)
     this.background.position = v(375, wall - (BG_WALL_Y - BG_H / 2) * k)
+    this.portal = v(375 + (BG_PORTAL.x - BG_W / 2) * k, this.background.y + (BG_PORTAL.y - BG_H / 2) * k)
   }
 
   override exitTree() {
@@ -587,7 +592,7 @@ export class Battle extends Scene implements HeroWorld {
       if (b.abilityIn > 0) continue
       if (data.summon) {
         b.abilityIn += data.summon.every
-        for (let n = 0; n < data.summon.count; n++) this.spawnEnemy(data.summon.kind, randomPath((x, y) => this.tree.rng.randfRange(x, y), b.x, b.y))
+        for (let n = 0; n < data.summon.count; n++) this.spawnEnemy(data.summon.kind, this.pathFrom(b.x, b.y)).emerge(PORTAL.emerge)
         this._pulse(b, 0x80ff80, 160)
       }
       if (data.revive) {
@@ -694,6 +699,12 @@ export class Battle extends Scene implements HeroWorld {
     }
   }
 
+  /** 从传送门中心（随机偏一点）出发的随机路线。 */
+  portalPath(): Curve2D {
+    const r = this.tree.rng
+    return randomPath((a, b) => r.randfRange(a, b), this.portal.x + r.randfRange(-PORTAL.jitter, PORTAL.jitter), this.portal.y + r.randfRange(-PORTAL.jitter, PORTAL.jitter) * 0.5)
+  }
+
   /** 从 (x, y) 出发往下走的新随机路线（离开路线的怪放弃目标、在路线外死掉的怪分裂 / 被复活时用）。 */
   pathFrom(x: number, y: number): Curve2D {
     return randomPath((a, b) => this.tree.rng.randfRange(a, b), x, y)
@@ -773,7 +784,7 @@ export class Battle extends Scene implements HeroWorld {
    * 出一只怪：默认走一条新的随机路线，出现时路线预览闪一下（普通怪限流，见 `PATH.previewGap`）。
    * `preview: false` 时不显示路线（分裂出来的小怪、复活的怪）。
    */
-  spawnEnemy(kind: EnemyKind, path: Curve2D = randomPath((a, b) => this.tree.rng.randfRange(a, b)), hp?: number, elite = false, preview = true): Enemy {
+  spawnEnemy(kind: EnemyKind, path: Curve2D = this.portalPath(), hp?: number, elite = false, preview = true): Enemy {
     const important = elite || !!ENEMIES[kind].boss
     if (preview && (important || this.tree.time - this._lastPreview >= PATH.previewGap)) {
       this.add(new PathPreview(path, important))
@@ -1099,7 +1110,8 @@ export class Battle extends Scene implements HeroWorld {
     let pending = false
     for (const s of this._spawners) {
       while (s.spawned < s.group.count && this._waveTime >= s.next) {
-        this.spawnEnemy(s.group.kind, undefined, undefined, !!s.group.elite)
+        this.spawnEnemy(s.group.kind, undefined, undefined, !!s.group.elite).emerge(PORTAL.emerge)
+        this._shockwave(this.portal.x, this.portal.y, 60, 0xb060ff)
         s.spawned++
         s.next += s.group.interval
       }

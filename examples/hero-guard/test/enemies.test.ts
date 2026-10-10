@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { ART_SCALE } from '../src/assets'
+import { PORTAL } from '../src/config'
 import { ELITE, ENEMIES, enemyHp, HP_GROWTH, type EnemyKind } from '../src/data/enemies'
 import { WAVE_COUNT, WAVES } from '../src/data/waves'
 import { gameOptions } from '../src/game'
@@ -117,5 +118,27 @@ describe('波次表', () => {
     expect(elites).toHaveLength(2)
     expect(elites[0]!.maxHp).toBe(enemyHp('slime', 5, true))
     expect(enemyHp('slime', 5)).toBe(Math.round(40 * HP_GROWTH ** 4))
+  })
+})
+
+describe('传送门', () => {
+  it('波次出的怪从背景里传送门的中心由小变大地出现，长全了才出发', async () => {
+    const { g, battle } = await setup()
+    battle.manual = false
+    battle.startWave(1)
+    while (!battle.enemies.length) g.step()
+    const e = battle.enemies[0]!
+    expect(Math.hypot(e.x - battle.portal.x, e.y - battle.portal.y)).toBeLessThan(PORTAL.jitter * 1.5)
+    expect(e.scale.x).toBeLessThan(0.3)
+    const dist = e.dist
+    g.stepSeconds(PORTAL.emerge * 0.5)
+    expect(e.dist).toBe(dist) // 出现中不走
+    g.stepSeconds(PORTAL.emerge)
+    expect(e.scale.x).toBeCloseTo(1)
+    expect(e.dist).toBeGreaterThan(dist)
+    // 传送门就在屏幕里（背景顶部往下一点）
+    const top = g.tree.viewport.visibleRect.top
+    expect(battle.portal.y).toBeGreaterThan(top + 50)
+    expect(battle.portal.y).toBeLessThan(top + 300)
   })
 })

@@ -11,7 +11,7 @@ import uiData from '../public/assets/ui.json'
  * - 其余是占位图（scripts/gen-placeholders.mjs）：光晕、火花、圆圈、槽位这类简单形状，留着用。
  */
 export const ASSETS = {
-  /** 英雄：`<hero>_body`（锚点在脚底）和 `<hero>_weapon`（锚点在握持处）。 */
+  /** 英雄：`<hero>_body`（锚点在脚底）、`<hero>_weapon`（锚点在握持处）、阵亡后的 `tombstone`（锚点在底部）。 */
   heroes: atlas('heroes.png', heroesData),
   /** 怪物和 Boss：`enemy_<kind>`（锚点在脚底）。小史莱姆用 `enemy_slime` 缩小。 */
   enemies: atlas('enemies.png', enemiesData),
@@ -23,8 +23,6 @@ export const ASSETS = {
   /** 界面：`ui_panel`（九宫格木框）、`ui_button`（九宫格按钮）、`icon_<hero>_<branch>`、`icon_generic_<effect>`、`icon_ult_<hero>`。 */
   ui: atlas('ui.png', uiData),
   bg: tex('bg.jpg'),
-  /** 英雄阵亡的墓碑（占位，底边是脚底；美术管线的 `tombstone` 生成后换掉）。 */
-  tombstone: tex('tombstone.png'),
   glow: tex('glow.png'),
   spark: tex('spark.png'),
   dot: tex('dot.png'),

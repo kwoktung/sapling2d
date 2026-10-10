@@ -118,7 +118,7 @@ export abstract class Hero extends Node2D {
     this.hpBack = this.add(new ColorRect({ size: v(w, HERO_FEEL.barHeight), color: 0x301818, position: v(-w / 2, -150), visible: false }))
     this.hpFill = this.hpBack.add(new ColorRect({ size: v(w, HERO_FEEL.barHeight), color: 0x60c0ff }))
     // 墓碑和倒计时：阵亡时显示（墓碑画在地上，比怪低：zIndex 是相对英雄的）
-    this.tomb = this.add(new Sprite2D({ texture: ASSETS.tombstone, offset: v(0, -32), visible: false }))
+    this.tomb = this.add(new Sprite2D({ texture: ASSETS.heroes.get('tombstone'), scale: v(ART_SCALE, ART_SCALE), visible: false }))
     this.countdown = this.add(new Label({ text: '', fontSize: 30, fontWeight: 'bold', color: 0xffffff, align: 'center', verticalAlign: 'center', position: v(0, -96), stroke: { color: 0x000000, width: 5 }, visible: false }))
   }
 

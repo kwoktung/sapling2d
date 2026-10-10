@@ -11,9 +11,7 @@ const TEXT_X = 180
 
 /** 卡片左边的图标：技能分支 `icon_<hero>_<branch>`，通用选项 `icon_generic_<effect>`。 */
 export function offerIcon(offer: Offer): string {
-  if (!isGeneric(offer)) return `icon_${offer.hero}_${offer.branch}`
-  // “坚韧”的图标还没生成（Gemini 额度用完了）：先借守护分支的盾牌
-  return offer.effect === 'hp' ? 'icon_knight_guard' : `icon_generic_${offer.effect}`
+  return isGeneric(offer) ? `icon_generic_${offer.effect}` : `icon_${offer.hero}_${offer.branch}`
 }
 
 /** 一张卡片（木框）：图标、英雄名 · 分支名、等级（第 4 级标“质变”，木框染金）或“通用”、效果描述。点一下选中。 */

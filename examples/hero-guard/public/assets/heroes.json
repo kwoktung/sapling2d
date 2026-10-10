@@ -1,8 +1,32 @@
 {
  "frames": {
-  "archer_body": {
+  "tombstone": {
    "frame": {
     "x": 0,
+    "y": 0,
+    "w": 109,
+    "h": 140
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 109,
+    "h": 140
+   },
+   "sourceSize": {
+    "w": 109,
+    "h": 140
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.95
+   }
+  },
+  "archer_body": {
+   "frame": {
+    "x": 111,
     "y": 0,
     "w": 185,
     "h": 280
@@ -26,8 +50,8 @@
   },
   "archer_weapon": {
    "frame": {
-    "x": 187,
-    "y": 0,
+    "x": 0,
+    "y": 282,
     "w": 42,
     "h": 200
    },
@@ -50,7 +74,7 @@
   },
   "mage_body": {
    "frame": {
-    "x": 231,
+    "x": 298,
     "y": 0,
     "w": 177,
     "h": 280
@@ -74,8 +98,8 @@
   },
   "mage_weapon": {
    "frame": {
-    "x": 0,
-    "y": 282,
+    "x": 44,
+    "y": 142,
     "w": 50,
     "h": 260
    },
@@ -98,7 +122,7 @@
   },
   "knight_body": {
    "frame": {
-    "x": 410,
+    "x": 477,
     "y": 0,
     "w": 165,
     "h": 280
@@ -122,7 +146,7 @@
   },
   "knight_weapon": {
    "frame": {
-    "x": 52,
+    "x": 96,
     "y": 282,
     "w": 52,
     "h": 200
@@ -150,8 +174,8 @@
   "image": "heroes.png",
   "format": "RGBA8888",
   "size": {
-   "w": 575,
-   "h": 542
+   "w": 642,
+   "h": 482
   },
   "scale": "1"
  }

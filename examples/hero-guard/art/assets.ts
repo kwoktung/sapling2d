@@ -233,13 +233,15 @@ const ART_13: AssetSpec[] = [
   })),
 ]
 
-/** 16：英雄阵亡后的墓碑（进英雄图集，锚点在底部）、通用选项“坚韧”的图标。 */
+/** 16：英雄阵亡后的墓碑（进英雄图集，锚点在底部）、通用选项“坚韧”的图标。生成一次看过之后存进 `refs/`。 */
 const ART_16: AssetSpec[] = [
   {
     id: 'tombstone',
     mode: 'generate',
     plain: true,
     displayHeight: 70,
+    atlas: 'heroes',
+    from: 'refs/tombstone.jpg',
     pivot: { x: 0.5, y: 0.95 },
     prompt:
       'A small cute cartoon grey stone tombstone with a rounded top and a simple cross carved on it, a little tuft of grass at its base, front view, isolated object, cartoon fantasy mobile game style with bold dark outlines and flat cel shading.',
@@ -249,6 +251,8 @@ const ART_16: AssetSpec[] = [
     mode: 'generate',
     plain: true,
     displayHeight: 64,
+    atlas: 'ui',
+    from: 'refs/icon_generic_hp.jpg',
     prompt:
       'A square game skill icon for a cartoon fantasy mobile game: a big red heart with a steel shield behind it, centered on a round dark slate badge with a thick golden rim. Bold dark outlines, flat cel shading, bright saturated colors, readable at small size.',
   },

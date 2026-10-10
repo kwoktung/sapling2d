@@ -34,10 +34,10 @@ Date: 2026-10-10
 | 01 | 核心：每帧时长 + 时长和帧时间点的查询 | — |
 | 02 | `aseprite()` 导入器：tag、方向、重复、时长、slices | 01 |
 | 03 | TexturePacker 管线：文档和示例（`atlas().frames()` + `durations`） | 01 |
-| 04 | TexturePacker 的 pivot（每张贴图一个锚点） | 03，待定 |
+| 04 | TexturePacker 的 pivot（每张贴图一个锚点） | 03（已完成） |
 | 05 | `atlas().frames(prefix)` 只匹配“前缀 + 编号”（03 发现） | 待定 |
 
 ## 未定（Fog）
 
 - 帧事件：要不要放进数据里（例如 Aseprite tag / 帧的 user data，或者在 `SpriteAnimation` 里写 `events: { 3: 'hit' }`）。等塔防的英雄写出几个之后再看是否值得。
-- Aseprite slices 当 pivot 用的约定（比如名为 `pivot` 的 slice）：同 04，有需要再做。
+- Aseprite slices 当 pivot 用的约定（比如名为 `pivot` 的 slice）：04 没有跟进（Aseprite 的帧共用画布），有需要再做。

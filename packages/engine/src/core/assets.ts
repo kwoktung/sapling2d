@@ -63,6 +63,14 @@ export class Texture {
     return this._base ? this._base._resource : this._ownResource
   }
 
+  /**
+   * 打包工具给这一帧设置的锚点（0–1，相对裁剪前的原始尺寸；TexturePacker 里打开 pivot points 导出）。
+   * `Sprite2D` 默认（`centered: true`）以它为原点，没有时以中心为原点。整张图和网格图集的帧为 null。
+   */
+  get pivot(): Vector2 | null {
+    return this._frameOf ? this._frameOf().pivot : null
+  }
+
   /** @internal 子区域在整张图里的位置；整张图为 null。 */
   get _frame(): TextureFrame | null {
     return this._frameOf ? this._frameOf() : null
@@ -85,12 +93,16 @@ export class Texture {
   }
 }
 
-/** @internal 子区域：`region` 是它在整张图里的矩形；`width` / `height` 是裁剪前的原始尺寸，`trim` 是 region 在原始尺寸里的偏移（图集打包时裁掉了透明边）。 */
+/**
+ * @internal 子区域：`region` 是它在整张图里的矩形；`width` / `height` 是裁剪前的原始尺寸，`trim` 是 region 在原始尺寸里的偏移（图集打包时裁掉了透明边），
+ * `pivot` 是打包工具设置的锚点（0–1，相对原始尺寸），没有时为 null。
+ */
 export interface TextureFrame {
   region: Rect2
   width: number
   height: number
   trim: Vector2 | null
+  pivot: Vector2 | null
 }
 
 const textureCache = new Map<string, Texture>()
@@ -137,7 +149,7 @@ export class SpriteSheet {
       return new Texture(`${texture.path}#${i}`, texture, () => {
         const w = texture.width / columns
         const h = texture.height / rows
-        return { region: new Rect2(col * w, row * h, w, h), width: w, height: h, trim: null }
+        return { region: new Rect2(col * w, row * h, w, h), width: w, height: h, trim: null, pivot: null }
       })
     })
   }
@@ -176,6 +188,10 @@ export interface AtlasFrameData {
   trimmed?: boolean
   spriteSourceSize?: { x: number; y: number; w: number; h: number }
   sourceSize?: { w: number; h: number }
+  /** 锚点（0–1，相对裁剪前的原始尺寸）：TexturePacker 打开 pivot points 时导出。 */
+  pivot?: { x: number; y: number }
+  /** 同 `pivot`：TexturePacker 的 PixiJS 格式用这个名字。 */
+  anchor?: { x: number; y: number }
 }
 
 /** 图集 JSON：`frames` 是 名字 → 帧（JSON Hash），或带 `filename` 的帧数组（JSON Array）。 */
@@ -268,11 +284,15 @@ export function atlasFrame(who: string, name: string, f: AtlasFrameData): Textur
   if (f.rotated) throw new Error(`${who}: frame "${name}" is rotated. Export the atlas with rotation disabled.`)
   const { x, y, w, h } = f.frame
   const src = f.trimmed ? f.spriteSourceSize : undefined
+  const pivot = f.pivot ?? f.anchor
+  if (pivot && !(Number.isFinite(pivot.x) && Number.isFinite(pivot.y))) throw new Error(`${who}: frame "${name}" has an invalid pivot (${pivot.x}, ${pivot.y}).`)
   return {
     region: new Rect2(x, y, w, h),
     width: src ? (f.sourceSize?.w ?? w) : w,
     height: src ? (f.sourceSize?.h ?? h) : h,
     trim: src ? new Vector2(src.x, src.y) : null,
+    // 正好是中心的锚点当作没有：和默认行为一样，dump 里也不多一项
+    pivot: pivot && !(pivot.x === 0.5 && pivot.y === 0.5) ? new Vector2(pivot.x, pivot.y) : null,
   }
 }
 

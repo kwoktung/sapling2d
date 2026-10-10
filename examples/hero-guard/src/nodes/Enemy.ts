@@ -1,6 +1,7 @@
 import { ColorRect, Node2D, Sprite2D, v, type Curve2D, type Texture } from 'sapling2d'
 import { ENEMY_FEEL } from '../config'
-import { ENEMIES, type EnemyKind } from '../data/enemies'
+import { ASSETS } from '../assets'
+import { ELITE, ENEMIES, type EnemyKind } from '../data/enemies'
 
 /** 怪物的贴图和脚底到贴图中心的距离（身体节点的原点在脚底）。 */
 export interface EnemyLook {
@@ -42,24 +43,39 @@ export class Enemy extends Node2D {
   private readonly _halfHeight: number
   private readonly _p = { x: 0, y: 0 }
 
+  /** 显示的缩放（精灵放大）。 */
+  private readonly _sizeScale: number
+
   constructor(
     readonly kind: EnemyKind,
     readonly path: Curve2D,
     readonly maxHp: number,
     look: EnemyLook,
     phase: number,
+    /** 精英：体型大一号、身后一圈金光（血量由 Battle 按精英算好传进来）。 */
+    readonly elite = false,
   ) {
-    super()
-    const base = ENEMIES[kind]
+    super({ alpha: ENEMIES[kind].alpha ?? 1 })
+    const k = (this._sizeScale = ENEMIES[kind].scale * (elite ? ELITE.scale : 1))
     this.hp = maxHp
     this._hop = phase
-    this.body = this.add(new Sprite2D({ texture: look.texture, position: v(0, -look.halfHeight), scale: v(base.scale, base.scale) }))
+    if (elite) this.add(new Sprite2D({ texture: ASSETS.glow, position: v(0, -look.halfHeight * k), scale: v(k * 1.5, k * 1.5), selfModulate: 0xffc030, blendMode: 'add', zIndex: -1 }))
+    this.body = this.add(new Sprite2D({ texture: look.texture, position: v(0, -look.halfHeight), scale: v(k, k) }))
     this.barBack = this.add(
-      new ColorRect({ size: v(ENEMY_FEEL.barWidth, ENEMY_FEEL.barHeight), color: 0x301818, position: v(-ENEMY_FEEL.barWidth / 2, -look.halfHeight * 2 * base.scale - 14), visible: false }),
+      new ColorRect({ size: v(ENEMY_FEEL.barWidth, ENEMY_FEEL.barHeight), color: 0x301818, position: v(-ENEMY_FEEL.barWidth / 2, -look.halfHeight * 2 * k - 14), visible: false }),
     )
     this.barBack.add(this.barFill)
-    this._halfHeight = look.halfHeight * base.scale
+    this._halfHeight = look.halfHeight * k
     this._move(0)
+  }
+
+  /** 打死给的经验、漏掉扣的命（精英加倍）。 */
+  get xp(): number {
+    return ENEMIES[this.kind].xp * (this.elite ? ELITE.xp : 1)
+  }
+
+  get leak(): number {
+    return ENEMIES[this.kind].leak * (this.elite ? ELITE.leak : 1)
   }
 
   /** 停下了（冰冻、眩晕、嘲讽）。 */
@@ -84,7 +100,7 @@ export class Enemy extends Node2D {
     if (!this.held) this._hop += dt * ENEMY_FEEL.hopRate * Math.PI * (1 - this.slowPct)
     const s = Math.abs(Math.sin(this._hop))
     const squash = (1 - s) * ENEMY_FEEL.squash
-    const k = ENEMIES[this.kind].scale
+    const k = this._sizeScale
     this.body.y = -this._halfHeight - s * ENEMY_FEEL.hopHeight
     this.body.scale = v(k * (1 + squash), k * (1 - squash))
     if (this._flashLeft > 0) {
@@ -97,6 +113,13 @@ export class Enemy extends Node2D {
   /** 沿路线往回推 `d` 像素（击退），位置马上更新（撞人判定要用新位置）。 */
   pushBack(d: number): void {
     this._move(-d)
+  }
+
+  /** 回血（萨满），不超过上限。 */
+  heal(amount: number): void {
+    if (this.dead || this.hp >= this.maxHp) return
+    this.hp = Math.min(this.maxHp, this.hp + amount)
+    this.barFill.scale = v(this.hp / this.maxHp, 1)
   }
 
   /** 扣血；返回是否被这一下打死。 */
@@ -122,6 +145,6 @@ export class Enemy extends Node2D {
   }
 
   protected override dumpProps(): Record<string, unknown> {
-    return { ...super.dumpProps(), kind: this.kind, hp: Math.round(this.hp), dist: Math.round(this.dist) }
+    return { ...super.dumpProps(), kind: this.kind, elite: this.elite || undefined, hp: Math.round(this.hp), dist: Math.round(this.dist) }
   }
 }

@@ -48,9 +48,19 @@ export const UNLOCK_WAVES: readonly number[] = [3, 6]
 /** 中毒每隔多久跳一次伤害。 */
 const POISON_TICK = 0.5
 
+/** 怪物的贴图和脚底到贴图中心的距离（占位图的尺寸；12 换成美术管线的图集）。 */
 const LOOKS: Record<EnemyKind, EnemyLook> = {
   slime: { texture: ASSETS.slime, halfHeight: 28 },
+  bat: { texture: ASSETS.bat, halfHeight: 26 },
+  skeleton: { texture: ASSETS.skeleton, halfHeight: 38 },
+  splitter: { texture: ASSETS.splitter, halfHeight: 28 },
+  smallSlime: { texture: ASSETS.slime, halfHeight: 28 },
+  shaman: { texture: ASSETS.shaman, halfHeight: 36 },
+  ghost: { texture: ASSETS.ghost, halfHeight: 35 },
 }
+
+/** 护甲：弓箭伤害乘这个数。 */
+const ARMOR_MUL = 0.5
 
 /** 一组怪的出怪进度。 */
 interface Spawner {
@@ -363,7 +373,7 @@ export class Battle extends Scene implements HeroWorld {
 
   private _arrowHit(e: Enemy, shot: Shot) {
     if (shot.poison) this.poison(e, shot.poison.dps, shot.poison.time, shot.poison.maxStacks, 1)
-    this.damage(e, shot.damage, { crit: shot.crit || shot.headshot, ignoreArmor: shot.headshot, source: 'archer' })
+    this.damage(e, shot.damage, { crit: shot.crit || shot.headshot, arrow: true, ignoreArmor: shot.headshot, source: 'archer' })
   }
 
   // ---------------------------------------------------------------- 法师
@@ -499,9 +509,9 @@ export class Battle extends Scene implements HeroWorld {
 
   // ---------------------------------------------------------------- 状态
 
-  /** 能不能被控制（减速、冰冻、眩晕、击退、嘲讽）：08 的幽灵免疫。 */
-  controllable(_e: Enemy): boolean {
-    return true
+  /** 能不能被控制（减速、冰冻、眩晕、击退、嘲讽）：幽灵免疫。 */
+  controllable(e: Enemy): boolean {
+    return !ENEMIES[e.kind].immune
   }
 
   /** 减速：取更强的那个比例，刷新时间。 */
@@ -532,6 +542,32 @@ export class Battle extends Scene implements HeroWorld {
   private _tint(e: Enemy) {
     e.body.selfModulate =
       e.frozenLeft > 0 ? 0x80c0ff : e.stunLeft > 0 ? 0xfff080 : e.tauntLeft > 0 ? 0xffb070 : e.slowPct > 0 ? 0xbfe0ff : e.poisonStacks > 0 ? 0xb0ff90 : 0xffffff
+  }
+
+  /** 治疗光环的计时：每 0.5 秒结算一次（开局先等 0.5 秒）。 */
+  private _healTick = POISON_TICK
+
+  /** 萨满的治疗光环：每 0.5 秒给半径内的其他怪回血，萨满身上闪一圈绿光。 */
+  private _tickHeal(dt: number) {
+    this._healTick -= dt
+    if (this._healTick > 0) return
+    this._healTick += POISON_TICK
+    for (const s of this.enemies) {
+      const heal = ENEMIES[s.kind].heal
+      if (!heal || s.dead) continue
+      const r2 = heal.radius * heal.radius
+      let healed = false
+      for (const e of this.enemies) {
+        if (e === s || e.dead || e.hp >= e.maxHp || (e.x - s.x) ** 2 + (e.y - s.y) ** 2 > r2) continue
+        e.heal(heal.perSecond * POISON_TICK)
+        healed = true
+      }
+      if (healed) {
+        const k = (heal.radius * 2) / 256
+        const ring = this.fx.add(new Sprite2D({ texture: ASSETS.range, position: v(s.x, s.y - 20), scale: v(k * 0.4, k * 0.4), selfModulate: 0x60ff80, alpha: 0.8 }))
+        ring.createTween().to(ring, { scale: v(k, k), alpha: 0 }, 0.4, Ease.QuadOut).call(() => ring.queueFree())
+      }
+    }
   }
 
   /** 加 `stacks` 层毒（不超过上限），刷新持续时间；伤害按最强的那一份毒算。 */
@@ -583,6 +619,7 @@ export class Battle extends Scene implements HeroWorld {
       }
       if (changed && !e.dead) this._tint(e)
     }
+    this._tickHeal(dt)
     // 燃烧地面：每 0.5 秒对里面的敌人造成伤害
     if (!this.burns.length) return
     this._burnTick -= dt
@@ -598,24 +635,27 @@ export class Battle extends Scene implements HeroWorld {
 
   // ---------------------------------------------------------------- 怪物
 
-  /** 出一只怪：默认走一条新的随机路线，出现时路线预览闪一下。 */
-  spawnEnemy(kind: EnemyKind, path: Curve2D = randomPath((a, b) => this.tree.rng.randfRange(a, b)), hp = enemyHp(kind, Math.max(1, this.wave))): Enemy {
-    this.add(new PathPreview(path))
-    const e = this.add(new Enemy(kind, path, hp, LOOKS[kind], this.tree.rng.randfRange(0, Math.PI)))
+  /** 出一只怪：默认走一条新的随机路线，出现时路线预览闪一下。`preview: false` 时不显示路线（分裂出来的小怪）。 */
+  spawnEnemy(kind: EnemyKind, path: Curve2D = randomPath((a, b) => this.tree.rng.randfRange(a, b)), hp?: number, elite = false, preview = true): Enemy {
+    if (preview) this.add(new PathPreview(path))
+    const e = this.add(new Enemy(kind, path, hp ?? enemyHp(kind, Math.max(1, this.wave), elite), LOOKS[kind], this.tree.rng.randfRange(0, Math.PI), elite))
     this.enemies.push(e)
     return e
   }
 
   /**
-   * 扣血、飘字、火花；打死了加经验、碎片。`crit` 飘字大一号带感叹号，`dot`（中毒等持续伤害）绿色、没有火花。
-   * `ignoreArmor`：08 的护甲（弓箭伤害减半）用。
+   * 扣血、飘字、火花；打死了加经验、碎片、分裂。`crit` 飘字大一号带感叹号，`dot`（中毒等持续伤害）绿色、没有火花。
+   * `arrow`：弓箭伤害（普通箭、箭雨），打护甲减半（飘字灰色），`ignoreArmor`（爆头）不减。`source`：哪个英雄打的（充大招能量）。
    */
-  damage(e: Enemy, amount: number, opts: { crit?: boolean; dot?: boolean; ignoreArmor?: boolean; source?: HeroKind } = {}): void {
+  damage(e: Enemy, raw: number, opts: { crit?: boolean; dot?: boolean; arrow?: boolean; ignoreArmor?: boolean; source?: HeroKind } = {}): void {
     if (e.dead) return
+    const armored = !!opts.arrow && !opts.ignoreArmor && !!ENEMIES[e.kind].armor
+    const amount = armored ? raw * ARMOR_MUL : raw
     if (opts.source) this.chargeUlt(opts.source, Math.min(amount, e.hp))
     const killed = e.damage(amount)
     const text = opts.crit ? `${Math.round(amount)}!` : String(Math.round(amount))
-    this._float(text, e.x, e.y - 50, opts.dot ? 0x90ff70 : opts.crit ? 0xffb030 : killed ? 0xffd040 : 0xffffff, opts.crit ? 1.4 : opts.dot ? 0.8 : 1)
+    const color = opts.dot ? 0x90ff70 : armored ? 0xa0a0a0 : opts.crit ? 0xffb030 : killed ? 0xffd040 : 0xffffff
+    this._float(text, e.x, e.y - 50, color, opts.crit ? 1.4 : opts.dot || armored ? 0.8 : 1)
     if (!killed) {
       if (!opts.dot) {
         this.sparks.position = v(e.x, e.y - 24)
@@ -637,7 +677,16 @@ export class Battle extends Scene implements HeroWorld {
       this.sparks.position = v(e.x, e.y - 24)
       this.sparks.emit(FEEL.sparks * 2)
     }
-    this.gainXp(ENEMIES[e.kind].xp)
+    // 分裂：在原路线上前后错开出几只小怪（不显示路线预览）
+    const split = ENEMIES[e.kind].split
+    if (split) {
+      for (let i = 0; i < split.count; i++) {
+        const child = this.spawnEnemy(split.kind, e.path, enemyHp(split.kind, Math.max(1, this.wave)), false, false)
+        child.dist = Math.max(0, e.dist + (i - (split.count - 1) / 2) * 30)
+        child.pushBack(0)
+      }
+    }
+    this.gainXp(e.xp)
   }
 
   // ---------------------------------------------------------------- 经验和升级
@@ -691,7 +740,7 @@ export class Battle extends Scene implements HeroWorld {
     const damage = archer.stats.damage * ULT.rain.mul
     this.add(
       new RainZone(x, y, ULT.rain.radius, (cx, cy, r) => {
-        for (const e of this.enemies) if (!e.dead && (e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r) this.damage(e, damage)
+        for (const e of this.enemies) if (!e.dead && (e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r) this.damage(e, damage, { arrow: true })
       }, (a, b) => this.tree.rng.randfRange(a, b)),
     )
     return true
@@ -801,7 +850,7 @@ export class Battle extends Scene implements HeroWorld {
       if (e.leaked && !e.dead) {
         e.dead = true
         e.queueFree()
-        this.loseLives(ENEMIES[e.kind].leak)
+        this.loseLives(e.leak)
       }
     }
     HitTester.compact(enemies)
@@ -828,7 +877,7 @@ export class Battle extends Scene implements HeroWorld {
     let pending = false
     for (const s of this._spawners) {
       while (s.spawned < s.group.count && this._waveTime >= s.next) {
-        this.spawnEnemy(s.group.kind)
+        this.spawnEnemy(s.group.kind, undefined, undefined, !!s.group.elite)
         s.spawned++
         s.next += s.group.interval
       }

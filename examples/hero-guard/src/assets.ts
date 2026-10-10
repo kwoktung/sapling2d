@@ -10,6 +10,11 @@ export const ASSETS = {
   /** 英雄：`<hero>_body`（锚点在脚底）和 `<hero>_weapon`（锚点在握持处）。 */
   heroes: atlas('heroes.png', heroesData),
   slime: tex('slime.png'),
+  bat: tex('bat.png'),
+  skeleton: tex('skeleton.png'),
+  splitter: tex('splitter.png'),
+  shaman: tex('shaman.png'),
+  ghost: tex('ghost.png'),
   slot: tex('slot.png'),
   arrow: tex('arrow.png'),
   glow: tex('glow.png'),

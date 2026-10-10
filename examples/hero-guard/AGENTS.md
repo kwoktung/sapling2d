@@ -24,6 +24,8 @@ This is a [sapling2d](../../packages/engine/llms.txt) game. **Read `node_modules
 - `test/skills.test.ts` — level-ups (pause, offers, consecutive levels, maxed branches) and every archer node's effect.
 - `test/battle.test.ts` — paths and preview, drag / swap / snap back, no attacks while dragging, targeting, hit timing, kills and XP, waves, losing and restarting, winning after 20 waves.
 
+**Don't name subclass fields like engine privates** (`_scale`, `_flash`, `_texture`…): TypeScript rejects a subclass field with the same name as a base class's private one. `Enemy` uses `_sizeScale` for this reason; see `.scratch/engine-ergonomics/`.
+
 **Hero origins are at the feet**: the body sprite is moved up by half its height, so `hero.position` is the slot center and range checks measure from the feet.
 
 **Tests call `battle.startWith(kind, slot)`** to skip the hero picker, then `battle.stopSpawning()` to place their own enemies (it also stops waves from advancing).

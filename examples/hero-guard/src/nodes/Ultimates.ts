@@ -65,7 +65,8 @@ export class UltButton extends Node2D {
 /**
  * 屏幕底部的大招栏。弓手（箭雨）和法师（陨石）要选位置，两种操作都行：
  * - 按住按钮拖到场上松手：直接释放（拖回按钮上松手不算，见下一条）；
- * - 点一下按钮（在按钮上松手）：进入选点模式（`waiting`），场上显示目标圈和提示，再点场上释放；再点按钮取消。
+ * - 点一下按钮（在按钮上松手）：进入选点模式（`waiting`），场上显示目标圈和提示，再点场上释放；再点按钮取消
+ *   （选点模式里又从按钮拖到场上松手，也是释放：真机上玩家常这样操作）。
  * 骑士（冲锋）点按钮直接释放。只发信号，释放和目标圈由 Battle 处理；位置是设计坐标（这一层不跟相机走）。
  */
 export class UltBar extends CanvasLayer {
@@ -82,8 +83,8 @@ export class UltBar extends CanvasLayer {
   /** 正在选目标的大招；`waiting`：在选点模式里（等着点场上）。 */
   aiming: HeroKind | null = null
   waiting = false
-  /** 选点模式里又按下了按钮：松手时取消。 */
-  private _cancelOnUp = false
+  /** 选点模式里又按下了按钮：在按钮上松手是取消，拖到场上松手是释放。 */
+  private _pressedAgain = false
 
   constructor() {
     super({ name: 'UltBar', layer: 12 })
@@ -106,7 +107,7 @@ export class UltBar extends CanvasLayer {
         continue
       }
       b.pointerDown.connect(() => this._down(kind), this)
-      b.pointerMove.connect((e) => this.aiming === kind && !this.waiting && this.aimMove.emit(kind, e.position), this)
+      b.pointerMove.connect((e) => this.aiming === kind && (!this.waiting || this._pressedAgain) && this.aimMove.emit(kind, e.position), this)
       b.pointerUp.connect((e) => this._up(kind, b, e), this)
     }
     this._layout()
@@ -119,14 +120,14 @@ export class UltBar extends CanvasLayer {
     if (!kind) return
     this.aiming = null
     this.waiting = false
-    this._cancelOnUp = false
+    this._pressedAgain = false
     this.catcher.visible = false
     this.aimEnd.emit(kind, null)
   }
 
   private _down(kind: HeroKind) {
     if (this.aiming === kind && this.waiting) {
-      this._cancelOnUp = true
+      this._pressedAgain = true
       return
     }
     if (!this.buttons[kind].charged || this.aiming) return
@@ -137,16 +138,21 @@ export class UltBar extends CanvasLayer {
 
   private _up(kind: HeroKind, b: UltButton, e: PointerEvent2D) {
     if (this.aiming !== kind) return
-    if (this._cancelOnUp) return this.cancelAim()
-    if (this.waiting) return
-    if (b.hitTest(b.toLocal(e.position))) {
+    if (this.waiting && !this._pressedAgain) return
+    const onButton = b.hitTest(b.toLocal(e.position))
+    if (onButton && this._pressedAgain) return this.cancelAim() // 选点模式里又点了按钮：取消
+    if (onButton) {
       // 在按钮上松手：是“点一下”，进入选点模式
       this.waiting = true
       this.catcher.visible = true
       this.aimWait.emit(kind)
       return
     }
+    // 拖到场上松手：释放
     this.aiming = null
+    this.waiting = false
+    this._pressedAgain = false
+    this.catcher.visible = false
     this.aimEnd.emit(kind, e.position)
   }
 

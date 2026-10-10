@@ -132,6 +132,18 @@ describe('操作', () => {
     expect(g.dump()).toContain('RainZone')
   })
 
+  it('选点模式里又从按钮拖到场上松手：在那里释放（真机上常这样操作）', async () => {
+    const { g, battle } = await setup('mage')
+    full(battle, 'mage')
+    g.step()
+    const btn = battle.ultBar.buttons.mage
+    g.tap(btn.x + 75, btn.y + 75)
+    expect(battle.ultBar.waiting).toBe(true)
+    g.drag(v(btn.x + 75, btn.y + 75), v(375, 400), { frames: 6 })
+    expect([battle.ultBar.aiming, battle.ultBar.waiting, battle.energy.mage]).toEqual([null, false, 0])
+    expect(g.dump()).toContain('MeteorStrike')
+  })
+
   it('法师：点按钮进入选点，再点场上释放；升级弹窗出现时取消选点', async () => {
     const { g, battle } = await setup('mage')
     full(battle, 'mage')

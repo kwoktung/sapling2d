@@ -1,6 +1,6 @@
 {
   "name": "sapling2d",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Code-first, agent-friendly 2D game engine: PixiJS rendering, planck.js physics, Godot-style node tree. Runs in the browser and as a WeChat Mini Game, with deterministic headless testing.",
   "keywords": [
     "game-engine",

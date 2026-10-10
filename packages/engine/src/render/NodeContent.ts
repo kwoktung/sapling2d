@@ -35,6 +35,8 @@ export interface SyncContext {
 export interface NodeContent {
   /** 内容层的显示对象。 */
   readonly display: Container
+  /** 画在内容层上面、子节点下面的覆盖层（Sprite2D 闪白的剪影）；第一次用到时才创建，没有时为 null 或不定义。 */
+  readonly overlay?: Container | null
   /**
    * 每帧对每个有内容的节点调用（遍历整棵树的热路径：不分配内存）。
    * `changed`：节点的 `_version` 变了。没变时只检查自己额外关心的状态（贴图加载完成、文字分辨率、每帧都动的粒子等）。
@@ -55,15 +57,23 @@ export function createContent(node: Node2D, ctx: SyncContext): NodeContent | nul
 
 /** 内容层的 label，调试时和子节点的容器区分。 */
 const CONTENT_LABEL = '__content'
+const OVERLAY_LABEL = '__flash'
 
-/** Sprite2D：offset、centered、flip 作用在贴图层上，不影响子节点。 */
+/**
+ * Sprite2D：offset、centered、flip 作用在贴图层上，不影响子节点。
+ * 闪白（`flash > 0`）：覆盖层是同一帧的白色剪影（`TextureCache.flash`），染成 `flashColor`、透明度是 `flash`；
+ * 第一次闪白时才创建，之后不闪时隐藏（大多数精灵从不闪白，不多一个显示对象）。
+ */
 class SpriteContent implements NodeContent {
   readonly display: Sprite
+  overlay: Sprite | null = null
   /** 上次同步时贴图句柄背后的资源，用来发现“贴图后来才加载完成”。 */
   private _resource: unknown = undefined
+  private readonly _pixelArt: boolean
 
   constructor(ctx: SyncContext) {
     this.display = new Sprite({ label: CONTENT_LABEL, roundPixels: ctx.pixelArt })
+    this._pixelArt = ctx.pixelArt
   }
 
   sync(node: Sprite2D, ctx: SyncContext, changed: boolean): void {
@@ -76,10 +86,23 @@ class SpriteContent implements NodeContent {
     s.position.set(node.offset.x, node.offset.y)
     s.scale.set(node.flipH ? -1 : 1, node.flipV ? -1 : 1)
     s.tint = node.selfModulate
+
+    const flash = node.flash
+    if (flash <= 0 && !this.overlay) return
+    const o = (this.overlay ??= new Sprite({ label: OVERLAY_LABEL, roundPixels: this._pixelArt }))
+    o.visible = flash > 0 && node.texture !== null
+    if (!o.visible) return
+    o.texture = ctx.textures.flash(node.texture!)
+    o.anchor.copyFrom(s.anchor)
+    o.position.copyFrom(s.position)
+    o.scale.copyFrom(s.scale)
+    o.tint = node.flashColor
+    o.alpha = flash
   }
 
   destroy(): void {
     this.display.destroy()
+    this.overlay?.destroy()
   }
 }
 

@@ -27,8 +27,15 @@ export interface AssetSpec {
    * AI 每次生成都不一样：挑定之后用它固定下来，以后重新抠图、打包结果不变。`prompt` 留着记录它是怎么来的。
    */
   from?: string
-  /** 画面比例，默认 '1:1'（背景用 '9:16'）。 */
-  aspect?: '1:1' | '9:16'
+  /** 画面比例，默认 '1:1'（背景用 '9:16'，横排的帧用 '21:9'）。 */
+  aspect?: '1:1' | '9:16' | '16:9' | '21:9'
+  /**
+   * 横排的帧数：原图是一行 N 帧（等宽），抠图后按格切开，每帧裁边后放进同样大小的画布（底边对齐 = 脚底在同一条线上、水平居中），
+   * 统一缩放，输出 `<id>_0` … `<id>_<N-1>`（图集的帧名也是这些）。
+   */
+  frames?: number
+  /** true：原图左右翻转后再抠图（AI 偶尔把角色画成镜像，翻回来和原来的朝向、挂点一致）。 */
+  mirror?: boolean
   /**
    * false：不抠图（背景；黑底的特效贴图——游戏里叠加发光时黑色等于透明）。提示词里的背景说明也跟着变成黑底 / 不要求纯色。
    * 默认 true。
@@ -258,7 +265,58 @@ const ART_16: AssetSpec[] = [
   },
 ]
 
+/**
+ * 19：走路的序列帧（横排 4 帧）。先给骷髅出 3 套候选，用户挑定后再铺到其他角色（工单 19）。
+ * 编辑模式：以挑定的角色图为参考，要求同一个角色、只动腿，脚底在同一高度。
+ */
+const WALK_PROMPT =
+  'Draw a horizontal sprite sheet: exactly 4 frames of this same character side by side on one row, evenly spaced, each frame the same size, all facing the same direction as the reference. It is a walk cycle: frame 1 left foot forward, frame 2 legs passing, frame 3 right foot forward, frame 4 legs passing. Only the legs move; the head, body, arms and anything held stay in exactly the same pose in every frame. Same proportions, colors and details in all 4 frames, full body visible, feet at the same height in every frame, generous empty space between frames.'
+
+const SHAMAN_FEET =
+  'Seen in a three-quarter side view walking to the right: in every frame both feet clearly point to the right (the walking direction), never toward the viewer. The robe hem may sway, the feet must be visible under it.'
+
+/** 挑定的走路帧（`refs/walk_<id>.jpg`）：打进对应的图集，帧名 `walk_<id>_0` … `_3`。 */
+const WALKS: AssetSpec[] = [
+  { id: 'walk_skeleton', ref: 'refs/enemy_skeleton.jpg', atlas: 'enemies', height: 84 },
+  // 萨满第一轮三套脚的朝向乱，第二轮加了“脚朝走路方向”的要求（`SHAMAN_FEET`）
+  { id: 'walk_shaman', ref: 'refs/enemy_shaman.jpg', atlas: 'enemies', height: 84, extra: SHAMAN_FEET },
+  // 弓手挑定的那套是镜像的（箭筒跑到了另一边）：翻回来
+  { id: 'walk_archer', ref: 'refs/archer_body.jpg', atlas: 'heroes', height: 140, mirror: true },
+  { id: 'walk_mage', ref: 'refs/mage_body.jpg', atlas: 'heroes', height: 140 },
+  { id: 'walk_knight', ref: 'refs/knight_body.jpg', atlas: 'heroes', height: 140 },
+].map((w: { id: string; ref: string; atlas: string; height: number; mirror?: boolean; extra?: string }) => ({
+  id: w.id,
+  mode: 'edit' as const,
+  refs: [w.ref],
+  aspect: '21:9' as const,
+  frames: 4,
+  displayHeight: w.height,
+  atlas: w.atlas,
+  from: `refs/${w.id}.jpg`,
+  pivot: { x: 0.5, y: 1 },
+  ...(w.mirror ? { mirror: true } : {}),
+  prompt: w.extra ? `${WALK_PROMPT} ${w.extra}` : WALK_PROMPT,
+}))
+
+/** 给一个角色出 3 套走路候选（`cand_walk_<name>_<n>`，不进图集）：挑定后存成 `refs/walk_<name>.jpg`，加进 `WALKS`。 */
+function walkCandidates(name: string, ref: string, height: number, round = 1, extra = ''): AssetSpec[] {
+  return [1, 2, 3].map((n) => ({
+    id: `cand_walk_${name}_${(round - 1) * 3 + n}`,
+    mode: 'edit' as const,
+    refs: [ref],
+    aspect: '21:9' as const,
+    frames: 4,
+    displayHeight: height,
+    pivot: { x: 0.5, y: 1 },
+    prompt: extra ? `${WALK_PROMPT} ${extra}` : WALK_PROMPT,
+  }))
+}
+const WALK_CANDIDATES: AssetSpec[] = []
+void walkCandidates
+
 export const ASSETS: AssetSpec[] = [
+  ...WALKS,
+  ...WALK_CANDIDATES,
   ...ART_16,
   ...ART_13,
   ...ENEMY_PARTS,

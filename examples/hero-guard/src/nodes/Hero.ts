@@ -1,4 +1,4 @@
-import { ColorRect, Ease, Label, Node2D, Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
+import { AnimatedSprite2D, ColorRect, Ease, Label, Node2D, Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
 import { ART_SCALE, ASSETS } from '../assets'
 import { HERO_FEEL, ULT, Z } from '../config'
 import { HEROES, RIG, type HeroKind } from '../data/heroes'
@@ -73,7 +73,8 @@ const bodyScale = (kind: HeroKind, sx: number, sy: number) => v((RIG[kind].bodyF
  */
 export abstract class Hero extends Node2D {
   readonly stats: HeroStats
-  readonly body: Sprite2D
+  /** 身体：走路的 4 帧（`walk_<kind>_0` … `_3`），站着时停在第 1 帧。 */
+  readonly body: AnimatedSprite2D
   readonly weapon: Sprite2D
   /** 活动区域；null 表示站着不动（测试用，见 Battle.placeHero 的 `at`）。 */
   zone: Zone | null = null
@@ -93,6 +94,10 @@ export abstract class Hero extends Node2D {
   readonly tomb: Sprite2D
   readonly countdown: Label
   private _flashLeft = 0
+  /** 走路帧：走过的距离（换帧用）、这一帧有没有走、呼吸的相位。 */
+  private _walked = 0
+  private _moving = false
+  private _breath = 0
   /** 朝向：1 朝右、-1 朝左（翻转整个英雄节点，武器的位置和旋转跟着镜像）。 */
   facing = 1
   private _anim: Tween | null = null
@@ -109,7 +114,7 @@ export abstract class Hero extends Node2D {
     this.home = position
     this.maxHp = this.hp = base.hp
     // 身体的锚点在脚底（美术管线设的 pivot），放在原点就站在槽位上；武器的锚点在握持处，挥动时绕着手转
-    this.body = this.add(new Sprite2D({ texture: ASSETS.heroes.get(`${kind}_body`), scale: bodyScale(kind, 1, 1) }))
+    this.body = this.add(new AnimatedSprite2D({ frames: ASSETS.heroes.frames(`walk_${kind}_`), scale: bodyScale(kind, 1, 1) }))
     const rig = RIG[kind]
     // 武器画在身体后面（zIndex −1）：拳头盖住握柄
     this.weapon = this.add(new Sprite2D({ texture: ASSETS.heroes.get(`${kind}_weapon`), position: v(rig.weaponX, rig.weaponY), scale: v(ART_SCALE, ART_SCALE), zIndex: -1 }))
@@ -143,7 +148,9 @@ export abstract class Hero extends Node2D {
       this._flashLeft = Math.max(0, this._flashLeft - dt)
       this.body.flash = this._flashLeft / HERO_FEEL.flashTime
     }
+    this._moving = false
     if (!this._attacking && this.zone) this._walk(dt)
+    this._animateBody(dt)
     if (this._attacking || this.cooldown > 0) return
     const target = this.world.findTarget(this.x, this.y, this.stats.range)
     if (!target) return
@@ -179,11 +186,34 @@ export abstract class Hero extends Node2D {
     const step = Math.min(d, this.speed * dt)
     this.x += (dx / d) * step
     this.y += (dy / d) * step
+    this._walked += step
+    this._moving = true
     this.zIndex = this.y
     if (Math.abs(dx) > 1) {
       this.facing = dx < 0 ? -1 : 1
       this.scale = v(this.facing, 1)
     }
+  }
+
+  /**
+   * 身体动画：走路时按走过的距离换帧（每 `walkStep` 像素一帧，脚不打滑）、每一步轻颠；
+   * 站着时回到第 1 帧、轻微呼吸。攻击动作的补间在改身体的缩放，攻击中不呼吸。
+   */
+  private _animateBody(dt: number) {
+    const b = this.body
+    if (this._moving) {
+      b.frame = Math.floor(this._walked / HERO_FEEL.walkStep) % b.frameCount
+      const t = (this._walked / HERO_FEEL.walkStep / 2) % 1
+      b.y = -Math.sin(t * Math.PI) * HERO_FEEL.walkBob
+      if (!this._attacking) b.scale = bodyScale(this.kind, 1, 1)
+      return
+    }
+    this._walked = 0
+    b.frame = 0
+    b.y = 0
+    if (this._attacking) return
+    this._breath += dt
+    b.scale = bodyScale(this.kind, 1, 1 + Math.sin(this._breath * HERO_FEEL.breathRate * Math.PI * 2) * HERO_FEEL.breath)
   }
 
   /**

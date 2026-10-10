@@ -1,4 +1,4 @@
-import { ColorRect, Ease, Node2D, Sprite2D, v, type Curve2D, type Texture, type Tween } from 'sapling2d'
+import { AnimatedSprite2D, ColorRect, Ease, Node2D, Sprite2D, v, type Curve2D, type Texture, type Tween } from 'sapling2d'
 import { ART_SCALE, ASSETS } from '../assets'
 import { AGGRO, ENEMY_FEEL } from '../config'
 import { ELITE, ENEMIES, type EnemyKind } from '../data/enemies'
@@ -16,6 +16,8 @@ export interface EnemyTarget {
 /** 怪物的贴图：图集的帧，锚点在脚底（美术管线设的 pivot），按 2 倍存（显示时乘 `ART_SCALE`）。 */
 export interface EnemyLook {
   texture: Texture
+  /** 有脚的怪的走路帧（4 帧循环）：有它就不弹跳，按走过的距离换帧。 */
+  walk?: readonly Texture[]
 }
 
 /**
@@ -23,10 +25,13 @@ export interface EnemyLook {
  * 有 `target`（Battle 按仇恨设置的英雄）时离开路线走过去，到了够得着的距离停下（Battle 结算攻击）；
  * 位置 = 路线上的点 + 偏移（`ox`, `oy`），离开路线时路线进度不动。目标没了，Battle 给它一条从当前位置出发的新路线
  * （`repath`），直接接着往下走，不走回原来的路线。
- * 走路是程序化的上下弹跳 + 落地时压扁；按前进方向翻转；受击闪白；受过伤才显示头顶血条。
+ * 有走路帧的（骷髅、萨满）按走过的距离换帧、每步轻颠，停下时回到第 1 帧并轻微呼吸；没有的（史莱姆、幽灵……）
+ * 是程序化的上下弹跳 + 落地时压扁。按前进方向翻转；受击闪白；受过伤才显示头顶血条。
  */
 export class Enemy extends Node2D {
   readonly body: Sprite2D
+  /** 走路帧（没有走路帧的怪是 null）：和 `body` 是同一个节点。 */
+  readonly walker: AnimatedSprite2D | null = null
   readonly barBack: ColorRect
   readonly barFill = new ColorRect({ size: v(ENEMY_FEEL.barWidth, ENEMY_FEEL.barHeight), color: 0x60d060 })
   dist = 0
@@ -63,6 +68,13 @@ export class Enemy extends Node2D {
   readonly eliteRing: Sprite2D | null = null
   private _flashLeft = 0
   private _hop: number
+  /** 走路帧：走过的距离（换帧用）、每帧的步长、上一帧的位置。 */
+  private _walked = 0
+  /** 站着时呼吸的相位（秒）。 */
+  private _breath = 0
+  private _walkStep = 0
+  private _lastX = NaN
+  private _lastY = NaN
   private readonly _p = { x: 0, y: 0 }
 
   /** 显示的缩放（精灵放大）。 */
@@ -92,7 +104,12 @@ export class Enemy extends Node2D {
       this.eliteRing = this.add(new Sprite2D({ texture: ASSETS.ring, scale: v(w, w * 0.42), selfModulate: ELITE_RING_COLOR, zIndex: -1 }))
     }
     // 锚点在脚底：身体放在原点，弹跳时往上挪
-    this.body = this.add(new Sprite2D({ texture: look.texture, scale: v(k * ART_SCALE, k * ART_SCALE) }))
+    if (look.walk) {
+      this.body = this.walker = this.add(new AnimatedSprite2D({ frames: look.walk, scale: v(k * ART_SCALE, k * ART_SCALE) }))
+      this._walkStep = (ENEMY_FEEL.walkStep * height) / 84
+    } else {
+      this.body = this.add(new Sprite2D({ texture: look.texture, scale: v(k * ART_SCALE, k * ART_SCALE) }))
+    }
     this.barBack = this.add(
       new ColorRect({ size: v(ENEMY_FEEL.barWidth, ENEMY_FEEL.barHeight), color: 0x301818, position: v(-ENEMY_FEEL.barWidth / 2, -height - 14), visible: false }),
     )
@@ -144,17 +161,47 @@ export class Enemy extends Node2D {
     else this._move(step)
     // 弹跳：|sin| 的一拍是一下，落地（接近 0）时压扁；冰冻时停住，减速时跳得慢
     if (!this.held) this._hop += dt * ENEMY_FEEL.hopRate * Math.PI * (1 - this.slowPct)
-    const s = Math.abs(Math.sin(this._hop))
-    const squash = (1 - s) * ENEMY_FEEL.squash
-    const k = this._sizeScale * ART_SCALE
-    this.body.y = -s * ENEMY_FEEL.hopHeight
-    this.body.scale = v(k * (1 + squash), k * (1 - squash)) // 朝向用 flipH，不用负的缩放
+    if (this.walker) this._animateWalk(dt)
+    else {
+      const s = Math.abs(Math.sin(this._hop))
+      const squash = (1 - s) * ENEMY_FEEL.squash
+      const k = this._sizeScale * ART_SCALE
+      this.body.y = -s * ENEMY_FEEL.hopHeight
+      this.body.scale = v(k * (1 + squash), k * (1 - squash)) // 朝向用 flipH，不用负的缩放
+    }
     if (this.eliteRing) this.eliteRing.alpha = 0.75 + 0.2 * Math.sin(this._hop * 0.8)
     if (this._flashLeft > 0) {
       this._flashLeft = Math.max(0, this._flashLeft - dt)
       this.body.flash = this._flashLeft / ENEMY_FEEL.flashTime
     }
     if (this.dist >= this.path.length) this.leaked = true
+  }
+
+  /**
+   * 走路帧：这一帧走了多远就往前翻多少（每 `_walkStep` 像素一帧），所以减速自然变慢、停下就停住，脚不打滑；
+   * 每走两帧（一步）轻颠一下。没在走（站着、打人、被控制）时回到第 1 帧，身体轻微伸缩（呼吸）。
+   */
+  private _animateWalk(dt: number) {
+    const w = this.walker!
+    const moved = Number.isNaN(this._lastX) ? 0 : Math.hypot(this.x - this._lastX, this.y - this._lastY)
+    this._lastX = this.x
+    this._lastY = this.y
+    const k = this._sizeScale * ART_SCALE
+    if (moved > 0.05) {
+      this._walked += moved
+      const f = Math.floor(this._walked / this._walkStep)
+      w.frame = f % w.frameCount
+      // 一步 = 两帧：在一步的中间颠到最高
+      const t = (this._walked / this._walkStep / 2) % 1
+      this.body.y = -Math.sin(t * Math.PI) * ENEMY_FEEL.walkBob
+      this.body.scale = v(k, k)
+      return
+    }
+    this._walked = 0
+    w.frame = 0
+    this.body.y = 0
+    this._breath += dt
+    this.body.scale = v(k, k * (1 + Math.sin(this._breath * ENEMY_FEEL.breathRate * Math.PI * 2) * ENEMY_FEEL.breath))
   }
 
   /** 攻击时朝目标扑一下（身体往前探再收回）。 */

@@ -36,8 +36,8 @@ export function parseHex(color: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-/** 抠图：输入 RGBA 原图，返回裁好边的 RGBA 图。 */
-export function chromaKey(img: RawImage, background: string): RawImage {
+/** 抠图：输入 RGBA 原图，返回裁好边的 RGBA 图（`trim: false` 时不裁边，大小和原图一样：横排的帧要按格切开）。 */
+export function chromaKey(img: RawImage, background: string, options: { trim?: boolean } = {}): RawImage {
   const { width: w, height: h } = img
   const src = img.data
   const [kr, kg, kb] = parseHex(background)
@@ -155,7 +155,7 @@ export function chromaKey(img: RawImage, background: string): RawImage {
     out[o + 2] = b
     out[o + 3] = Math.round(a * 255)
   }
-  return trim({ data: out, width: w, height: h })
+  return options.trim === false ? { data: out, width: w, height: h } : trim({ data: out, width: w, height: h })
 }
 
 function touchesBackground(bg: Uint8Array, i: number, w: number, h: number): boolean {

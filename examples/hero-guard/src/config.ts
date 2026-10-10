@@ -33,6 +33,11 @@ export const HERO_FEEL = {
   /** 阵亡后多久原地复活、复活后无敌多久。 */
   respawn: 15,
   invulnerable: 1,
+  /** 走路帧：每走多少像素换一帧、每一步颠多高；站着时呼吸的伸缩幅度和每秒几次。 */
+  walkStep: 12,
+  walkBob: 3,
+  breath: 0.02,
+  breathRate: 0.5,
   /** 受击闪白、头顶血条的大小（像素）。 */
   flashTime: 0.12,
   barWidth: 56,
@@ -74,6 +79,11 @@ export const ENEMY_FEEL = {
   hopRate: 2.4,
   hopHeight: 6,
   squash: 0.12,
+  /** 有走路帧的怪：每走多少像素换一帧（按显示高度 84 算，越高的角色步子越大）、每一步颠多高、站着时呼吸的伸缩幅度和每秒几次。 */
+  walkStep: 9,
+  walkBob: 2,
+  breath: 0.025,
+  breathRate: 0.6,
   barWidth: 46,
   barHeight: 6,
 }

@@ -69,10 +69,10 @@ const POISON_TICK = 0.5
 const LOOKS: Record<EnemyKind, EnemyLook> = {
   slime: { texture: ASSETS.enemies.get('enemy_slime') },
   bat: { texture: ASSETS.enemies.get('enemy_bat') },
-  skeleton: { texture: ASSETS.enemies.get('enemy_skeleton') },
+  skeleton: { texture: ASSETS.enemies.get('enemy_skeleton'), walk: ASSETS.enemies.frames('walk_skeleton_') },
   splitter: { texture: ASSETS.enemies.get('enemy_splitter') },
   smallSlime: { texture: ASSETS.enemies.get('enemy_slime') },
-  shaman: { texture: ASSETS.enemies.get('enemy_shaman') },
+  shaman: { texture: ASSETS.enemies.get('enemy_shaman'), walk: ASSETS.enemies.frames('walk_shaman_') },
   ghost: { texture: ASSETS.enemies.get('enemy_ghost') },
   slimeKing: { texture: ASSETS.enemies.get('enemy_slimeKing') },
   lich: { texture: ASSETS.enemies.get('enemy_lich') },

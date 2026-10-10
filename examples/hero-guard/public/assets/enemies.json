@@ -1,9 +1,201 @@
 {
  "frames": {
-  "enemy_slime": {
+  "walk_skeleton_0": {
    "frame": {
     "x": 0,
     "y": 0,
+    "w": 124,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 124,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 124,
+    "h": 168
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "walk_skeleton_1": {
+   "frame": {
+    "x": 126,
+    "y": 0,
+    "w": 124,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 124,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 124,
+    "h": 168
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "walk_skeleton_2": {
+   "frame": {
+    "x": 0,
+    "y": 170,
+    "w": 124,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 124,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 124,
+    "h": 168
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "walk_skeleton_3": {
+   "frame": {
+    "x": 126,
+    "y": 170,
+    "w": 124,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 124,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 124,
+    "h": 168
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "walk_shaman_0": {
+   "frame": {
+    "x": 252,
+    "y": 0,
+    "w": 110,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 110,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 110,
+    "h": 168
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "walk_shaman_1": {
+   "frame": {
+    "x": 252,
+    "y": 170,
+    "w": 110,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 110,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 110,
+    "h": 168
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "walk_shaman_2": {
+   "frame": {
+    "x": 0,
+    "y": 340,
+    "w": 110,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 110,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 110,
+    "h": 168
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "walk_shaman_3": {
+   "frame": {
+    "x": 112,
+    "y": 340,
+    "w": 110,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 110,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 110,
+    "h": 168
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "enemy_slime": {
+   "frame": {
+    "x": 224,
+    "y": 340,
     "w": 130,
     "h": 128
    },
@@ -26,8 +218,8 @@
   },
   "enemy_bat": {
    "frame": {
-    "x": 0,
-    "y": 130,
+    "x": 364,
+    "y": 0,
     "w": 154,
     "h": 120
    },
@@ -50,8 +242,8 @@
   },
   "enemy_skeleton": {
    "frame": {
-    "x": 156,
-    "y": 0,
+    "x": 356,
+    "y": 340,
     "w": 130,
     "h": 168
    },
@@ -74,8 +266,8 @@
   },
   "enemy_splitter": {
    "frame": {
-    "x": 0,
-    "y": 252,
+    "x": 364,
+    "y": 122,
     "w": 109,
     "h": 144
    },
@@ -98,8 +290,8 @@
   },
   "enemy_shaman": {
    "frame": {
-    "x": 156,
-    "y": 170,
+    "x": 0,
+    "y": 510,
     "w": 112,
     "h": 168
    },
@@ -122,8 +314,8 @@
   },
   "enemy_ghost": {
    "frame": {
-    "x": 288,
-    "y": 0,
+    "x": 114,
+    "y": 510,
     "w": 142,
     "h": 160
    },
@@ -146,8 +338,8 @@
   },
   "enemy_slimeKing": {
    "frame": {
-    "x": 0,
-    "y": 398,
+    "x": 520,
+    "y": 0,
     "w": 283,
     "h": 340
    },
@@ -170,8 +362,8 @@
   },
   "enemy_lich": {
    "frame": {
-    "x": 432,
-    "y": 0,
+    "x": 0,
+    "y": 680,
     "w": 300,
     "h": 380
    },
@@ -198,8 +390,8 @@
   "image": "enemies.png",
   "format": "RGBA8888",
   "size": {
-   "w": 732,
-   "h": 738
+   "w": 803,
+   "h": 1060
   },
   "scale": "1"
  }

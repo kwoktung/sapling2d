@@ -93,6 +93,18 @@ describe('TouchJoystick', () => {
     expect([input.getActionStrength('tjRight'), input.isActionJustReleased('tjRight')]).toEqual([0, true])
   })
 
+  it('拖着摇杆的手指抬起丢了（真机偶尔丢 touchend）：同一个 id 再按下时摇杆先松开，不会一直推着', async () => {
+    const { g, input, stick } = await setup()
+    g.pointerDown(200, 1000, 1)
+    g.pointerMove(300, 1000, 1)
+    g.step()
+    expect(input.isActionPressed('tjRight')).toBe(true)
+    g.pointerDown(150, 900, 1) // 上一次的 pointerup 没有收到：在新位置重新按下摇杆
+    g.step()
+    expect([stick.isPressed, stick.x, stick.y, stick.vectorX]).toEqual([true, 150, 900, 0])
+    expect([input.isActionPressed('tjRight'), input.isActionJustReleased('tjRight')]).toEqual([false, true])
+  })
+
   it('g.drag 可以驱动摇杆', async () => {
     let maxLeft = 0
     const { g, input } = await setup({}, (scene) => {

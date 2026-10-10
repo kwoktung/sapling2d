@@ -109,28 +109,45 @@ export class PointerRouter {
     }
 
     if (!this._pointers.has(id) && e.type !== 'pointermove') return
+    if (e.type !== 'pointermove') {
+      this._end(id, e.type === 'pointerup', position, design)
+      return
+    }
     const capture = this._captures.get(id)
     const target = capture && capture.isInsideTree && !capture.isFreed ? capture : null
 
-    if (e.type === 'pointermove') {
-      if (controls.ownsPointer(id)) {
-        this._pointers.set(id, position)
-        this._pointersDesign.set(id, design)
-        controls.drag(id, position, design)
-        return
-      }
-      if (this._pointers.has(id)) {
-        this._pointers.set(id, position)
-        this._pointersDesign.set(id, design)
-        // 捕获的节点已经销毁或离开树：这个手指不再算拖着节点
-        if (controls.move(id, position, design, target !== null)) this._unhandled.delete(id)
-      }
-      target?.pointerMove.emit(event(id, position, design, target))
+    if (controls.ownsPointer(id)) {
+      this._pointers.set(id, position)
+      this._pointersDesign.set(id, design)
+      controls.drag(id, position, design)
       return
     }
+    if (this._pointers.has(id)) {
+      this._pointers.set(id, position)
+      this._pointersDesign.set(id, design)
+      // 捕获的节点已经销毁或离开树：这个手指不再算拖着节点
+      if (controls.move(id, position, design, target !== null)) this._unhandled.delete(id)
+    }
+    target?.pointerMove.emit(event(id, position, design, target))
+  }
 
-    // pointerup / pointercancel
-    controls.release(id)
+  /**
+   * 指针 `id` 还按着时又收到它的按下：上一次的抬起丢了（真机偶尔丢 touchend，浏览器失去焦点时也可能丢 pointerup）。
+   * 把上一次的按下当作在最后的位置取消（松开按钮和摇杆，捕获它的节点收到 pointerUp）。返回是否取消了。
+   * 由 `Input` 在处理按下之前调用，这样动作先松开、再按下，新的按下照常有“刚按下”。
+   */
+  cancelStale(id: number): boolean {
+    const position = this._pointers.get(id)
+    if (!position) return false
+    this._end(id, false, position, this._pointersDesign.get(id)!)
+    return true
+  }
+
+  /** 指针抬起（`up`）或取消：松开它按着的控件，捕获它的节点收到 pointerUp（抬起时还在节点里才算 clicked）。 */
+  private _end(id: number, up: boolean, position: Vector2, design: Vector2): void {
+    const capture = this._captures.get(id)
+    const target = capture && capture.isInsideTree && !capture.isFreed ? capture : null
+    this._controls.release(id)
     this._pointers.delete(id)
     this._pointersDesign.delete(id)
     this._unhandled.delete(id)
@@ -139,7 +156,7 @@ export class PointerRouter {
     if (target) {
       const ev = event(id, position, design, target)
       target.pointerUp.emit(ev)
-      if (e.type === 'pointerup' && target.hitTest(ev.localPosition)) target.clicked.emit(ev)
+      if (up && target.hitTest(ev.localPosition)) target.clicked.emit(ev)
     }
   }
 

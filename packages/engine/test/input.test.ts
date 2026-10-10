@@ -156,6 +156,29 @@ describe('InputMap', () => {
     return { g, rec }
   }
 
+  it('同一个指针还按着又收到按下（抬起丢了，真机偶尔丢 touchend）：先当作取消，新的按下照常有 justPressed', async () => {
+    const { g, rec } = await setup()
+    g.pointerDown(10, 10, 1)
+    g.step()
+    g.pointerDown(20, 20, 1) // 上一次的 pointerup 没有收到
+    g.step()
+    g.pointerUp(20, 20, 1)
+    g.step()
+    expect(rec.frames).toEqual(['drop! drop', 'drop! drop drop^', 'drop^'])
+    expect(g.tree.input.isPointerPressed).toBe(false)
+  })
+
+  it('抬起丢了的指针：捕获它的节点收到 pointerUp（不算 clicked），新的按下另外分发', async () => {
+    const { g } = await setup()
+    const b = g.scene.add(new Button({ position: v(100, 100) }))
+    g.pointerDown(100, 100, 1)
+    g.step()
+    g.pointerDown(400, 400, 1) // 按在空白处：触发 pointer 绑定
+    g.step()
+    expect(b.log.map((l) => l.split(' ')[0])).toEqual(['down', 'up'])
+    expect(g.tree.input.isActionJustPressed('drop')).toBe(true)
+  })
+
   it('点击空白处触发 pointer 绑定：按下那一帧 justPressed，抬起那一帧 justReleased', async () => {
     const { g, rec } = await setup()
     g.tap(10, 10)

@@ -241,6 +241,17 @@ describe('TouchScreenButton 审查修复', () => {
     expect(dragged.isInsideTree).toBe(true)
   })
 
+  it('按着按钮的手指抬起丢了（真机偶尔丢 touchend）：同一个 id 再按下时按钮松开', async () => {
+    const g = await setup((scene) => scene.add(new TouchScreenButton({ action: 'tbJump', position: v(100, 100), hitArea: AREA })))
+    const input = g.tree.input
+    g.pointerDown(100, 100, 1)
+    g.step()
+    expect(input.isActionPressed('tbJump')).toBe(true)
+    g.pointerDown(400, 400, 1) // 上一次的 pointerup 没有收到；这次按在按钮外
+    g.step()
+    expect([input.isActionPressed('tbJump'), input.isActionJustReleased('tbJump'), input.isActionJustPressed('tbTap')]).toEqual([false, true, true])
+  })
+
   it('拖着的节点中途被销毁后，这个手指不再算拖着节点：滑进 passbyPress 按钮会按下', async () => {
     let dragged!: Node2D
     const g = await setup((scene) => {

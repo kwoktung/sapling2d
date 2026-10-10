@@ -1,13 +1,14 @@
 import { startGame } from 'sapling2d/wechat'
+import { runBench } from './bench'
 import { gameOptions } from './game'
-import { Battle } from './scenes/Battle'
 
 // 小游戏构建是 CommonJS，不能用顶层 await
 void startGame(gameOptions).then((game) => {
-  // 压力测试构建（VITE_STRESS=60）：放满英雄、同屏 N 只怪
-  const stress = Number(import.meta.env.VITE_STRESS ?? 0)
-  const scene = game.tree.currentScene
-  if (stress > 0 && scene instanceof Battle) scene.stress(stress)
+  // 真机压力测试构建（VITE_BENCH=1）：自己跑三个阶段、打印结果
+  if (import.meta.env.VITE_BENCH === '1') {
+    void runBench(game)
+    return
+  }
   // 每 5 秒打印一次帧耗时（构建时设置 SAPLING_LOG_URL 就能在电脑上看到真机的数字）
   setInterval(() => {
     const s = game.frameStats

@@ -49,6 +49,10 @@ export class Battle extends Scene implements HeroWorld {
   toSpawn = 0
   /** 见 stopSpawning()。 */
   manual = false
+  /** 压力测试：怪走到底线后回到起点，数量不变、不扣命。 */
+  stressMode = false
+  /** 伤害飘字的文字（压力测试换成每次都不同的数字，测 Label 重新栅格化的代价）。 */
+  formatDamage = (amount: number): string => String(Math.round(amount))
   private _spawnIn = 0
   /** 对象池：箭和火球、飘字（引擎缺口：对象池手写）。 */
   private readonly _projectiles: Projectile[] = []
@@ -119,7 +123,10 @@ export class Battle extends Scene implements HeroWorld {
     const enemies = this.enemies
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i]!
-      if (e.leaked && !e.dead) {
+      if (e.leaked && !e.dead && this.stressMode) {
+        e.leaked = false
+        e.dist = 0
+      } else if (e.leaked && !e.dead) {
         e.dead = true
         e.queueFree()
         this.loseLife()
@@ -284,7 +291,7 @@ export class Battle extends Scene implements HeroWorld {
   /** 扣血、飘字、火花；打死了给金币、碎片。 */
   damage(e: Enemy, amount: number): void {
     const killed = e.damage(amount)
-    this._float(String(Math.round(amount)), e.x, e.y - 30, killed ? 0xffd040 : 0xffffff)
+    this._float(this.formatDamage(amount), e.x, e.y - 30, killed ? 0xffd040 : 0xffffff)
     if (!killed) {
       this.sparks.position = e.position
       this.sparks.emit(FEEL.sparks)
@@ -327,6 +334,7 @@ export class Battle extends Scene implements HeroWorld {
   /** 压力测试：放满英雄、一次放 n 只血很厚的怪（看同屏很多怪时的耗时）。 */
   stress(n: number): void {
     this.gold = 1e9
+    this.stressMode = true
     const kinds: HeroKind[] = ['archer', 'mage', 'knight']
     this.slots.forEach((slot, i) => this.placeHero(slot, kinds[i % 3]!))
     this.stopSpawning()

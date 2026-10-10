@@ -11,7 +11,7 @@ A portrait (750×1334) tower-defense **gray-box prototype**: enemies walk down r
 - `src/skills.ts` — pure data: hero kinds and their stats (`baseStats`), the shared attack timing (`ATTACK.durations`, `hitFrame`), the upgrade list and `drawUpgrades`.
 - `src/path.ts` — `CurvePath`: centripetal Catmull-Rom through random control points, sampled by arc length (`sample(dist, out)` writes into `out`, no allocation). Uniform Catmull-Rom made cusps on ~5% of random paths; keep it centripetal.
 - `src/assets.ts` — every texture. Hero sheets are 6 frames: 0–1 idle, 2–5 attack.
-- `src/scenes/Battle.ts` — the whole fight: waves and spawning, leaks and lives, hero placement, target search (`findTarget`: in range, least remaining path), `strike` (archer arrows / mage fireball area damage / knight cone slash), damage numbers and particles, the upgrade picker, screen shake, `stress(n)`.
+- `src/scenes/Battle.ts` — the whole fight: waves and spawning, leaks and lives, hero placement, target search (`findTarget`: in range, least remaining path), `strike` (archer arrows / mage fireball area damage / knight cone slash), damage numbers and particles, the upgrade picker, screen shake, `stress(n)` (enemies loop back to the top instead of leaking).
 - `src/nodes/Hero.ts` — idle/attack `AnimatedSprite2D` with per-frame `durations`; damage happens on the hit frame (`frameChanged` + frame index); `speedScale` speeds the animation up when the attack interval is shorter than the animation.
 - `src/nodes/Enemy.ts` — follows its `CurvePath` (`dist` along it); white silhouette child for the hit flash; overhead HP bar; `zIndex = y` every frame for y-sorting.
 - `src/nodes/Projectile.ts`, `src/nodes/FloatText.ts` — pooled arrows/fireballs and damage numbers (`active` flag, reused, never freed).
@@ -25,4 +25,4 @@ A portrait (750×1334) tower-defense **gray-box prototype**: enemies walk down r
 
 ## Workflow
 
-Same as the other examples: test first with `createTestGame`, `pnpm check`, `pnpm dev` for the browser (`?stress=60` fills the slots and spawns 60 enemies, logging `frameStats` every 5 s), `pnpm build:wechat` for the WeChat Mini Game (`VITE_STRESS=60` for the same stress run; logs `[perf] …` every 5 s — build with `SAPLING_LOG_URL` and run `pnpm log-server` to read them).
+Same as the other examples: test first with `createTestGame`, `pnpm check`, `pnpm dev` for the browser (`?stress=60` fills the slots and spawns 60 enemies, logging `frameStats` every 5 s), `pnpm build:wechat` for the WeChat Mini Game (logs `[perf] …` every 5 s — build with `SAPLING_LOG_URL` and run `pnpm log-server` to read them). `VITE_BENCH=1` builds the device benchmark (`src/bench.ts`): 12 heroes + 60 looping enemies, three 10 s phases (normal / fast attacks / fast with every damage number different), one `[bench]` line each. iPhone results: `.scratch/towerdefense/issues/02-device-perf.md`.

@@ -251,12 +251,22 @@ export class Atlas {
   }
 
   /**
-   * 名字以 `prefix` 开头的所有帧，按名字里的数字自然排序（`run_2` 在 `run_10` 之前）。
-   * 用来取一段动画：`frames('explosion_')`。一帧都没有时报错。
+   * 一段动画的所有帧：名字是 `prefix` + 编号（前面可以有一个分隔符 `_` / `-` / 空格，后面可以有扩展名），按编号排序。
+   * `frames('explosion_')` 和 `frames('explosion')` 都取 `explosion_1.png`、`explosion_2.png`……，
+   * 但不会取到 `explosion_big_1.png`（前缀后面不是编号）。一帧都没有时报错。
    */
   frames(prefix: string): Texture[] {
-    const names = this.names.filter((n) => n.startsWith(prefix)).sort(naturalCompare)
-    if (!names.length) throw new Error(`atlas('${this.texture.path}'): no frames start with "${prefix}".`)
+    const frameNumber = (n: string) => Number(/\d+/.exec(n.slice(prefix.length))![0])
+    const names = this.names
+      .filter((n) => n.startsWith(prefix) && FRAME_NUMBER.test(n.slice(prefix.length)))
+      .sort((x, y) => frameNumber(x) - frameNumber(y) || naturalCompare(x, y))
+    if (!names.length) {
+      const loose = this.names.filter((n) => n.startsWith(prefix))
+      const hint = loose.length
+        ? ` Frames starting with it, but not followed by a number: ${loose.slice(0, 5).join(', ')}${loose.length > 5 ? ', …' : ''}. Use a longer prefix (e.g. "${longerPrefix(loose[0]!, prefix)}").`
+        : ''
+      throw new Error(`atlas('${this.texture.path}'): no frames named "${prefix}" + a number.${hint}`)
+    }
     return names.map((n) => this._frames.get(n)!)
   }
 
@@ -304,6 +314,15 @@ export function sheet(path: string, grid: { columns: number; rows: number }): Sp
 /** 打包图集：`path` 是图集图片（相对于资源目录），`data` 是打包工具导出的 JSON。 */
 export function atlas(path: string, data: AtlasData): Atlas {
   return new Atlas(tex(path), data)
+}
+
+/** `frames(prefix)` 里前缀后面剩下的部分：可选的分隔符 + 编号 + 可选的扩展名（`_01.png`、`-3`、` 12`）。 */
+const FRAME_NUMBER = /^[_\- ]?\d+(\.[A-Za-z0-9]+)?$/
+
+/** 报错提示：`name` 里 `prefix` 之后、编号之前的那一段也算进前缀（`hero_attack_heavy_01` → `hero_attack_heavy_`）。 */
+function longerPrefix(name: string, prefix: string): string {
+  const m = /^(.*?)\d+(\.[A-Za-z0-9]+)?$/.exec(name)
+  return m && m[1]!.length > prefix.length ? m[1]! : name
 }
 
 /** 字符串比较，其中的数字按数值比较。 */

@@ -598,7 +598,7 @@ it('sprite animation', async () => {
 ```
 
 - `sheet(path, { columns, rows })`：等大格子的网格图集，`frame(i)` / `frames(start, end)`（含两端）/ `count`。帧尺寸 = 整张图尺寸 / 列数（行数），图片加载后才确定，无头模式下为 0。
-- `atlas(path, data)`：打包图集，`data` 是 TexturePacker 等工具导出的 JSON（Hash 或 Array 格式，直接 import）。`get(name)` / `frames(prefix)`（数字自然排序）/ `names` / `has`。尺寸来自 JSON，无头模式下也正确；支持裁剪透明边（trimmed），不支持旋转打包。
+- `atlas(path, data)`：打包图集，`data` 是 TexturePacker 等工具导出的 JSON（Hash 或 Array 格式，直接 import）。`get(name)` / `frames(prefix)`（名字是“前缀 + 编号”的帧，按编号排序）/ `names` / `has`。尺寸来自 JSON，无头模式下也正确；支持裁剪透明边（trimmed），不支持旋转打包。
 - 图集的帧就是 `Texture`，可以给任何 `Sprite2D`；同一张图的帧共用一份显存，绘制时能合批。`static assets` 里放 `sheet` / `atlas` / `aseprite`，切换场景时按整张图判断是否卸载。
 - `AnimatedSprite2D`：`frames` + `fps`（默认 10）+ `loop`（默认 true），或 `animations: { 名字: { frames, fps, loop } }`。`play(name?)` / `pause()` / `stop()`（回到第 0 帧）、`frame`（可赋值）、`frameCount`、`speedScale`、`isPlaying`、`animation`；信号 `frameChanged`、`animationFinished`（不循环的动画播完，参数是动画名）。`texture` 由动画控制，不要直接赋值。
 
@@ -821,7 +821,7 @@ it('texturepacker sequence', async () => {
 - **同一个角色的所有序列用相同的画布尺寸导出**（攻击时武器挥出去的部分也要在画布里）。TexturePacker 开启 trim（裁掉透明边，省图集空间）：帧的尺寸仍是画布尺寸、以画布中心对齐，切换动作时角色不会跳。
 - 画布没法统一时（不同工具、不同人做的序列）用**锚点**：TexturePacker 里选中帧、打开 pivot points，把锚点放在角色脚底（同一个角色每帧都放在脚底），导出的 JSON 里每帧带 `pivot`（PixiJS 格式叫 `anchor`，两个都认）。`Sprite2D` 默认（`centered: true`）就以锚点为原点，切换动作时脚底不动；`texture.pivot` 能读到（0–1，相对裁剪前的尺寸）。`centered: false` 时忽略锚点、原点在左上角；`offset` 照常叠加。没设 `hitArea` 时的点击范围也跟着锚点。
 - TexturePacker 里关闭 rotation（不支持旋转打包，加载时报错）。数据格式选 JSON (Hash) 或 JSON (Array)。
-- 帧名带编号，`frames(prefix)` 按数字排序（`_2` 在 `_10` 之前，补零也可以）。**一套动画的前缀不要是另一套的前缀**：`hero_attack_` 也会匹配 `hero_attack_heavy_01.png`，改成 `hero_attack-heavy_01` 这类名字。
+- 帧名是“前缀 + 编号”，`frames(prefix)` 只取前缀后面紧跟编号的帧（中间可以有一个 `_` / `-` / 空格，后面可以有扩展名），按编号排序（`_2` 在 `_10` 之前，补零也可以）：`frames('hero_attack_')` 取 `hero_attack_01.png`…，不会混进 `hero_attack_heavy_01.png`。一帧都没取到时，报错会列出“前缀开头但后面不是编号”的帧，并提示更长的前缀。
 - `durations` 的长度和帧数对不上时报错（`animation "attack" has 5 frames but 4 durations`）：美术加减了帧，记得改时长。
 
 ### 图块地图（TileMap）

@@ -21,4 +21,4 @@
 - **踩的坑**：
   - Pixi 的 high-shader 里 `localUniformBitGl` 用到 `roundPixelsBitGl` 声明的 `uRound`，少了它着色器编译失败，**Pixi 不报错、什么都不画**。剪影一开始全是透明的，在浏览器里用 `gl.readPixels` 读 RenderTexture 才查出来。注释写在 `silhouetteProgram()` 上。
   - 私有字段一开始叫 `_flash`，和 `examples/plane` 里 Boss / Enemy 自己的 `_flash` 冲突（TS 的同名私有字段编译失败）。游戏的子类很可能自己有这个名字，改成 `_flashAmount` / `_flashTint`。引擎其他类的私有字段也有同样的风险，没有统一处理。
-- 浏览器（Chrome）验证：弓手待机帧全白、法师停在出手帧（拉长的身体、法杖和闪光）的剪影完全对齐、剑士半强度红色闪光，和不闪的剑士对比正常。剪影在 WebGL1 小游戏上的表现还没上真机看，下次真机测试时一起看。
+- 浏览器（Chrome）验证：弓手待机帧全白、法师停在出手帧（拉长的身体、法杖和闪光）的剪影完全对齐、剑士半强度红色闪光，和不闪的剑士对比正常。剪影在 WebGL1 小游戏上也正常（2026-10-10，iPhone 17，`VITE_VERIFY=1` 截图 `../assets/iphone-flash-additive.png`）：怪物全白 / 半白 / 不闪对比清楚；弓手全白；法师和剑士停在攻击动画中间的帧，剪影和当帧的形状（包括法杖、压扁的身体）对齐；剑士半强度红色正确。

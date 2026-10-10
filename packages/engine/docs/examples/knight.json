@@ -1,0 +1,155 @@
+{
+ "frames": {
+  "hero_idle_01.png": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 48,
+    "h": 90
+   },
+   "rotated": false,
+   "trimmed": true,
+   "spriteSourceSize": {
+    "x": 40,
+    "y": 30,
+    "w": 48,
+    "h": 90
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "hero_idle_02.png": {
+   "frame": {
+    "x": 48,
+    "y": 0,
+    "w": 48,
+    "h": 92
+   },
+   "rotated": false,
+   "trimmed": true,
+   "spriteSourceSize": {
+    "x": 40,
+    "y": 28,
+    "w": 48,
+    "h": 92
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "hero_attack_01.png": {
+   "frame": {
+    "x": 96,
+    "y": 0,
+    "w": 60,
+    "h": 90
+   },
+   "rotated": false,
+   "trimmed": true,
+   "spriteSourceSize": {
+    "x": 30,
+    "y": 30,
+    "w": 60,
+    "h": 90
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "hero_attack_02.png": {
+   "frame": {
+    "x": 156,
+    "y": 0,
+    "w": 70,
+    "h": 90
+   },
+   "rotated": false,
+   "trimmed": true,
+   "spriteSourceSize": {
+    "x": 20,
+    "y": 30,
+    "w": 70,
+    "h": 90
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "hero_attack_03.png": {
+   "frame": {
+    "x": 226,
+    "y": 0,
+    "w": 92,
+    "h": 100
+   },
+   "rotated": false,
+   "trimmed": true,
+   "spriteSourceSize": {
+    "x": 36,
+    "y": 20,
+    "w": 92,
+    "h": 100
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "hero_attack_04.png": {
+   "frame": {
+    "x": 318,
+    "y": 0,
+    "w": 80,
+    "h": 94
+   },
+   "rotated": false,
+   "trimmed": true,
+   "spriteSourceSize": {
+    "x": 36,
+    "y": 26,
+    "w": 80,
+    "h": 94
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  },
+  "hero_attack_05.png": {
+   "frame": {
+    "x": 398,
+    "y": 0,
+    "w": 56,
+    "h": 90
+   },
+   "rotated": false,
+   "trimmed": true,
+   "spriteSourceSize": {
+    "x": 38,
+    "y": 30,
+    "w": 56,
+    "h": 90
+   },
+   "sourceSize": {
+    "w": 128,
+    "h": 128
+   }
+  }
+ },
+ "meta": {
+  "app": "https://www.codeandweb.com/texturepacker",
+  "version": "1.0",
+  "image": "knight.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 454,
+   "h": 100
+  },
+  "scale": "1"
+ }
+}

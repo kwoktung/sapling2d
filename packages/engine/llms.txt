@@ -704,6 +704,69 @@ it('aseprite', async () => {
 - `slice(name, frame)`：slice 在这一帧的 `{ bounds, pivot }`，**以精灵中心为原点**，直接加到精灵位置上（`flipH` 时 x 取反）。`frame` 传播放中精灵的 `sprite.texture`（`sprite.frame` 是动画里的序号，不是图里的帧号），或者图里的帧号。key 从它的帧开始生效直到下一个 key；之前没有 key 时返回 null。返回的对象共用，不要修改。
 - 导出时漏了 `--list-tags` / `--list-slices`，用到 tag / slice 时会报错提示。仓库里提交导出好的 png + json，不需要每台机器都装 Aseprite。
 
+#### PNG 序列（TexturePacker）
+
+高清手绘的角色一般在 Spine、AE、Animate、PS 里做好，导出成 PNG 序列（`hero_attack_01.png` …），再用 TexturePacker 打包成 `atlas()`。这条路上的 JSON 里没有帧时长和命中帧，写在代码或数据里：
+
+```ts
+import { AnimatedSprite2D, atlas, Scene, v } from 'sapling2d'
+// TexturePacker 打包 PNG 序列（hero_attack_01.png …）导出的 JSON；图片放在 public/assets/
+import knightData from './knight.json'
+
+// 帧时长和命中帧写在数据里：美术加减帧时只改这里（长度对不上会报错，指出是哪套动画）
+const KNIGHT = {
+  idle: { fps: 4 },
+  attack: { durations: [0.1, 0.2, 0.04, 0.04, 0.15], hitFrame: 2 },
+}
+
+export class Arena extends Scene {
+  static override assets = { knight: atlas('knight.png', knightData) }
+  knight!: AnimatedSprite2D<'idle' | 'attack'>
+
+  override ready() {
+    const sheet = Arena.assets.knight
+    this.knight = this.add(
+      new AnimatedSprite2D({
+        animations: {
+          // frames(prefix) 按名字里的数字排序：hero_attack_01 … hero_attack_05
+          idle: { frames: sheet.frames('hero_idle_'), fps: KNIGHT.idle.fps },
+          attack: { frames: sheet.frames('hero_attack_'), durations: KNIGHT.attack.durations, loop: false },
+        },
+        autoplay: true,
+        position: v(375, 1000),
+      }),
+    )
+    this.knight.animationFinished.connect(() => this.knight.play('idle'), this)
+  }
+}
+```
+
+```ts
+import { expect, it } from 'vitest'
+import { createTestGame } from 'sapling2d/testing'
+
+it('texturepacker sequence', async () => {
+  const g = await createTestGame({ main: Arena })
+  const knight = g.scene.knight
+  // 裁掉的透明边各不相同，但尺寸都是导出时的画布 128×128：以画布中心对齐，切换动作时角色不会跳
+  const sizes = new Set(Arena.assets.knight.names.map((n) => `${Arena.assets.knight.get(n).width}×${Arena.assets.knight.get(n).height}`))
+  expect([...sizes]).toEqual(['128×128'])
+
+  knight.play('attack')
+  const hitAt = knight.getFrameTime('attack', KNIGHT.attack.hitFrame)
+  expect(hitAt).toBeCloseTo(0.3)
+  g.stepSeconds(hitAt + 0.01)
+  expect(knight.texture?.path).toBe('knight.png#hero_attack_03.png')
+  g.stepSeconds(0.3)
+  expect(knight.animation).toBe('idle')
+})
+```
+
+- **同一个角色的所有序列用相同的画布尺寸导出**（攻击时武器挥出去的部分也要在画布里）。TexturePacker 开启 trim（裁掉透明边，省图集空间）：帧的尺寸仍是画布尺寸、以画布中心对齐，切换动作时角色不会跳。画布不一样大时，切换动作会跳一下。
+- TexturePacker 里关闭 rotation（不支持旋转打包，加载时报错）。数据格式选 JSON (Hash) 或 JSON (Array)。
+- 帧名带编号，`frames(prefix)` 按数字排序（`_2` 在 `_10` 之前，补零也可以）。**一套动画的前缀不要是另一套的前缀**：`hero_attack_` 也会匹配 `hero_attack_heavy_01.png`，改成 `hero_attack-heavy_01` 这类名字。
+- `durations` 的长度和帧数对不上时报错（`animation "attack" has 5 frames but 4 durations`）：美术加减了帧，记得改时长。
+
 ### 图块地图（TileMap）
 
 ```ts

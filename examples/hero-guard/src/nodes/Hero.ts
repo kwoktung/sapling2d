@@ -1,8 +1,9 @@
 import { Ease, Node2D, rect, Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
 import { ART_SCALE, ASSETS } from '../assets'
 import { HEROES, RIG, type HeroKind } from '../data/heroes'
-import { archerMods, HEADSHOT_EVERY, HEADSHOT_MUL, type ArcherMods } from '../data/skills'
+import { archerMods, HEADSHOT_EVERY, HEADSHOT_MUL, mageMods, type ArcherMods, type MageMods } from '../data/skills'
 import type { Shot } from './Arrow'
+import type { Blast } from './Effects'
 import type { Enemy } from './Enemy'
 
 /** 英雄需要的场景接口（Battle 实现）。 */
@@ -13,6 +14,10 @@ export interface HeroWorld {
   findTargets(x: number, y: number, range: number, n: number, exclude: Enemy | null): Enemy[]
   /** 从 (x, y) 向目标射一支箭。 */
   shootArrow(x: number, y: number, target: Enemy, shot: Shot, range: number): void
+  /** 从 (x, y) 向目标所在的点扔一个火球（落地爆炸）。 */
+  castFireball(x: number, y: number, target: Enemy, blast: Blast): void
+  /** 从 (x, y) 放连锁闪电：先打 `first`，再跳 `jumps` 次（每次跳到最近的没打过的敌人），每跳伤害乘 `falloff`。 */
+  chainLightning(x: number, y: number, first: Enemy, damage: number, jumps: number, falloff: number): void
   /** [0, 1) 的随机数（tree.rng，测试可复现）。 */
   random(): number
 }
@@ -137,6 +142,9 @@ export abstract class Hero extends Node2D {
     this.weapon.rotation = 0
   }
 
+  /** 这个英雄这一局的技能修正值（`data/skills.ts` 里对应的 `HeroMods[kind]`）。 */
+  abstract readonly mods: object
+
   /** 技能改了修正值之后重新算 `stats`。 */
   abstract refreshStats(): void
 
@@ -150,7 +158,7 @@ export abstract class Hero extends Node2D {
  * 每支箭的效果在出手时算好（`Shot`），飞到时由 Battle 结算。
  */
 export class Archer extends Hero {
-  readonly mods: ArcherMods = archerMods()
+  override readonly mods: ArcherMods = archerMods()
   /** 射出过多少支箭（爆头按它数）。 */
   shots = 0
 
@@ -186,6 +194,54 @@ export class Archer extends Hero {
     // 拉弓：弓往身体收、出手时往前送
     if (phase === 'windup') return { dx: -8, dy: 2 }
     if (phase === 'release') return { dx: 6, dy: -2 }
+    return { dx: 0, dy: 0 }
+  }
+}
+
+/** 法师的火球爆炸半径（技能前）。 */
+export const MAGE_BLAST = 70
+
+/**
+ * 法师：火球飞向目标所在的点，落地范围伤害。技能（`mods`）：烈焰（伤害、半径、燃烧地面）、
+ * 寒冰（减速，质变冰冻）、雷电（每隔几次攻击额外放连锁闪电）。
+ */
+export class Mage extends Hero {
+  override readonly mods: MageMods = mageMods()
+  /** 第几次攻击（连锁闪电按它数）。 */
+  casts = 0
+
+  constructor(world: HeroWorld, position: Vector2) {
+    super(world, 'mage', position)
+  }
+
+  override refreshStats(): void {
+    this.stats.damage = HEROES.mage.damage * this.mods.damageMul
+  }
+
+  get blastRadius(): number {
+    return MAGE_BLAST * this.mods.blastMul
+  }
+
+  protected override release(target: Enemy): void {
+    const m = this.mods
+    const x = this.x + this.facing * RIG.mage.weaponX
+    const y = this.y + RIG.mage.weaponY - 40 // 宝珠在法杖顶端
+    this.casts++
+    this.world.castFireball(x, y, target, {
+      damage: this.stats.damage,
+      radius: this.blastRadius,
+      slowPct: m.slowPct,
+      slowTime: m.slowTime,
+      freeze: m.freeze,
+      burnGround: m.burnGround,
+    })
+    if (m.chainEvery > 0 && this.casts % m.chainEvery === 0) this.world.chainLightning(x, y, target, this.stats.damage, m.chainJumps, m.chainFalloff)
+  }
+
+  protected override weaponPose(phase: 'windup' | 'release' | 'rest'): { dx: number; dy: number } {
+    // 举起法杖，出手时往前送
+    if (phase === 'windup') return { dx: -4, dy: -10 }
+    if (phase === 'release') return { dx: 8, dy: 2 }
     return { dx: 0, dy: 0 }
   }
 }

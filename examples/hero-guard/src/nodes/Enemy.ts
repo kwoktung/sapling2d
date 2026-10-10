@@ -25,6 +25,12 @@ export class Enemy extends Node2D {
   poisonLeft = 0
   poisonDps = 0
   poisonTick = 0
+  /** 减速（比例和剩余时间）、冰冻剩余时间、寒冰质变的计数（2 秒窗口里被打了几次）。 */
+  slowPct = 0
+  slowLeft = 0
+  frozenLeft = 0
+  frostHits = 0
+  frostWindowStart = -1
   /** 越过底线了（Battle 扣命后移除）。 */
   leaked = false
   private _flashLeft = 0
@@ -53,8 +59,10 @@ export class Enemy extends Node2D {
     this._move(0)
   }
 
+  /** 当前速度：冰冻时 0，减速时打折。 */
   get speed(): number {
-    return ENEMIES[this.kind].speed
+    if (this.frozenLeft > 0) return 0
+    return ENEMIES[this.kind].speed * (1 - this.slowPct)
   }
 
   get remaining(): number {
@@ -64,8 +72,8 @@ export class Enemy extends Node2D {
   override process(dt: number) {
     if (this.dead) return
     this._move(this.speed * dt)
-    // 弹跳：|sin| 的一拍是一下，落地（接近 0）时压扁
-    this._hop += dt * ENEMY_FEEL.hopRate * Math.PI
+    // 弹跳：|sin| 的一拍是一下，落地（接近 0）时压扁；冰冻时停住，减速时跳得慢
+    if (this.frozenLeft <= 0) this._hop += dt * ENEMY_FEEL.hopRate * Math.PI * (1 - this.slowPct)
     const s = Math.abs(Math.sin(this._hop))
     const squash = (1 - s) * ENEMY_FEEL.squash
     const k = ENEMIES[this.kind].scale

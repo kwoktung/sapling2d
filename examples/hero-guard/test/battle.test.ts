@@ -9,9 +9,12 @@ import { gameOptions } from '../src/game'
 import { linePath, randomPath } from '../src/path'
 import { Battle } from '../src/scenes/Battle'
 
+/** 开局：跳过选英雄，弓手放在 1 号槽位（上排中间）。 */
 async function start(seed = 1) {
   const g = await createTestGame({ ...gameOptions, seed })
-  return { g, battle: g.scene as Battle }
+  const battle = g.scene as Battle
+  battle.startWith('archer', 1)
+  return { g, battle }
 }
 
 /** 手动模式：不自动出怪，测试自己放。 */
@@ -146,7 +149,10 @@ describe('波次和胜负', () => {
     for (let i = 0; i < 60 * 600 && battle.state !== 'won'; i++) {
       g.step()
       for (const e of battle.enemies) if (!e.dead) battle.damage(e, 1e9)
-      if (battle.picker) battle.picker.cards[0]!.clicked.emit({ pointerId: 0, position: v(0, 0), localPosition: v(0, 0) }) // 升级就选第一张
+      const click = { pointerId: 0, position: v(0, 0), localPosition: v(0, 0) }
+      if (battle.picker) battle.picker.cards[0]!.clicked.emit(click) // 升级就选第一张
+      if (battle.heroPicker) battle.heroPicker.cards.find((c) => c.enabled)!.clicked.emit(click) // 第 3、6 波：选第一个能选的英雄
+      if (battle.state === 'placing') battle.slots.find((s) => !s.hero)!.clicked.emit(click) // 放在第一个空槽位
     }
     expect([battle.state, battle.wave, battle.lives]).toEqual(['won', WAVE_COUNT, START.lives])
     expect(battle.hud.message.text).toContain('胜利')

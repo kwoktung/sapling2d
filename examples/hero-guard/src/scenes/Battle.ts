@@ -1,21 +1,44 @@
-import { Camera2D, ColorRect, HitTester, Node2D, Particles2D, Scene, type Curve2D, type PointerEvent2D, type Tween, v, Vector2 } from 'sapling2d'
+import { Camera2D, ColorRect, Ease, HitTester, Node2D, Particles2D, Scene, Sprite2D, type Curve2D, type PointerEvent2D, type Tween, v, Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
 import { FEEL, FIELD, SLOTS, START, Z } from '../config'
 import { ENEMIES, enemyHp, type EnemyKind } from '../data/enemies'
-import type { HeroKind } from '../data/heroes'
-import { availableNodes, drawOffers, POISON_CLOUD_RADIUS, POISON_CLOUD_STACKS, xpToNext, type BranchLevels, type SkillNode } from '../data/skills'
+import { HERO_KINDS, HEROES, type HeroKind } from '../data/heroes'
+import {
+  availableNodes,
+  BURN_DPS,
+  BURN_TIME,
+  CHAIN_RANGE,
+  drawOffers,
+  FREEZE_HITS,
+  FREEZE_TIME,
+  FREEZE_WINDOW,
+  POISON_CLOUD_RADIUS,
+  POISON_CLOUD_STACKS,
+  xpToNext,
+  type BranchLevels,
+  type SkillNode,
+} from '../data/skills'
 import { WAVE_COUNT, WAVES, type SpawnGroup } from '../data/waves'
 import { Arrow, PIERCE_RADIUS, type Shot } from '../nodes/Arrow'
+import { BurnZone, Bolt, Fireball, type Blast } from '../nodes/Effects'
 import { Enemy, type EnemyLook } from '../nodes/Enemy'
 import { FloatText } from '../nodes/FloatText'
-import { Archer, type Hero, type HeroWorld } from '../nodes/Hero'
+import { Archer, Mage, type Hero, type HeroWorld } from '../nodes/Hero'
+import { HeroPicker } from '../nodes/HeroPicker'
 import { Hud } from '../nodes/Hud'
 import { PathPreview } from '../nodes/PathPreview'
 import { UpgradePicker } from '../nodes/UpgradePicker'
 import { Slot } from '../nodes/Slot'
 import { randomPath } from '../path'
 
-export type BattleState = 'wave' | 'gap' | 'won' | 'lost'
+/** `choosing` 选英雄、`placing` 点槽位放下选好的英雄、`wave` 出怪中、`gap` 两波之间。 */
+export type BattleState = 'choosing' | 'placing' | 'wave' | 'gap' | 'won' | 'lost'
+
+/** 已经实现的英雄（骑士在 07 加）；没实现的在选英雄画面里显示“敬请期待”。 */
+export const IMPLEMENTED: ReadonlySet<HeroKind> = new Set(['archer', 'mage'])
+
+/** 这几波开始前再选一个英雄上场。 */
+export const UNLOCK_WAVES: readonly number[] = [3, 6]
 
 /** 中毒每隔多久跳一次伤害。 */
 const POISON_TICK = 0.5
@@ -39,7 +62,7 @@ interface Spawner {
  */
 export class Battle extends Scene implements HeroWorld {
   static override assets = ASSETS
-  state: BattleState = 'gap'
+  state: BattleState = 'choosing'
   lives = START.lives
   wave = 0
   /** 这一局拿到的总经验、等级、这一级已经攒了多少、还有几次升级没选。 */
@@ -52,6 +75,11 @@ export class Battle extends Scene implements HeroWorld {
   readonly branchLevels: BranchLevels = new Map()
   readonly taken: SkillNode[] = []
   picker: UpgradePicker | null = null
+  heroPicker: HeroPicker | null = null
+  /** 选好了、等着点槽位放下的英雄。 */
+  placing: HeroKind | null = null
+  /** 燃烧地面（Battle 每 0.5 秒对里面的敌人造成伤害）。 */
+  readonly burns: BurnZone[] = []
   readonly enemies: Enemy[] = []
   readonly heroes: Hero[] = []
   readonly slots: Slot[] = []
@@ -67,6 +95,8 @@ export class Battle extends Scene implements HeroWorld {
   private _waveTime = 0
   private _gapLeft = 1
   private readonly _arrows: Arrow[] = []
+  private readonly _fireballs: Fireball[] = []
+  private _burnTick = 0
   private readonly _floats: FloatText[] = []
   private _shake: Tween | null = null
   private _hud = { lives: -1, wave: -1, level: -1, levelXp: -1 }
@@ -76,7 +106,13 @@ export class Battle extends Scene implements HeroWorld {
   override ready() {
     this.add(new ColorRect({ name: 'BaseLine', position: v(0, FIELD.baseY), size: v(750, 4), color: 0xc04030, zIndex: Z.slot }))
     let i = 0
-    for (const y of SLOTS.rows) for (const x of SLOTS.columns) this.slots.push(this.add(new Slot(i++, v(x, y))))
+    for (const y of SLOTS.rows) {
+      for (const x of SLOTS.columns) {
+        const slot = this.add(new Slot(i++, v(x, y)))
+        slot.clicked.connect(() => this._onSlotClicked(slot), this)
+        this.slots.push(slot)
+      }
+    }
     this.debris = this.add(
       new Particles2D({ name: 'Debris', texture: ASSETS.spark, emitting: false, zIndex: Z.fx - 1, amount: 400, lifetime: 0.6, lifetimeRandomness: 0.5, speedMin: 100, speedMax: 360, damping: 3, scaleStart: 1.8, scaleEnd: 0.3, alphaEnd: 0, selfModulate: 0x5ab05a }),
     )
@@ -86,9 +122,60 @@ export class Battle extends Scene implements HeroWorld {
     )
     this.camera = this.add(new Camera2D({ position: v(375, 667) }))
     this.hud = this.add(new Hud())
-    // 骨架阶段：弓手直接站在上排中间（选英雄在 06 做）
-    this.placeHero('archer', this.slots[1]!)
     this._updateHud()
+    this.openHeroPicker('选择你的第一位英雄')
+  }
+
+  // ---------------------------------------------------------------- 选英雄
+
+  /** 还没上场、可以选的英雄。 */
+  get unplacedKinds(): HeroKind[] {
+    return HERO_KINDS.filter((k) => !this.heroes.some((h) => h.kind === k))
+  }
+
+  /** 弹出选英雄画面（剩下的英雄里选）。 */
+  openHeroPicker(title: string): void {
+    this.state = 'choosing'
+    this.heroPicker = this.add(new HeroPicker(this.unplacedKinds, IMPLEMENTED, title))
+    this.heroPicker.picked.connect((kind) => this.choose(kind), this)
+  }
+
+  /** 选好了英雄：进入放置，空槽位高亮、可以点。 */
+  choose(kind: HeroKind): void {
+    this.heroPicker = null
+    this.placing = kind
+    this.state = 'placing'
+    for (const s of this.slots) {
+      s.highlighted = !s.hero
+      s.inputPickable = !s.hero
+    }
+    this.hud.flash(`点一个槽位放下${HEROES[kind].name}`, 0)
+  }
+
+  private _onSlotClicked(slot: Slot) {
+    if (this.state !== 'placing' || !this.placing || slot.hero) return
+    this.placeHero(this.placing, slot)
+    this.placing = null
+    for (const s of this.slots) {
+      s.highlighted = false
+      s.inputPickable = false
+    }
+    this.hud.flash('', 0)
+    // 开局：短暂停顿后第 1 波；解锁：直接开始下一波
+    this.state = 'gap'
+    this._gapLeft = this.wave === 0 ? 1 : 0.6
+  }
+
+  /** 测试用：跳过选英雄，直接把英雄放在第 `slotIndex` 个槽位。 */
+  startWith(kind: HeroKind, slotIndex: number): Hero {
+    if (this.heroPicker) {
+      this.heroPicker.visible = false // queueFree 要到帧末才删：先藏起来，这一帧的点击不会被它的遮罩吃掉
+      this.heroPicker.queueFree()
+    }
+    this.heroPicker = null
+    this.choose(kind)
+    this._onSlotClicked(this.slots[slotIndex]!)
+    return this.heroOf(kind)!
   }
 
   // ---------------------------------------------------------------- 英雄
@@ -96,8 +183,8 @@ export class Battle extends Scene implements HeroWorld {
   /** 在空槽位上放一个英雄。 */
   placeHero(kind: HeroKind, slot: Slot): Hero {
     if (slot.hero) throw new Error(`slot ${slot.index} is taken`)
-    if (kind !== 'archer') throw new Error(`hero ${kind} is not implemented yet`)
-    const hero = this.add(new Archer(this, slot.position))
+    if (!IMPLEMENTED.has(kind)) throw new Error(`hero ${kind} is not implemented yet`)
+    const hero = this.add(kind === 'archer' ? new Archer(this, slot.position) : new Mage(this, slot.position))
     slot.hero = hero
     this.heroes.push(hero)
     hero.pointerDown.connect((e) => this._beginDrag(hero, e), this)
@@ -120,7 +207,7 @@ export class Battle extends Scene implements HeroWorld {
   }
 
   private _beginDrag(hero: Hero, e: PointerEvent2D) {
-    if (this._drag || this.state === 'won' || this.state === 'lost') return
+    if (this._drag || this.state === 'won' || this.state === 'lost' || this.state === 'choosing' || this.state === 'placing') return
     this._drag = { hero, dx: hero.x - e.position.x, dy: hero.y - e.position.y }
     hero.dragging = true
     hero.cancelAttack()
@@ -257,6 +344,107 @@ export class Battle extends Scene implements HeroWorld {
     this.damage(e, shot.damage, { crit: shot.crit || shot.headshot, ignoreArmor: shot.headshot })
   }
 
+  // ---------------------------------------------------------------- 法师
+
+  castFireball(x: number, y: number, target: Enemy, blast: Blast): void {
+    let f = this._fireballs.find((q) => !q.active)
+    if (!f) {
+      f = this.fx.add(new Fireball())
+      f.onArrive = this._onFireball
+      this._fireballs.push(f)
+    }
+    f.launch(x, y, target, blast)
+  }
+
+  /** 火球落地：半径内的敌人受伤、减速（寒冰）、计冰冻次数（寒冰质变）；燃烧地面（烈焰质变）。 */
+  private readonly _onFireball = (f: Fireball) => {
+    const b = f.blast
+    const r2 = b.radius * b.radius
+    const enemies = this.enemies
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i]!
+      if (e.dead || (e.x - f.x) ** 2 + (e.y - 20 - f.y) ** 2 > r2) continue
+      if (b.slowPct > 0) this.slow(e, b.slowPct, b.slowTime)
+      if (b.freeze) this._frostHit(e)
+      this.damage(e, b.damage)
+    }
+    if (b.burnGround) this.burns.push(this.add(new BurnZone(f.x, f.y + 20, b.radius, BURN_TIME)))
+    this._burst(f.x, f.y, b.radius, 0xff8030)
+  }
+
+  chainLightning(x: number, y: number, first: Enemy, damage: number, jumps: number, falloff: number): void {
+    const hit = new Set<Enemy>()
+    let fromX = x
+    let fromY = y
+    let t: Enemy | null = first
+    let dmg = damage
+    for (let k = 0; k <= jumps && t; k++) {
+      hit.add(t)
+      this.add(new Bolt(fromX, fromY, t.x, t.y - 24, this.tree.rng.randfRange(-14, 14)))
+      fromX = t.x
+      fromY = t.y - 24
+      this.damage(t, dmg)
+      dmg *= falloff
+      // 下一跳：离这里最近、没打过的敌人
+      let next: Enemy | null = null
+      let best = CHAIN_RANGE * CHAIN_RANGE
+      for (const e of this.enemies) {
+        if (e.dead || hit.has(e)) continue
+        const d2 = (e.x - fromX) ** 2 + (e.y - 24 - fromY) ** 2
+        if (d2 < best) {
+          best = d2
+          next = e
+        }
+      }
+      t = next
+    }
+  }
+
+  /** 爆炸特效：放大淡出的光圈（叠加发光）+ 火花。 */
+  private _burst(x: number, y: number, radius: number, color: number) {
+    const s = (radius * 2) / 64
+    const fx = this.fx.add(new Sprite2D({ texture: ASSETS.glow, position: v(x, y), scale: v(s * 0.4, s * 0.4), selfModulate: color }))
+    fx.createTween().to(fx, { scale: v(s, s), alpha: 0 }, 0.3, Ease.QuadOut).call(() => fx.queueFree())
+    this.sparks.position = v(x, y)
+    this.sparks.emit(FEEL.sparks * 2)
+  }
+
+  // ---------------------------------------------------------------- 状态
+
+  /** 能不能被控制（减速、冰冻、眩晕、击退、嘲讽）：08 的幽灵免疫。 */
+  controllable(_e: Enemy): boolean {
+    return true
+  }
+
+  /** 减速：取更强的那个比例，刷新时间。 */
+  slow(e: Enemy, pct: number, time: number): void {
+    if (e.dead || !this.controllable(e)) return
+    e.slowPct = Math.max(e.slowPct, pct)
+    e.slowLeft = Math.max(e.slowLeft, time)
+    this._tint(e)
+  }
+
+  /** 寒冰质变：2 秒窗口里被打满 3 次就冰冻。 */
+  private _frostHit(e: Enemy) {
+    if (e.dead || !this.controllable(e)) return
+    const now = this.tree.time
+    if (e.frostWindowStart < 0 || now - e.frostWindowStart > FREEZE_WINDOW) {
+      e.frostWindowStart = now
+      e.frostHits = 0
+    }
+    if (++e.frostHits >= FREEZE_HITS) {
+      e.frozenLeft = FREEZE_TIME
+      e.frostHits = 0
+      e.frostWindowStart = -1
+      this._tint(e)
+    }
+  }
+
+  /** 身上状态的颜色：冰冻 > 减速 > 中毒。 */
+  private _tint(e: Enemy) {
+    e.body.selfModulate = e.frozenLeft > 0 ? 0x80c0ff : e.slowPct > 0 ? 0xbfe0ff : e.poisonStacks > 0 ? 0xb0ff90 : 0xffffff
+  }
+
   /** 加 `stacks` 层毒（不超过上限），刷新持续时间；伤害按最强的那一份毒算。 */
   poison(e: Enemy, dps: number, time: number, maxStacks: number, stacks: number): void {
     if (e.dead) return
@@ -264,27 +452,51 @@ export class Battle extends Scene implements HeroWorld {
     e.poisonStacks = Math.min(maxStacks, e.poisonStacks + stacks)
     e.poisonLeft = time
     e.poisonDps = Math.max(e.poisonDps, dps)
-    e.body.selfModulate = 0xb0ff90
+    this._tint(e)
   }
 
-  /** 每帧结算怪物身上的持续状态（中毒每 0.5 秒跳一次伤害）。 */
+  /** 每帧结算怪物身上的持续状态（中毒每 0.5 秒跳一次伤害、减速和冰冻的计时）和燃烧地面。 */
   private _tickStatuses(dt: number) {
     const enemies = this.enemies
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i]!
-      if (e.dead || e.poisonStacks === 0) continue
-      e.poisonLeft -= dt
-      e.poisonTick -= dt
-      if (e.poisonTick <= 0) {
-        e.poisonTick += POISON_TICK
-        this.damage(e, e.poisonStacks * e.poisonDps * POISON_TICK, { dot: true })
+      if (e.dead) continue
+      let changed = false
+      if (e.frozenLeft > 0 && (e.frozenLeft -= dt) <= 0) {
+        e.frozenLeft = 0
+        changed = true
       }
-      if (e.poisonLeft <= 0 && !e.dead) {
-        e.poisonStacks = 0
-        e.poisonDps = 0
-        e.body.selfModulate = 0xffffff
+      if (e.slowLeft > 0 && (e.slowLeft -= dt) <= 0) {
+        e.slowLeft = 0
+        e.slowPct = 0
+        changed = true
       }
+      if (e.poisonStacks > 0) {
+        e.poisonLeft -= dt
+        e.poisonTick -= dt
+        if (e.poisonTick <= 0) {
+          e.poisonTick += POISON_TICK
+          this.damage(e, e.poisonStacks * e.poisonDps * POISON_TICK, { dot: true })
+        }
+        if (e.poisonLeft <= 0 && !e.dead) {
+          e.poisonStacks = 0
+          e.poisonDps = 0
+          changed = true
+        }
+      }
+      if (changed && !e.dead) this._tint(e)
     }
+    // 燃烧地面：每 0.5 秒对里面的敌人造成伤害
+    if (!this.burns.length) return
+    this._burnTick -= dt
+    if (this._burnTick > 0) return
+    this._burnTick += POISON_TICK
+    for (const z of this.burns) {
+      if (!z.burning) continue
+      const r2 = z.radius * z.radius
+      for (const e of enemies) if (!e.dead && (e.x - z.x) ** 2 + (e.y - z.y) ** 2 <= r2) this.damage(e, BURN_DPS * POISON_TICK, { dot: true })
+    }
+    for (let i = this.burns.length - 1; i >= 0; i--) if (!this.burns[i]!.burning) this.burns.splice(i, 1)
   }
 
   // ---------------------------------------------------------------- 怪物
@@ -359,8 +571,9 @@ export class Battle extends Scene implements HeroWorld {
     this.branchLevels.set(`${node.hero}.${node.branch}`, node.level)
     this.taken.push(node)
     const hero = this.heroOf(node.hero)
-    if (hero instanceof Archer) {
-      node.apply(hero.mods)
+    if (hero) {
+      // 节点只会出现给已上场的英雄，hero.mods 就是这个节点要改的那一份
+      ;(node.apply as (m: object) => void)(hero.mods)
       hero.refreshStats()
     }
     this.picker = null
@@ -407,7 +620,15 @@ export class Battle extends Scene implements HeroWorld {
   private _advanceWaves(dt: number) {
     if (this.state === 'gap') {
       this._gapLeft -= dt
-      if (this._gapLeft <= 0) this.startWave(this.wave + 1)
+      if (this._gapLeft > 0) return
+      const next = this.wave + 1
+      // 第 3、6 波前再选一个英雄（还有能选的才弹）
+      const due = UNLOCK_WAVES.filter((w) => w <= next).length + 1
+      if (UNLOCK_WAVES.includes(next) && this.heroes.length < due && this.unplacedKinds.some((k) => IMPLEMENTED.has(k))) {
+        this.openHeroPicker(`第 ${next} 波：再选一位英雄`)
+        return
+      }
+      this.startWave(next)
       return
     }
     if (this.state !== 'wave') return

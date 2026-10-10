@@ -2,3 +2,7 @@ node_modules
 dist
 dist-wechat
 logs
+# 美术管线：AI 原图和中间结果不进 git（art/sprites/ 进）
+art/raw/
+art/work/
+art/preview.png

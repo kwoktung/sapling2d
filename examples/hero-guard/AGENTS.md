@@ -10,11 +10,13 @@ This is a [sapling2d](../../packages/engine/llms.txt) game. **Read `node_modules
 - `src/config.ts` — field, slots, path shape, enemy feel, z layers. Hero / enemy / wave numbers live in `src/data/`.
 - `src/data/heroes.ts` — hero base stats and the body/weapon rig (weapon offset, windup and recover times). `src/data/enemies.ts` — enemy stats and per-wave HP growth. `src/data/waves.ts` — the wave table (groups of `{ kind, count, interval, delay }`).
 - `src/path.ts` — `randomPath` (random control points joined with `Curve2D.catmullRom`) and `linePath` for tests.
-- `src/assets.ts` — every texture. Placeholders come from `scripts/gen-placeholders.mjs` until the art pipeline (`scripts/art/`, ticket 02) replaces them.
+- `src/assets.ts` — every texture. Placeholders come from `scripts/gen-placeholders.mjs` until real art replaces them.
+- `art/` + `scripts/art/` — the art pipeline (`pnpm art`, see `scripts/art/README.md`): `art/assets.ts` lists every asset (prompt, mode, refs, background, display height, atlas, pivot), `art/style.md` is the shared style prompt. Gemini generates into `art/raw/` (gitignored), `key.ts` chroma-keys the background and its shadows, sprites are resized to 2× display height into `art/sprites/` (committed), then packed into `public/assets/<atlas>.png/.json` for `atlas()`. Generation needs `GEMINI_API_KEY`.
 - `src/scenes/Battle.ts` — the whole fight: waves (`startWave`, spawners, gap between waves), leaks and lives, win / loss, hero placement and drag-to-swap between slots, `findTarget` (in range, least remaining path), arrows, damage, XP and kills, particles, damage numbers, screen shake.
 - `src/nodes/Hero.ts` — abstract `Hero` (body + weapon sprites; the attack is a tween: squash windup → `release()` → stretch → settle; the whole node flips with `scale.x` to face the target) and `Archer`. `Hero.stats` is a per-run copy of the base stats that the skill tree will modify.
 - `src/nodes/Enemy.ts` — follows its `Curve2D` (`dist`, `remaining`), hops and squashes while walking, `flash` on hit, overhead HP bar, `zIndex = y`.
 - `src/nodes/Arrow.ts`, `src/nodes/FloatText.ts` — pooled arrows and damage numbers. `src/nodes/PathPreview.ts` — dotted route preview that fades out. `src/nodes/Slot.ts`, `src/nodes/Hud.ts`.
+- `test/art.test.ts` — chroma key on a synthetic image (background, its shadow, enclosed background, anti-aliased edges) and the packed atlas read back by `atlas()`.
 - `test/battle.test.ts` — paths and preview, drag / swap / snap back, no attacks while dragging, targeting, hit timing, kills and XP, waves, losing and restarting, winning after 20 waves.
 
 **Hero origins are at the feet**: the body sprite is moved up by half its height, so `hero.position` is the slot center and range checks measure from the feet.

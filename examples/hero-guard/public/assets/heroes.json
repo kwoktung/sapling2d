@@ -1,0 +1,38 @@
+{
+ "frames": {
+  "archer_test": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 191,
+    "h": 280
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 191,
+    "h": 280
+   },
+   "sourceSize": {
+    "w": 191,
+    "h": 280
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  }
+ },
+ "meta": {
+  "app": "hero-guard/scripts/art",
+  "image": "heroes.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 191,
+   "h": 280
+  },
+  "scale": "1"
+ }
+}

@@ -4,5 +4,5 @@
     "lib": ["ES2022", "DOM"],
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "test", "vite.config.ts", "vite.wechat.config.ts", "log-server.ts"]
+  "include": ["src", "test", "scripts", "art", "vite.config.ts", "vite.wechat.config.ts", "log-server.ts"]
 }

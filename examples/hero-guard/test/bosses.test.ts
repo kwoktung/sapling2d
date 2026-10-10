@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { START } from '../src/config'
 import { ENEMIES, enemyHp } from '../src/data/enemies'
@@ -10,7 +11,7 @@ import type { Battle } from '../src/scenes/Battle'
 async function setup() {
   const g = await createTestGame({ ...gameOptions, seed: 7 })
   const battle = g.scene as Battle
-  battle.startWith('archer', 1)
+  battle.startWith('archer', v(375, 740))
   battle.stopSpawning()
   battle.heroes[0]!.cooldown = 1e9
   return { g, battle }

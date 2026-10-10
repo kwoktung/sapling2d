@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { RandomNumberGenerator } from 'sapling2d'
+import { RandomNumberGenerator, v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { START, ULT } from '../src/config'
 import { HEROES } from '../src/data/heroes'
@@ -15,7 +15,7 @@ const node = (id: string) => BRANCHES.flatMap((b) => b.nodes).find((n) => n.id =
 async function setup(storage?: Record<string, number>) {
   const g = await createTestGame({ ...gameOptions, seed: 8, ...(storage ? { storage } : {}) })
   const battle = g.scene as Battle
-  battle.startWith('archer', 1)
+  battle.startWith('archer', v(375, 740))
   battle.stopSpawning()
   return { g, battle }
 }
@@ -29,7 +29,7 @@ describe('通用选项', () => {
     const archer = battle.heroes[0]!
     expect(archer.stats.interval).toBeCloseTo(HEROES.archer.interval / 1.1)
     expect(archer.stats.damage).toBeCloseTo(HEROES.archer.damage * 1.2)
-    const mage = battle.placeHero('mage', battle.slots[3]!)
+    const mage = battle.placeHero('mage', v(165, 950))
     expect(mage.stats.damage).toBeCloseTo(HEROES.mage.damage * 1.2)
     battle.applySkill(node('archer.multishot.1'))
     battle.applySkill(node('archer.multishot.2'))
@@ -60,11 +60,12 @@ describe('通用选项', () => {
       total++
       if (isGeneric(first)) genericPicks++
     }
-    // 3 个节点 × 1 + 5 个通用 × 0.35：第一张是通用的概率 = 1.75 / 4.75
-    expect(genericPicks / total).toBeCloseTo((5 * GENERIC_WEIGHT) / (3 + 5 * GENERIC_WEIGHT), 1)
+    // 3 个节点 × 1 + 6 个通用 × 0.35：第一张是通用的概率 = 2.1 / 5.1
+    const n = GENERIC.length
+    expect(genericPicks / total).toBeCloseTo((n * GENERIC_WEIGHT) / (3 + n * GENERIC_WEIGHT), 1)
     const { battle } = await setup()
     battle.applyGeneric(generic('lives'))
-    const offers = drawOffers([], 5, () => rng.randf())
+    const offers = drawOffers([], GENERIC.length, () => rng.randf())
     expect(offers.map((o) => o.id).sort()).toEqual(GENERIC.map((g) => g.id).sort())
     void battle
   })

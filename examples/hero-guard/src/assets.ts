@@ -23,7 +23,8 @@ export const ASSETS = {
   /** 界面：`ui_panel`（九宫格木框）、`ui_button`（九宫格按钮）、`icon_<hero>_<branch>`、`icon_generic_<effect>`、`icon_ult_<hero>`。 */
   ui: atlas('ui.png', uiData),
   bg: tex('bg.jpg'),
-  slot: tex('slot.png'),
+  /** 英雄阵亡的墓碑（占位，底边是脚底；美术管线的 `tombstone` 生成后换掉）。 */
+  tombstone: tex('tombstone.png'),
   glow: tex('glow.png'),
   spark: tex('spark.png'),
   dot: tex('dot.png'),

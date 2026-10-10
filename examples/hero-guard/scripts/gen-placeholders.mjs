@@ -1,5 +1,5 @@
 // 生成骨架阶段的占位图：node scripts/gen-placeholders.mjs（美术到位后由 scripts/art/ 的管线替换）
-// - 槽位、箭、火花、光晕、路线虚线的点、射程圈、刀光（英雄和怪物已经换成美术管线生成的图集）（英雄已经换成美术管线生成的图集）
+// - 火花、光晕、路线虚线的点、射程圈；墓碑（等美术管线的 `tombstone` 生成出来再换）
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 
@@ -82,9 +82,15 @@ const save = (name, c) => writeFileSync(new URL(name, OUT), png(c))
 
 // ---------------------------------------------------------------- 怪物和场地
 
-const slot = canvas(110, 110)
-ellipse(slot, 0, 55, 55, 52, 52, 0x3a4a3a, 0x6a806a, 5)
-save('slot.png', slot)
+// 墓碑：圆顶的灰色石碑 + 十字，底边在图的底部（锚点在脚底：游戏里 offset 往上挪半个高度）
+const tomb = canvas(48, 64)
+ellipse(tomb, 0, 24, 22, 20, 20, 0x9aa0a6, 0x2a2e33, 3)
+rect(tomb, 0, 4, 22, 40, 38, 0x2a2e33)
+rect(tomb, 0, 7, 22, 34, 35, 0x9aa0a6)
+rect(tomb, 0, 22, 14, 4, 26, 0x5a6066)
+rect(tomb, 0, 15, 20, 18, 4, 0x5a6066)
+rect(tomb, 0, 0, 58, 48, 6, 0x4a7a3a)
+save('tombstone.png', tomb)
 
 save('glow.png', softCircle(64, 0.3))
 save('spark.png', softCircle(12, 0.4))

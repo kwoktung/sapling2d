@@ -1,7 +1,7 @@
 import { AudioStreamPlayer, Camera2D, Ease, HitTester, Node2D, Particles2D, Scene, Sprite2D, type Curve2D, type PointerEvent2D, type Tween, v, Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
-import { FEEL, FIELD, PATH, SLOTS, START, ULT, Z } from '../config'
-import { ENEMIES, enemyHp, type EnemyKind } from '../data/enemies'
+import { AGGRO, FEEL, FIELD, PATH, START, ULT, Z, ZONES } from '../config'
+import { ELITE, ENEMIES, enemyHp, type EnemyKind } from '../data/enemies'
 import { HERO_KINDS, HEROES, type HeroKind } from '../data/heroes'
 import {
   availableNodes,
@@ -32,14 +32,13 @@ import { Arrow, PIERCE_RADIUS, type Shot } from '../nodes/Arrow'
 import { BurnZone, Bolt, Fireball, type Blast } from '../nodes/Effects'
 import { Enemy, type EnemyLook } from '../nodes/Enemy'
 import { FloatText } from '../nodes/FloatText'
-import { Archer, Knight, Mage, type Hero, type HeroWorld, type Slash } from '../nodes/Hero'
+import { Archer, Knight, Mage, type Hero, type HeroWorld, type Slash, type Zone } from '../nodes/Hero'
 import { HeroPicker } from '../nodes/HeroPicker'
 import { Hud } from '../nodes/Hud'
 import { PathPreview } from '../nodes/PathPreview'
 import { ResultPanel } from '../nodes/ResultPanel'
 import { AimRing, MeteorStrike, RainZone, UltBar } from '../nodes/Ultimates'
 import { UpgradePicker } from '../nodes/UpgradePicker'
-import { Slot } from '../nodes/Slot'
 import { randomPath } from '../path'
 import { BGM, BGM_VOLUME, playSound, SOUND_ASSETS, type SoundName } from '../sounds'
 
@@ -55,8 +54,8 @@ const BG_WALL_Y = 2300
 /** 刀光贴图的弧顶朝下偏右 160°：转回朝上（和 `angle` 的约定一致）。 */
 const SLASH_TURN = (-160 * Math.PI) / 180
 
-/** `choosing` 选英雄、`placing` 点槽位放下选好的英雄、`wave` 出怪中、`gap` 两波之间。 */
-export type BattleState = 'choosing' | 'placing' | 'wave' | 'gap' | 'won' | 'lost'
+/** `choosing` 选英雄、`wave` 出怪中、`gap` 两波之间。 */
+export type BattleState = 'choosing' | 'wave' | 'gap' | 'won' | 'lost'
 
 /** 已经实现的英雄；没实现的在选英雄画面里显示“敬请期待”。 */
 export const IMPLEMENTED: ReadonlySet<HeroKind> = new Set(['archer', 'mage', 'knight'])
@@ -101,8 +100,8 @@ interface Spawner {
 }
 
 /**
- * 战斗场景：20 波怪沿随机曲线下来，英雄站在槽位上自动攻击；越过底线扣命，命用完失败，打完 20 波胜利。
- * 英雄可以拖到别的槽位（拖到有人的槽位就交换）。
+ * 战斗场景：20 波怪沿随机曲线下来，英雄在自己的区域里自动走位、攻击；地面怪会离开路线围攻附近的英雄。
+ * 越过底线扣命，命用完失败，打完 20 波胜利。
  *
  * 场景的 process 先于子节点：这里先出怪、处理上一帧越过底线的怪、清掉死怪、推进波次，然后怪物前进、英雄攻击。
  */
@@ -127,8 +126,6 @@ export class Battle extends Scene implements HeroWorld {
   result: ResultPanel | null = null
   picker: UpgradePicker | null = null
   heroPicker: HeroPicker | null = null
-  /** 选好了、等着点槽位放下的英雄。 */
-  placing: HeroKind | null = null
   /** 燃烧地面（Battle 每 0.5 秒对里面的敌人造成伤害）。 */
   readonly burns: BurnZone[] = []
   /** 大招：每个英雄的能量、上次放大招的游戏时间、充能倍率（通用选项“大招充能 +25%”改它）。 */
@@ -144,7 +141,6 @@ export class Battle extends Scene implements HeroWorld {
   private readonly _charged = new Set<Enemy>()
   readonly enemies: Enemy[] = []
   readonly heroes: Hero[] = []
-  readonly slots: Slot[] = []
   hud!: Hud
   camera!: Camera2D
   /** 发光特效的父节点（叠加混合）：火花、光晕。 */
@@ -164,22 +160,12 @@ export class Battle extends Scene implements HeroWorld {
   private readonly _floats: FloatText[] = []
   private _shake: Tween | null = null
   private _hud = { lives: -1, wave: -1, level: -1, levelXp: -1 }
-  /** 拖动中的英雄、按下时手指相对英雄的偏移。 */
-  private _drag: { hero: Hero; dx: number; dy: number } | null = null
 
   override ready() {
     this.music = this.add(new AudioStreamPlayer({ name: 'Music', stream: BGM, loop: true, volume: BGM_VOLUME, autoplay: true }))
     this.background = this.add(new Sprite2D({ name: 'Background', texture: ASSETS.bg, zIndex: Z.background }))
     this._layoutBackground()
     this.tree.viewport.resized.connect(() => this._layoutBackground(), this)
-    let i = 0
-    for (const y of SLOTS.rows) {
-      for (const x of SLOTS.columns) {
-        const slot = this.add(new Slot(i++, v(x, y)))
-        slot.clicked.connect(() => this._onSlotClicked(slot), this)
-        this.slots.push(slot)
-      }
-    }
     this.debris = this.add(
       new Particles2D({ name: 'Debris', texture: ASSETS.spark, emitting: false, zIndex: Z.fx - 1, amount: 400, lifetime: 0.6, lifetimeRandomness: 0.5, speedMin: 100, speedMax: 360, damping: 3, scaleStart: 1.8, scaleEnd: 0.3, alphaEnd: 0, selfModulate: 0x5ab05a }),
     )
@@ -235,59 +221,56 @@ export class Battle extends Scene implements HeroWorld {
     this.heroPicker.picked.connect((kind) => this.choose(kind), this)
   }
 
-  /** 选好了英雄：进入放置，空槽位高亮、可以点。 */
+  /** 选好了英雄：直接出现在它的区域里，然后开始下一波（开局短暂停顿后第 1 波）。 */
   choose(kind: HeroKind): void {
     this.sound('pick')
     this.heroPicker = null
-    this.placing = kind
-    this.state = 'placing'
-    for (const s of this.slots) {
-      s.highlighted = !s.hero
-      s.inputPickable = !s.hero
-    }
-    this.hud.flash(`点一个槽位放下${HEROES[kind].name}`, 0)
-  }
-
-  private _onSlotClicked(slot: Slot) {
-    if (this.state !== 'placing' || !this.placing || slot.hero) return
-    this.placeHero(this.placing, slot)
-    this.placing = null
-    for (const s of this.slots) {
-      s.highlighted = false
-      s.inputPickable = false
-    }
-    this.hud.flash('', 0)
-    // 开局：短暂停顿后第 1 波；解锁：直接开始下一波
+    this.placeHero(kind)
     this.state = 'gap'
     this._gapLeft = this.wave === 0 ? 1 : 0.6
   }
 
-  /** 测试用：跳过选英雄，直接把英雄放在第 `slotIndex` 个槽位。 */
-  startWith(kind: HeroKind, slotIndex: number): Hero {
+  /** 测试用：跳过选英雄，直接放下英雄（`at`：固定站在这里、不走位，见 placeHero）。 */
+  startWith(kind: HeroKind, at?: Vector2): Hero {
     if (this.heroPicker) {
       this.heroPicker.visible = false // queueFree 要到帧末才删：先藏起来，这一帧的点击不会被它的遮罩吃掉
       this.heroPicker.queueFree()
     }
     this.heroPicker = null
-    this.choose(kind)
-    this._onSlotClicked(this.slots[slotIndex]!)
-    return this.heroOf(kind)!
+    this.sound('pick')
+    const hero = this.placeHero(kind, at)
+    this.state = 'gap'
+    this._gapLeft = this.wave === 0 ? 1 : 0.6
+    return hero
   }
 
   // ---------------------------------------------------------------- 英雄
 
-  /** 在空槽位上放一个英雄。 */
-  placeHero(kind: HeroKind, slot: Slot): Hero {
-    if (slot.hero) throw new Error(`slot ${slot.index} is taken`)
+  /**
+   * 放一个英雄：近战去中上的区域，远程先上场的去左下、后上场的去右下，站在区域里的待命点
+   * （近战在区域中心，远程在区域的中心偏下）。`at`（测试用）：固定站在这一点，没有区域、不走位。
+   */
+  placeHero(kind: HeroKind, at?: Vector2): Hero {
     if (!IMPLEMENTED.has(kind)) throw new Error(`hero ${kind} is not implemented yet`)
-    const hero = this.add(kind === 'archer' ? new Archer(this, slot.position) : kind === 'mage' ? new Mage(this, slot.position) : new Knight(this, slot.position))
-    slot.hero = hero
+    if (this.heroOf(kind)) throw new Error(`hero ${kind} is already placed`)
+    let zone: Zone | null = null
+    if (!at) {
+      zone = this.zoneFor(kind)
+      at = HEROES[kind].role === 'melee' ? v((zone.left + zone.right) / 2, (zone.top + zone.bottom) / 2) : v((zone.left + zone.right) / 2, zone.top + (zone.bottom - zone.top) * 0.6)
+    }
+    const hero = this.add(kind === 'archer' ? new Archer(this, at) : kind === 'mage' ? new Mage(this, at) : new Knight(this, at))
+    hero.zone = zone
     this.heroes.push(hero)
-    hero.refreshStats() // 之前选过的通用选项（全体伤害、攻速）也要算上
-    hero.pointerDown.connect((e) => this._beginDrag(hero, e), this)
-    hero.pointerMove.connect((e) => this._dragTo(hero, e), this)
-    hero.pointerUp.connect((e) => this._endDrag(hero, e), this)
+    hero.refreshStats() // 之前选过的通用选项（全体伤害、攻速、血量）也要算上
+    hero.hp = hero.maxHp
     return hero
+  }
+
+  /** 这个英雄该站的区域：近战中上；远程左下，左下有人了就右下。 */
+  zoneFor(kind: HeroKind): Zone {
+    if (HEROES[kind].role === 'melee') return ZONES.melee
+    const leftTaken = this.heroes.some((h) => h.zone === ZONES.rangedLeft)
+    return leftTaken ? ZONES.rangedRight : ZONES.rangedLeft
   }
 
   heroOf(kind: HeroKind): Hero | null {
@@ -299,67 +282,30 @@ export class Battle extends Scene implements HeroWorld {
     return new Set(this.heroes.map((h) => h.kind))
   }
 
-  slotOf(hero: Hero): Slot | null {
-    return this.slots.find((s) => s.hero === hero) ?? null
-  }
-
-  private _beginDrag(hero: Hero, e: PointerEvent2D) {
-    if (this._drag || hero.busy || this.state === 'won' || this.state === 'lost' || this.state === 'choosing' || this.state === 'placing') return
-    this._drag = { hero, dx: hero.x - e.position.x, dy: hero.y - e.position.y }
-    hero.dragging = true
-    hero.cancelAttack()
-    hero.zIndex = Z.dragging
-    hero.showRange(true)
-    for (const s of this.slots) s.highlighted = s.hero !== hero
-  }
-
-  private _dragTo(hero: Hero, e: PointerEvent2D) {
-    const d = this._drag
-    if (!d || d.hero !== hero) return
-    hero.position = v(e.position.x + d.dx, e.position.y + d.dy)
-  }
-
-  /** 松手：落在别的槽位附近就过去（有人就交换），否则回原来的槽位。 */
-  private _endDrag(hero: Hero, e: PointerEvent2D) {
-    const d = this._drag
-    if (!d || d.hero !== hero) return
-    this._drag = null
-    hero.dragging = false
-    hero.showRange(false)
-    for (const s of this.slots) s.highlighted = false
-    const from = this.slotOf(hero)!
-    const to = this.slotNear(e.position.x + d.dx, e.position.y + d.dy) ?? from
-    if (to !== from) this.moveHero(hero, to)
-    else this._settle(hero, from)
-  }
-
-  /** 离 (x, y) 最近、在接住范围内的槽位。 */
-  slotNear(x: number, y: number): Slot | null {
-    let best: Slot | null = null
-    let bestD = SLOTS.radius * 1.6
-    for (const s of this.slots) {
-      const dist = Math.hypot(s.x - x, s.y - y)
-      if (dist < bestD) {
-        bestD = dist
-        best = s
+  /** 离 (x, y) 最近的活着的怪物。 */
+  nearestEnemy(x: number, y: number): Enemy | null {
+    let best: Enemy | null = null
+    let bestD = Infinity
+    for (const e of this.enemies) {
+      if (e.dead || e.leaked) continue
+      const d = (e.x - x) ** 2 + (e.y - y) ** 2
+      if (d < bestD) {
+        bestD = d
+        best = e
       }
     }
     return best
   }
 
-  /** 把英雄移到另一个槽位；那里有人就和它交换。 */
-  moveHero(hero: Hero, to: Slot): void {
-    const from = this.slotOf(hero)!
-    const other = to.hero
-    to.hero = hero
-    from.hero = other
-    this._settle(hero, to)
-    if (other) this._settle(other, from)
-  }
-
-  private _settle(hero: Hero, slot: Slot) {
-    hero.position = slot.position
-    hero.zIndex = slot.y
+  /** 骑士要追的怪：站在区域里的地面怪里离城门最近（剩余路程最短）的。 */
+  chaseTarget(zone: Zone): Enemy | null {
+    let best: Enemy | null = null
+    for (const e of this.enemies) {
+      if (e.dead || e.leaked || ENEMIES[e.kind].flying) continue
+      if (e.x < zone.left || e.x > zone.right || e.y < zone.top || e.y > zone.bottom) continue
+      if (!best || e.remaining < best.remaining) best = e
+    }
+    return best
   }
 
   /** 射程内离城门最近（剩余路程最短）的怪物。 */
@@ -570,7 +516,7 @@ export class Battle extends Scene implements HeroWorld {
 
   tauntAura(x: number, y: number): void {
     for (const e of this.enemies) {
-      if (e.dead || !this.controllable(e) || (e.x - x) ** 2 + (e.y - y) ** 2 > TAUNT_RADIUS ** 2) continue
+      if (e.dead || !this.controllable(e) || ENEMIES[e.kind].flying || (e.x - x) ** 2 + (e.y - y) ** 2 > TAUNT_RADIUS ** 2) continue
       e.tauntLeft = Math.max(e.tauntLeft, TAUNT_TIME)
       this._tint(e)
     }
@@ -715,6 +661,49 @@ export class Battle extends Scene implements HeroWorld {
   }
 
   /** 每帧结算怪物身上的持续状态（中毒每 0.5 秒跳一次伤害、减速和冰冻的计时）和燃烧地面。 */
+  /**
+   * 怪物的仇恨和攻击：地面怪在 `AGGRO.radius` 内看到活着的英雄就去打（最近的那个），英雄阵亡或走出 `AGGRO.leash` 就放弃、回到路线；
+   * 嘲讽中的只打骑士。够得着时每隔攻击间隔打一下（停下的怪不打）。飞行的怪不理英雄。
+   */
+  private _tickAggro(dt: number) {
+    const knight = this.heroOf('knight')
+    for (const e of this.enemies) {
+      if (e.dead) continue
+      const data = ENEMIES[e.kind]
+      if (data.flying || !data.attack) continue
+      let t = e.target as Hero | null
+      if (e.tauntLeft > 0 && knight && !knight.dead) t = knight
+      else if (t && (t.dead || (t.x - e.x) ** 2 + (t.y - e.y) ** 2 > AGGRO.leash ** 2)) t = null
+      if (!t) {
+        let bestD = AGGRO.radius ** 2
+        for (const h of this.heroes) {
+          if (h.dead) continue
+          const d = (h.x - e.x) ** 2 + (h.y - e.y) ** 2
+          if (d <= bestD) {
+            bestD = d
+            t = h
+          }
+        }
+      }
+      if (t !== e.target) e.attackIn = Math.min(data.attack.interval * 0.5, Math.max(e.attackIn, 0))
+      e.target = t
+      if (!t || e.held || !e.inReach) continue
+      e.attackIn -= dt
+      if (e.attackIn > 0) continue
+      e.attackIn += data.attack.interval
+      e.lunge()
+      this.hurtHero(t, data.attack.damage * (e.elite ? ELITE.attack : 1))
+    }
+  }
+
+  /** 英雄挨打：扣血、飘红字、音效；打死了墓碑出现、阵亡音效（怪下一帧自己放弃它）。 */
+  hurtHero(hero: Hero, amount: number): void {
+    const dealt = hero.takeDamage(amount)
+    if (dealt <= 0) return
+    this._float(String(Math.round(dealt)), hero.x, hero.y - 110, 0xff5050, 0.9)
+    this.sound(hero.dead ? 'hero_die' : 'hero_hit')
+  }
+
   private _tickStatuses(dt: number) {
     const enemies = this.enemies
     for (let i = 0; i < enemies.length; i++) {
@@ -799,7 +788,13 @@ export class Battle extends Scene implements HeroWorld {
     if (e.dead) return
     const armored = !!opts.arrow && !opts.ignoreArmor && !!ENEMIES[e.kind].armor
     const amount = armored ? raw * ARMOR_MUL : raw
-    if (opts.source) this.chargeUlt(opts.source, Math.min(amount, e.hp))
+    const dealt = Math.min(amount, e.hp)
+    if (opts.source) this.chargeUlt(opts.source, dealt)
+    // 斩击吸血（骑士守护分支）
+    if (opts.source === 'knight' && !opts.dot) {
+      const knight = this.heroOf('knight') as Knight | null
+      if (knight && knight.mods.lifesteal > 0) knight.heal(dealt * knight.mods.lifesteal)
+    }
     const killed = e.damage(amount)
     const text = opts.crit ? `${Math.round(amount)}!` : String(Math.round(amount))
     const color = opts.dot ? 0x90ff70 : armored ? 0xa0a0a0 : opts.crit ? 0xffb030 : killed ? 0xffd040 : 0xffffff
@@ -869,9 +864,10 @@ export class Battle extends Scene implements HeroWorld {
     this.energy[kind] = Math.min(ULT.energyMax, this.energy[kind] + (damage / ULT.damagePerEnergy) * this.run.ultChargeMul)
   }
 
-  /** 能不能放：英雄在场上、能量满了、离上次放够 12 秒、不在升级弹窗里。 */
+  /** 能不能放：英雄在场上而且活着、能量满了、离上次放够 12 秒、不在升级弹窗里。 */
   canUlt(kind: HeroKind): boolean {
-    return !!this.heroOf(kind) && this.energy[kind] >= ULT.energyMax && this.tree.time - this.lastUlt[kind] >= ULT.minInterval && !this.picker && (this.state === 'wave' || this.state === 'gap')
+    const hero = this.heroOf(kind)
+    return !!hero && !hero.dead && this.energy[kind] >= ULT.energyMax && this.tree.time - this.lastUlt[kind] >= ULT.minInterval && !this.picker && (this.state === 'wave' || this.state === 'gap')
   }
 
   private _consume(kind: HeroKind) {
@@ -989,6 +985,7 @@ export class Battle extends Scene implements HeroWorld {
     else if (g.effect === 'ultCharge') run.ultChargeMul += g.amount
     else if (g.effect === 'xp') run.xpMul += g.amount
     else if (g.effect === 'lives') this.lives += g.amount
+    else if (g.effect === 'hp') run.hpMul += g.amount
     for (const h of this.heroes) h.refreshStats()
     this.picker = null
     this.tree.paused = false
@@ -1034,6 +1031,7 @@ export class Battle extends Scene implements HeroWorld {
     if (this.state === 'wave' || this.state === 'gap') this.runTime += dt
     if (!this.manual) this._advanceWaves(dt)
     this._tickStatuses(dt)
+    this._tickAggro(dt)
     const enemies = this.enemies
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i]!
@@ -1145,7 +1143,10 @@ export class Battle extends Scene implements HeroWorld {
   }
 
   private _updateHud() {
-    for (const k of HERO_KINDS) this.ultBar.buttons[k].update(!!this.heroOf(k), this.energy[k] / ULT.energyMax, this.canUlt(k))
+    for (const k of HERO_KINDS) {
+      const hero = this.heroOf(k)
+      this.ultBar.buttons[k].update(!!hero, this.energy[k] / ULT.energyMax, this.canUlt(k), hero?.dead ? hero.respawnLeft : 0)
+    }
     const b = this.boss
     this.hud.updateBoss(b && !b.dead ? ENEMIES[b.kind].name : null, b ? b.hp / b.maxHp : 0)
     const h = this._hud

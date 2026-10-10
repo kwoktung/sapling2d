@@ -9,11 +9,44 @@ export const FIELD = {
   baseY: 1130,
 }
 
-/** 6 个槽位：两行三列，在场地中下部。 */
-export const SLOTS = {
-  columns: [165, 375, 585],
-  rows: [740, 950],
-  radius: 52,
+/**
+ * 英雄的活动区域（矩形，英雄的脚底不出这个范围）。从底线往上算场地高度（`baseY − spawnY` = 1170）的比例：
+ * 近战在中上（横向中间 70%，纵向 30%–60%）；远程在左下 / 右下（纵向 0–30%，各占半边），先上场的去左下。
+ * 左右和底下各留一点边，英雄不贴着屏幕边、不站在城墙上。
+ */
+export const ZONES = {
+  melee: { left: 112, top: 428, right: 638, bottom: 779 },
+  rangedLeft: { left: 50, top: 779, right: 375, bottom: 1090 },
+  rangedRight: { left: 375, top: 779, right: 700, bottom: 1090 },
+}
+
+/** 英雄的走位、血量恢复、阵亡（spec“站位和走位”）。 */
+export const HERO_FEEL = {
+  /** 移动速度（像素/秒）。 */
+  meleeSpeed: 140,
+  rangedSpeed: 90,
+  /** 远程射程内没目标时往最近的怪挪；挪到目标进射程的这个比例就停（留点余量）。 */
+  approach: 0.9,
+  /** 脱战多久开始回血、每秒回最大血量的多少。 */
+  regenDelay: 3,
+  regenRate: 0.05,
+  /** 阵亡后多久原地复活、复活后无敌多久。 */
+  respawn: 15,
+  invulnerable: 1,
+  /** 受击闪白、头顶血条的大小（像素）。 */
+  flashTime: 0.12,
+  barWidth: 56,
+  barHeight: 7,
+}
+
+/** 怪物的仇恨：多远看到英雄就过去打、英雄走出多远就放弃（回到路线）；近战够得着的距离 = 英雄半径 + 怪的半径。 */
+export const AGGRO = {
+  radius: 110,
+  leash: 180,
+  heroRadius: 34,
+  /** 攻击时朝英雄扑一下：距离、时间。 */
+  lunge: 12,
+  lungeTime: 0.14,
 }
 
 export const PATH = {
@@ -59,13 +92,14 @@ export const FEEL = {
 /** 绘制层级：怪物和英雄按 y 排序（zIndex = y，0–1334），其他东西放在这个范围之外。 */
 export const Z = {
   background: -1000,
-  slot: -200,
+  /** 墓碑画在地上（比英雄和怪低）。 */
+  tomb: -200,
   preview: -100,
   projectile: 2000,
   fx: 2100,
   floatText: 2200,
-  /** 拖动中的英雄画在最上面。 */
-  dragging: 2300,
+  /** 冲锋中的骑士画在最上面。 */
+  charging: 2300,
 }
 
 /** 大招（spec 的起始值）。 */

@@ -18,7 +18,7 @@ describe('音频', () => {
   it('进场开始循环播背景音乐；选英雄、射箭、命中、击杀都有音效', async () => {
     const { g, battle } = await setup()
     expect(g.audio.playing.find((s) => s.path === 'audio/bgm.mp3')?.loop).toBe(true)
-    battle.startWith('archer', 1)
+    battle.startWith('archer', v(375, 740))
     battle.stopSpawning()
     battle.spawnEnemy('slime', linePath(375, 300, 100000), 1)
     g.stepSeconds(4) // 怪走进射程、箭飞到
@@ -27,7 +27,7 @@ describe('音频', () => {
 
   it('漏怪、升级、选卡、大招、Boss 出场、失败、再来一局', async () => {
     const { g, battle } = await setup()
-    battle.startWith('archer', 1)
+    battle.startWith('archer', v(375, 740))
     battle.stopSpawning()
     battle.state = 'wave'
     battle.heroes[0]!.cooldown = 1e9
@@ -50,7 +50,7 @@ describe('音频', () => {
 
   it('同一帧大量命中：同一个音效最多同时播几个', async () => {
     const { g, battle } = await setup()
-    battle.startWith('archer', 1)
+    battle.startWith('archer', v(375, 740))
     battle.stopSpawning()
     const enemies = Array.from({ length: 30 }, (_, i) => battle.spawnEnemy('slime', linePath(60 + i * 20, 400, 100000), 1))
     for (const e of enemies) battle.damage(e, 10)

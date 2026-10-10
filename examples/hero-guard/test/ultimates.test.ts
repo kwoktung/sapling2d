@@ -19,7 +19,8 @@ function still(b: Battle, x: number, y: number, hp = 1e6) {
 async function setup(...kinds: ('archer' | 'mage' | 'knight')[]) {
   const g = await createTestGame({ ...gameOptions, seed: 5 })
   const battle = g.scene as Battle
-  kinds.forEach((k, i) => (i === 0 ? battle.startWith(k, [1, 3, 5][i]!) : battle.placeHero(k, battle.slots[[1, 3, 5][i]!]!)))
+  const at = [v(375, 740), v(165, 950), v(585, 950)]
+  kinds.forEach((k, i) => (i === 0 ? battle.startWith(k, at[i]) : battle.placeHero(k, at[i])))
   battle.stopSpawning()
   battle.state = 'wave'
   for (const h of battle.heroes) h.cooldown = 1e9 // 英雄不普通攻击，只看大招

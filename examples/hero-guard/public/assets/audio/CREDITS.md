@@ -24,6 +24,8 @@
 | `ult_knight.mp3` | [Kenney — RPG Audio](https://kenney.nl/assets/rpg-audio) | `drawKnife2.ogg` |
 | `ult_mage.mp3` | [rubberduck — 80 CC0 RPG SFX](https://opengameart.org/content/80-cc0-rpg-sfx) | `spell_fire_05.ogg` |
 | `win.mp3` | [Kenney — Music Jingles](https://kenney.nl/assets/music-jingles) | `jingles_PIZZI02.ogg` |
+| `hero_hit.mp3` | [Kenney — Impact Sounds](https://kenney.nl/assets/impact-sounds) | `impactPunch_medium_000.ogg` |
+| `hero_die.mp3` | [rubberduck — 50 CC0 retro / synth SFX](https://opengameart.org/content/50-cc0-retro-synth-sfx) | `retro_die_02.ogg` |
 | `bgm.mp3` | [RandomMind — Medieval: Minstrel Dance](https://opengameart.org/content/medieval-minstrel-dance) | `Loop_Minstrel_Dance_0.wav`（循环版） |
 
 `ult_archer.mp3` 是把原文件错开 90 ms 叠了三次（三支箭）。

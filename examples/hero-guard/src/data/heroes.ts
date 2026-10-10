@@ -7,17 +7,22 @@ export const HERO_KINDS: readonly HeroKind[] = ['archer', 'mage', 'knight']
 export interface HeroBase {
   name: string
   /** 一句话的定位（选英雄画面用）。 */
-  role: string
+  desc: string
   damage: number
   /** 两次攻击之间的秒数。 */
   interval: number
   range: number
+  /** 血量、受到的伤害乘这个数（护甲）。 */
+  hp: number
+  armor: number
+  /** 定位：近战站中上，远程站左下 / 右下（spec“站位和走位”）。 */
+  role: 'melee' | 'ranged'
 }
 
 export const HEROES: Record<HeroKind, HeroBase> = {
-  archer: { name: '弓手', role: '远程单体，射程最远', damage: 12, interval: 0.7, range: 340 },
-  mage: { name: '法师', role: '范围伤害，清成群的小怪', damage: 18, interval: 1.6, range: 280 },
-  knight: { name: '骑士', role: '近战控制，击退和眩晕', damage: 22, interval: 1.1, range: 150 },
+  archer: { name: '弓手', desc: '远程单体，射程最远', damage: 12, interval: 0.7, range: 340, hp: 180, armor: 1, role: 'ranged' },
+  mage: { name: '法师', desc: '范围伤害，清成群的小怪', damage: 18, interval: 1.6, range: 280, hp: 150, armor: 1, role: 'ranged' },
+  knight: { name: '骑士', desc: '近战，拦住怪物、击退', damage: 22, interval: 1.1, range: 150, hp: 600, armor: 0.7, role: 'melee' },
 }
 
 /**

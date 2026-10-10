@@ -13,7 +13,7 @@ import { Battle } from '../src/scenes/Battle'
 async function start(seed = 1) {
   const g = await createTestGame({ ...gameOptions, seed })
   const battle = g.scene as Battle
-  battle.startWith('archer', 1)
+  battle.startWith('archer', v(375, 740))
   return { g, battle }
 }
 
@@ -55,39 +55,6 @@ describe('随机路线', () => {
     expect(g.dump()).toContain('PathPreview')
     g.stepSeconds(1.5)
     expect(g.dump()).not.toContain('PathPreview')
-  })
-})
-
-describe('拖动英雄', () => {
-  it('拖到空槽位就过去；拖到有人的槽位就交换；松在别处回原来的槽位', async () => {
-    const { g, battle } = await manual()
-    const archer = battle.heroes[0]!
-    expect(battle.slotOf(archer)!.index).toBe(1)
-    // 从英雄身上（脚底往上 40）拖到 4 号槽位
-    const s4 = battle.slots[4]!
-    g.drag(v(archer.x, archer.y - 40), v(s4.x, s4.y - 40), { frames: 6 })
-    expect(battle.slotOf(archer)).toBe(s4)
-    expect([archer.x, archer.y]).toEqual([s4.x, s4.y])
-    // 松在两个槽位中间的空地：回到 4 号
-    g.drag(v(archer.x, archer.y - 40), v(270, 300), { frames: 6 })
-    expect(battle.slotOf(archer)).toBe(s4)
-    // 交换：直接调 moveHero（第二个英雄要到 06 才能放，这里用同一个类型放一个假的）
-    const other = battle.placeHero('archer', battle.slots[0]!)
-    battle.moveHero(archer, battle.slots[0]!)
-    expect([battle.slotOf(archer)!.index, battle.slotOf(other)!.index]).toEqual([0, 4])
-  })
-
-  it('拖动中不攻击，显示射程圈；松手后恢复', async () => {
-    const { g, battle } = await manual()
-    const archer = battle.heroes[0]!
-    dummy(battle, archer.x, archer.y - 200)
-    g.pointerDown(archer.x, archer.y - 40)
-    g.stepSeconds(1.5)
-    expect([archer.dragging, archer.attacks, archer.rangeRing.visible]).toEqual([true, 0, true])
-    g.pointerUp(archer.x, archer.y - 40)
-    g.stepSeconds(1.5)
-    expect(archer.dragging).toBe(false)
-    expect(archer.attacks).toBeGreaterThan(0)
   })
 })
 
@@ -156,7 +123,6 @@ describe('波次和胜负', () => {
       const click = { pointerId: 0, position: v(0, 0), localPosition: v(0, 0) }
       if (battle.picker) battle.picker.cards[0]!.clicked.emit(click) // 升级就选第一张
       if (battle.heroPicker) battle.heroPicker.cards.find((c) => c.enabled)!.clicked.emit(click) // 第 3、6 波：选第一个能选的英雄
-      if (battle.state === 'placing') battle.slots.find((s) => !s.hero)!.clicked.emit(click) // 放在第一个空槽位
     }
     expect([battle.state, battle.wave, battle.lives]).toEqual(['won', WAVE_COUNT, START.lives])
     g.step()

@@ -10,7 +10,10 @@ const NAMES: Record<HeroKind, string> = { archer: '箭雨', mage: '陨石', knig
 const ICON_SCALE = (BTN - 10) / 128
 const BAR_H = 10
 
-/** 一个大招按钮（原点在左上角，BTN × BTN）：大招图标（没充满时变暗）、名字、底下的充能条；充满时发光脉动。没上场的英雄是半透明的。 */
+/**
+ * 一个大招按钮（原点在左上角，BTN × BTN）：大招图标（没充满时变暗）、名字、底下的充能条；充满时发光脉动。
+ * 没上场的英雄是半透明的；英雄阵亡时也是半透明，图标上显示复活倒计时。
+ */
 export class UltButton extends Node2D {
   readonly icon: Sprite2D
   /** 充能条（ColorRect 原点在左上角：改 scale.x 从左往右填满）。 */
@@ -21,6 +24,8 @@ export class UltButton extends Node2D {
   placed = false
   /** 充满了、可以放（不叫 ready：那是节点的生命周期方法）。 */
   charged = false
+  /** 英雄阵亡时的复活倒计时（显示在图标上）。 */
+  readonly respawnLabel: Label
   private _t = 0
 
   constructor(readonly kind: HeroKind) {
@@ -28,15 +33,22 @@ export class UltButton extends Node2D {
     this.glow = this.add(new Sprite2D({ texture: ASSETS.glow, position: v(BTN / 2, BTN / 2), scale: v(3.4, 3.4), selfModulate: 0xffd060, blendMode: 'add', visible: false, zIndex: -1 }))
     this.icon = this.add(new Sprite2D({ texture: ASSETS.ui.get(`icon_ult_${kind}`), position: v(BTN / 2, BTN / 2), scale: v(ICON_SCALE, ICON_SCALE) }))
     this.add(new Label({ text: NAMES[kind], fontSize: 26, fontWeight: 'bold', color: 0xffffff, align: 'center', verticalAlign: 'center', position: v(BTN / 2, BTN - 12), stroke: { color: 0x000000, width: 4 } }))
+    this.respawnLabel = this.add(new Label({ text: '', fontSize: 56, fontWeight: 'bold', color: 0xffffff, align: 'center', verticalAlign: 'center', position: v(BTN / 2, BTN / 2 - 6), stroke: { color: 0x000000, width: 6 }, visible: false }))
     const bar = this.add(new ColorRect({ position: v(16, BTN + 2), size: v(BTN - 32, BAR_H), color: 0x1a2028 }))
     this.fill = bar.add(new ColorRect({ size: v(BTN - 32, BAR_H), color: 0x60c0ff }))
   }
 
-  update(placed: boolean, charge: number, charged: boolean): void {
+  /** `respawnLeft`：英雄阵亡时还有几秒复活（0 表示活着）。 */
+  update(placed: boolean, charge: number, charged: boolean, respawnLeft = 0): void {
     this.placed = placed
     this.charge = charge
     this.charged = placed && charged
-    this.alpha = placed ? 1 : 0.35
+    this.alpha = placed && respawnLeft <= 0 ? 1 : 0.35
+    this.respawnLabel.visible = respawnLeft > 0
+    if (respawnLeft > 0) {
+      const t = String(Math.ceil(respawnLeft))
+      if (this.respawnLabel.text !== t) this.respawnLabel.text = t
+    }
     this.fill.scale = v(charge, 1)
     this.fill.color = this.charged ? 0xffc040 : 0x60c0ff
     this.icon.selfModulate = this.charged ? 0xffffff : 0x7a8088

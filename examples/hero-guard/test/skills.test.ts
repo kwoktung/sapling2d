@@ -11,7 +11,7 @@ import type { Battle } from '../src/scenes/Battle'
 async function manual() {
   const g = await createTestGame({ ...gameOptions, seed: 1 })
   const battle = g.scene as Battle
-  battle.startWith('archer', 1)
+  battle.startWith('archer', v(375, 740))
   battle.stopSpawning()
   return { g, battle, archer: battle.heroes[0] as Archer }
 }

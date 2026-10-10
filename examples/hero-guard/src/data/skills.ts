@@ -62,12 +62,16 @@ export interface KnightMods {
   /** 眩晕几率和时间；0 表示没有。 */
   stunChance: number
   stunTime: number
+  /** 血量倍率、斩击吸血（造成伤害的比例）、受到的伤害倍率。 */
+  hpMul: number
+  lifesteal: number
+  damageTakenMul: number
   /** 质变：嘲讽光环。 */
   taunt: boolean
 }
 
 export function knightMods(): KnightMods {
-  return { damageMul: 1, knockbackMul: 1, collide: false, arc: (100 * Math.PI) / 180, rangeMul: 1, intervalMul: 1, whirl: false, stunChance: 0, stunTime: 0.6, taunt: false }
+  return { damageMul: 1, knockbackMul: 1, collide: false, arc: (100 * Math.PI) / 180, rangeMul: 1, intervalMul: 1, whirl: false, stunChance: 0, stunTime: 1, hpMul: 1, lifesteal: 0, damageTakenMul: 1, taunt: false }
 }
 
 /** 各英雄的修正值类型。 */
@@ -81,10 +85,10 @@ export const KNOCKBACK = 12
 /** 击退撞人：被击退的敌人新位置周围这么远的敌人受伤，伤害是斩击的一半。 */
 export const COLLIDE_RADIUS = 45
 export const COLLIDE_MUL = 0.5
-/** 嘲讽光环：每隔几秒、半径、让敌人停多久。 */
+/** 嘲讽光环：每隔几秒、半径、强制敌人打骑士多久（到下一次光环）。 */
 export const TAUNT_EVERY = 4
 export const TAUNT_RADIUS = 120
-export const TAUNT_TIME = 1
+export const TAUNT_TIME = 4
 
 export const BURN_TIME = 2
 export const BURN_DPS = 8
@@ -162,7 +166,7 @@ export const BRANCHES: Branch[] = [
   branch('knight', 'smash', '重击', [
     ['斩击伤害 +30%', (m) => (m.damageMul *= 1.3)],
     ['击退距离翻倍', (m) => (m.knockbackMul *= 2)],
-    ['斩击伤害 +30%', (m) => (m.damageMul *= 1.3)],
+    ['20% 几率眩晕 1 秒', (m) => (m.stunChance = 0.2)],
     ['质变：被击退的敌人撞到身后的敌人，造成一半伤害', (m) => (m.collide = true)],
   ]),
   branch('knight', 'whirl', '旋风', [
@@ -172,10 +176,10 @@ export const BRANCHES: Branch[] = [
     ['质变：360° 旋风斩', (m) => (m.whirl = true)],
   ]),
   branch('knight', 'guard', '守护', [
-    ['20% 几率眩晕 0.6 秒', (m) => (m.stunChance = 0.2)],
-    ['眩晕几率提高到 35%', (m) => (m.stunChance = 0.35)],
-    ['眩晕 1 秒', (m) => (m.stunTime = 1)],
-    ['质变：嘲讽光环，每 4 秒让半径 120 内的敌人停 1 秒', (m) => (m.taunt = true)],
+    ['骑士血量 +30%', (m) => (m.hpMul *= 1.3)],
+    ['斩击吸血：造成伤害的 15%', (m) => (m.lifesteal += 0.15)],
+    ['受到的伤害 −15%', (m) => (m.damageTakenMul *= 0.85)],
+    ['质变：嘲讽光环，每 4 秒强制半径 120 内的敌人来打骑士', (m) => (m.taunt = true)],
   ]),
   branch('mage', 'lightning', '雷电', [
     ['每第 3 次攻击额外放连锁闪电（跳 2 次，每跳 60%）', (m) => (m.chainEvery = 3)],
@@ -190,7 +194,7 @@ export interface GenericOption {
   id: string
   name: string
   desc: string
-  effect: 'attackSpeed' | 'damage' | 'lives' | 'ultCharge' | 'xp'
+  effect: 'attackSpeed' | 'damage' | 'lives' | 'ultCharge' | 'xp' | 'hp'
   amount: number
 }
 
@@ -200,6 +204,7 @@ export const GENERIC: GenericOption[] = [
   { id: 'generic.lives', name: '城墙修补', desc: '回复 3 条命', effect: 'lives', amount: 3 },
   { id: 'generic.ultCharge', name: '蓄能', desc: '大招充能速度 +25%', effect: 'ultCharge', amount: 0.25 },
   { id: 'generic.xp', name: '求知', desc: '获得的经验 +20%', effect: 'xp', amount: 0.2 },
+  { id: 'generic.hp', name: '坚韧', desc: '全体英雄血量 +20%', effect: 'hp', amount: 0.2 },
 ]
 
 /** 通用选项在抽卡池里的权重（技能节点是 1）。 */
@@ -211,10 +216,11 @@ export interface RunMods {
   damageMul: number
   ultChargeMul: number
   xpMul: number
+  hpMul: number
 }
 
 export function runMods(): RunMods {
-  return { attackSpeedMul: 1, damageMul: 1, ultChargeMul: 1, xpMul: 1 }
+  return { attackSpeedMul: 1, damageMul: 1, ultChargeMul: 1, xpMul: 1, hpMul: 1 }
 }
 
 /** 三选一里的一个选项：某个英雄的技能节点，或通用选项。 */

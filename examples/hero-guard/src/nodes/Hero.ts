@@ -1,5 +1,6 @@
-import { Ease, Node2D, rect, Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
+import { ColorRect, Ease, Label, Node2D, Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
 import { ART_SCALE, ASSETS } from '../assets'
+import { HERO_FEEL, Z } from '../config'
 import { HEROES, RIG, type HeroKind } from '../data/heroes'
 import { archerMods, HEADSHOT_EVERY, HEADSHOT_MUL, KNOCKBACK, knightMods, mageMods, TAUNT_EVERY, type ArcherMods, type KnightMods, type MageMods, type RunMods } from '../data/skills'
 import type { Shot } from './Arrow'
@@ -12,6 +13,10 @@ export interface HeroWorld {
   readonly run: RunMods
   /** 射程内离城门最近（剩余路程最短）的怪物；没有时为 null。 */
   findTarget(x: number, y: number, range: number): Enemy | null
+  /** 离 (x, y) 最近的活着的怪物（远程射程内没目标时往它挪）。 */
+  nearestEnemy(x: number, y: number): Enemy | null
+  /** 骑士要追的怪：站在区域里的地面怪里离城门最近的。 */
+  chaseTarget(zone: Zone): Enemy | null
   /** 射程内按离城门由近到远排好的怪物（最多 `n` 只，不含 `exclude`）。 */
   findTargets(x: number, y: number, range: number, n: number, exclude: Enemy | null): Enemy[]
   /** 从 (x, y) 向目标射一支箭。 */
@@ -22,7 +27,7 @@ export interface HeroWorld {
   chainLightning(x: number, y: number, first: Enemy, damage: number, jumps: number, falloff: number): void
   /** 骑士斩击：以 (x, y) 为圆心、朝 `angle`（0 朝上）的扇形（`whirl` 时 360°），打中范围内所有敌人。 */
   slash(hero: Hero, target: Enemy, s: Slash): void
-  /** 嘲讽光环：半径内的敌人停下。 */
+  /** 嘲讽光环：半径内的地面怪被强制来打骑士（一段时间）。 */
   tauntAura(x: number, y: number): void
   /** 骑士冲锋这一帧从 y0 冲到 y1：沿线的敌人受伤、击退、眩晕（每次冲锋每只一次）。 */
   chargeSweep(knight: Hero, y0: number, y1: number): void
@@ -42,6 +47,16 @@ export interface Slash {
   stunTime: number
 }
 
+/** 英雄的活动区域（脚底不出这个矩形）。 */
+export interface Zone {
+  readonly left: number
+  readonly top: number
+  readonly right: number
+  readonly bottom: number
+}
+
+const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x))
+
 /** 英雄这一局的数值：基础数值乘上技能的修正（`refreshStats()` 重新算）。 */
 export interface HeroStats {
   damage: number
@@ -53,19 +68,32 @@ export interface HeroStats {
 const bodyScale = (kind: HeroKind, sx: number, sy: number) => v((RIG[kind].bodyFlip ? -sx : sx) * ART_SCALE, sy * ART_SCALE)
 
 /**
- * 英雄：站在槽位上，冷却好了就攻击射程内离城门最近的怪物。身体和武器是两个精灵：
- * 攻击时身体下蹲蓄力、出手时拉长、再回弹（补间），武器朝目标转过去并做各自的动作；出手那一刻调用 `release`。
- * 拖动中（`dragging`）不攻击。
+ * 英雄：在自己的区域里自动走位（`moveGoal()`，远程和骑士不同），冷却好了就攻击射程内离城门最近的怪物。
+ * 身体和武器是两个精灵：攻击时身体下蹲蓄力、出手时拉长、再回弹（补间），武器朝目标转过去并做各自的动作；出手那一刻调用 `release`。
+ * 有血条：受伤闪白、脱战回血；血量打光阵亡，原地变成墓碑，倒计时结束复活（回满血、短暂无敌）。
  */
 export abstract class Hero extends Node2D {
   readonly stats: HeroStats
   readonly body: Sprite2D
   readonly weapon: Sprite2D
-  /** 射程圈：拖动时显示。 */
-  readonly rangeRing: Sprite2D
+  /** 活动区域；null 表示站着不动（测试用，见 Battle.placeHero 的 `at`）。 */
+  zone: Zone | null = null
+  /** 待命的位置：没事做时回到这里。 */
+  home: Vector2
   cooldown = 0
-  dragging = false
   attacks = 0
+  maxHp: number
+  hp: number
+  dead = false
+  /** 阵亡后还有多久复活、复活后还有多久无敌、离上次挨打多久（脱战回血用）。 */
+  respawnLeft = 0
+  invulnerableLeft = 0
+  sinceHit = Infinity
+  readonly hpBack: ColorRect
+  readonly hpFill: ColorRect
+  readonly tomb: Sprite2D
+  readonly countdown: Label
+  private _flashLeft = 0
   /** 朝向：1 朝右、-1 朝左（翻转整个英雄节点，武器的位置和旋转跟着镜像）。 */
   facing = 1
   private _anim: Tween | null = null
@@ -76,34 +104,156 @@ export abstract class Hero extends Node2D {
     readonly kind: HeroKind,
     position: Vector2,
   ) {
-    super({ position, zIndex: position.y, inputPickable: true, hitArea: rect(-50, -140, 100, 150) })
+    super({ position, zIndex: position.y })
     const base = HEROES[kind]
     this.stats = { damage: base.damage, interval: base.interval, range: base.range }
-    this.rangeRing = this.add(new Sprite2D({ texture: ASSETS.range, visible: false, zIndex: -2, selfModulate: 0x9fe0ff }))
+    this.home = position
+    this.maxHp = this.hp = base.hp
     // 身体的锚点在脚底（美术管线设的 pivot），放在原点就站在槽位上；武器的锚点在握持处，挥动时绕着手转
     this.body = this.add(new Sprite2D({ texture: ASSETS.heroes.get(`${kind}_body`), scale: bodyScale(kind, 1, 1) }))
     const rig = RIG[kind]
     // 武器画在身体后面（zIndex −1）：拳头盖住握柄
     this.weapon = this.add(new Sprite2D({ texture: ASSETS.heroes.get(`${kind}_weapon`), position: v(rig.weaponX, rig.weaponY), scale: v(ART_SCALE, ART_SCALE), zIndex: -1 }))
+    const w = HERO_FEEL.barWidth
+    this.hpBack = this.add(new ColorRect({ size: v(w, HERO_FEEL.barHeight), color: 0x301818, position: v(-w / 2, -150), visible: false }))
+    this.hpFill = this.hpBack.add(new ColorRect({ size: v(w, HERO_FEEL.barHeight), color: 0x60c0ff }))
+    // 墓碑和倒计时：阵亡时显示（墓碑画在地上，比怪低：zIndex 是相对英雄的）
+    this.tomb = this.add(new Sprite2D({ texture: ASSETS.tombstone, offset: v(0, -32), visible: false }))
+    this.countdown = this.add(new Label({ text: '', fontSize: 30, fontWeight: 'bold', color: 0xffffff, align: 'center', verticalAlign: 'center', position: v(0, -96), stroke: { color: 0x000000, width: 5 }, visible: false }))
   }
 
-  /** 显示 / 隐藏射程圈（按当前射程缩放）。 */
-  showRange(show: boolean): void {
-    const s = (this.stats.range * 2) / 256
-    this.rangeRing.scale = v(s, s)
-    this.rangeRing.visible = show
-  }
-
-  /** 放大招中（骑士冲锋）：不攻击、不能拖。 */
+  /** 放大招中（骑士冲锋）：不攻击、不走位。 */
   busy = false
 
+  /** 受到的伤害乘这个数（基础护甲；骑士再乘守护分支的减伤）。 */
+  get armor(): number {
+    return HEROES[this.kind].armor
+  }
+
+  get speed(): number {
+    return HEROES[this.kind].role === 'melee' ? HERO_FEEL.meleeSpeed : HERO_FEEL.rangedSpeed
+  }
+
   override process(dt: number) {
+    if (this.dead) {
+      this._tickDead(dt)
+      return
+    }
     this.cooldown -= dt
-    if (this.dragging || this.busy || this._attacking || this.cooldown > 0) return
+    this.sinceHit += dt
+    if (this.invulnerableLeft > 0) this.invulnerableLeft = Math.max(0, this.invulnerableLeft - dt)
+    if (this.sinceHit >= HERO_FEEL.regenDelay && this.hp < this.maxHp) this.heal(this.maxHp * HERO_FEEL.regenRate * dt)
+    if (this._flashLeft > 0) {
+      this._flashLeft = Math.max(0, this._flashLeft - dt)
+      this.body.flash = this._flashLeft / HERO_FEEL.flashTime
+    }
+    if (this.busy) return
+    if (!this._attacking && this.zone) this._walk(dt)
+    if (this._attacking || this.cooldown > 0) return
     const target = this.world.findTarget(this.x, this.y, this.stats.range)
     if (!target) return
     this.cooldown = this.stats.interval
     this._attack(target)
+  }
+
+  /**
+   * 这一帧想走到哪（已在区域里）；null 表示不动。默认（远程）：射程内有目标就不动；
+   * 没有就往最近的怪挪到它进射程为止（不出区域）；场上没怪就回待命的位置。
+   */
+  protected moveGoal(zone: Zone): { x: number; y: number } | null {
+    if (this.world.findTarget(this.x, this.y, this.stats.range)) return null
+    const e = this.world.nearestEnemy(this.x, this.y)
+    if (!e) return this.home
+    const dx = this.x - e.x
+    const dy = this.y - e.y
+    const d = Math.hypot(dx, dy) || 1
+    const r = this.stats.range * HERO_FEEL.approach
+    return { x: clamp(e.x + (dx / d) * r, zone.left, zone.right), y: clamp(e.y + (dy / d) * r, zone.top, zone.bottom) }
+  }
+
+  private _walk(dt: number) {
+    const zone = this.zone!
+    const goal = this.moveGoal(zone)
+    if (!goal) return
+    const gx = clamp(goal.x, zone.left, zone.right)
+    const gy = clamp(goal.y, zone.top, zone.bottom)
+    const dx = gx - this.x
+    const dy = gy - this.y
+    const d = Math.hypot(dx, dy)
+    if (d < 1) return
+    const step = Math.min(d, this.speed * dt)
+    this.x += (dx / d) * step
+    this.y += (dy / d) * step
+    this.zIndex = this.y
+    if (Math.abs(dx) > 1) {
+      this.facing = dx < 0 ? -1 : 1
+      this.scale = v(this.facing, 1)
+    }
+  }
+
+  /**
+   * 挨打：按护甲减伤，闪白，显示血条；无敌或阵亡时不受伤。返回实际扣掉的血；打光了就阵亡（`dead` 变 true）。
+   */
+  takeDamage(amount: number): number {
+    if (this.dead || this.invulnerableLeft > 0) return 0
+    const dealt = Math.min(this.hp, amount * this.armor)
+    this.hp -= dealt
+    this.sinceHit = 0
+    this._flashLeft = HERO_FEEL.flashTime
+    this.body.flash = 1
+    if (this.hp <= 0) this._die()
+    else this._updateBar()
+    return dealt
+  }
+
+  /** 回血（不超过上限）。 */
+  heal(amount: number): void {
+    if (this.dead) return
+    this.hp = Math.min(this.maxHp, this.hp + amount)
+    this._updateBar()
+  }
+
+  private _updateBar() {
+    const r = this.hp / this.maxHp
+    this.hpBack.visible = r < 0.999
+    this.hpFill.scale = v(Math.max(0, r), 1)
+  }
+
+  private _die() {
+    this.hp = 0
+    this.dead = true
+    this.respawnLeft = HERO_FEEL.respawn
+    this.cancelAttack()
+    this.body.visible = this.weapon.visible = this.hpBack.visible = false
+    this.body.flash = 0
+    this._flashLeft = 0
+    this.tomb.visible = this.countdown.visible = true
+    this.scale = v(1, 1) // 墓碑不翻转
+    this.zIndex = Z.tomb
+    this.countdown.text = String(Math.ceil(this.respawnLeft))
+  }
+
+  private _tickDead(dt: number) {
+    this.respawnLeft -= dt
+    if (this.respawnLeft > 0) {
+      const t = String(Math.ceil(this.respawnLeft))
+      if (this.countdown.text !== t) this.countdown.text = t
+      return
+    }
+    this.respawn()
+  }
+
+  /** 原地复活：回满血，短暂无敌。 */
+  respawn(): void {
+    this.dead = false
+    this.respawnLeft = 0
+    this.hp = this.maxHp
+    this.invulnerableLeft = HERO_FEEL.invulnerable
+    this.sinceHit = Infinity
+    this.body.visible = this.weapon.visible = true
+    this.tomb.visible = this.countdown.visible = false
+    this.zIndex = this.y
+    this._updateBar()
   }
 
   /** 出手：发射箭 / 火球 / 斩击。`target` 已确认还活着、在射程内（略放宽）。 */
@@ -159,7 +309,7 @@ export abstract class Hero extends Node2D {
     this.release(t)
   }
 
-  /** 拖动开始时停下正在做的动作，回到静止姿势。 */
+  /** 停下正在做的动作（阵亡、冲锋时），回到静止姿势。 */
   cancelAttack(): void {
     this._anim?.kill()
     this._anim = null
@@ -173,7 +323,10 @@ export abstract class Hero extends Node2D {
   /** 这个英雄这一局的技能修正值（`data/skills.ts` 里对应的 `HeroMods[kind]`）。 */
   abstract readonly mods: object
 
-  /** 重新算 `stats`：基础数值 → 这个英雄的技能修正（`applyMods`）→ 全局倍率（通用选项的伤害、攻速）。技能或通用选项变了之后调用。 */
+  /**
+   * 重新算 `stats` 和血量上限：基础数值 → 这个英雄的技能修正（`applyMods`、`hpMul`）→ 全局倍率（通用选项的伤害、攻速、血量）。
+   * 技能或通用选项变了之后调用。上限变大时多出来的血直接加上。
+   */
   refreshStats(): void {
     const base = HEROES[this.kind]
     const s = this.stats
@@ -183,13 +336,22 @@ export abstract class Hero extends Node2D {
     this.applyMods(s)
     s.damage *= this.world.run.damageMul
     s.interval /= this.world.run.attackSpeedMul
+    const maxHp = base.hp * this.hpMul * this.world.run.hpMul
+    if (!this.dead) this.hp = Math.max(1, this.hp + maxHp - this.maxHp)
+    this.maxHp = maxHp
+    this._updateBar()
+  }
+
+  /** 这个英雄技能给的血量倍率（骑士的守护分支）。 */
+  protected get hpMul(): number {
+    return 1
   }
 
   /** 按这个英雄的技能修正改 `stats`（已经是基础数值）。 */
   protected abstract applyMods(stats: HeroStats): void
 
   protected override dumpProps(): Record<string, unknown> {
-    return { ...super.dumpProps(), kind: this.kind, attacks: this.attacks }
+    return { ...super.dumpProps(), kind: this.kind, attacks: this.attacks, hp: Math.round(this.hp), dead: this.dead || undefined }
   }
 }
 
@@ -306,20 +468,40 @@ export class Knight extends Hero {
     s.interval *= this.mods.intervalMul
   }
 
-  /** 冲锋：竖直冲到 `topY` 再冲回原位（总共 `time` 秒），每帧把这段移动交给 `chargeSweep`；结束时回调 `done`。 */
+  protected override get hpMul(): number {
+    return this.mods.hpMul
+  }
+
+  override get armor(): number {
+    return HEROES.knight.armor * this.mods.damageTakenMul
+  }
+
+  /** 追自己区域里离城门最近的地面怪：走到它在斩击距离内（留点余量）；区域里没怪就回待命的位置（区域中心）。 */
+  protected override moveGoal(zone: Zone): { x: number; y: number } | null {
+    const e = this.world.chaseTarget(zone)
+    if (!e) return this.home
+    const dx = this.x - e.x
+    const dy = this.y - e.y
+    const d = Math.hypot(dx, dy)
+    const r = this.stats.range * 0.6
+    if (d <= r) return null
+    return { x: e.x + (dx / d) * r, y: e.y + (dy / d) * r }
+  }
+
+  /** 冲锋：从当前位置竖直冲到 `topY` 再冲回来（总共 `time` 秒），每帧把这段移动交给 `chargeSweep`；结束时回调 `done`。 */
   charge(topY: number, time: number, done: () => void): void {
     this.cancelAttack()
     this.busy = true
     const homeY = this.y
     const z = this.zIndex
-    this.zIndex = 2300
+    this.zIndex = Z.charging
     this._chargeY = homeY
     this.createTween()
       .to(this, { y: topY }, time * 0.45, Ease.QuadIn)
       .to(this, { y: homeY }, time * 0.55, Ease.QuadOut)
       .call(() => {
         this.busy = false
-        this.zIndex = z
+        this.zIndex = this.dead ? z : this.y
         this._chargeY = null
         done()
       })
@@ -330,11 +512,11 @@ export class Knight extends Hero {
 
   override process(dt: number) {
     super.process(dt)
-    if (this._chargeY !== null) {
+    if (this._chargeY !== null && !this.dead) {
       this.world.chargeSweep(this, this._chargeY, this.y)
       this._chargeY = this.y
     }
-    if (!this.mods.taunt || this.dragging || this.busy) return
+    if (!this.mods.taunt || this.dead || this.busy) return
     this._tauntIn -= dt
     if (this._tauntIn <= 0) {
       this._tauntIn += TAUNT_EVERY

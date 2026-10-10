@@ -22,6 +22,8 @@ const SOUNDS = {
   ult_mage: { stream: sfx('audio/ult_mage.mp3'), volume: 0.6, max: 1 },
   meteor: { stream: sfx('audio/meteor.mp3'), volume: 0.9, max: 1 },
   ult_knight: { stream: sfx('audio/ult_knight.mp3'), volume: 0.7, max: 1 },
+  hero_hit: { stream: sfx('audio/hero_hit.mp3'), volume: 0.5, max: 2 },
+  hero_die: { stream: sfx('audio/hero_die.mp3'), volume: 0.8, max: 1 },
   boss: { stream: sfx('audio/boss.mp3'), volume: 0.8, max: 1 },
   win: { stream: sfx('audio/win.mp3'), volume: 0.8, max: 1 },
   lose: { stream: sfx('audio/lose.mp3'), volume: 0.8, max: 1 },

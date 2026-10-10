@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { ART_SCALE } from '../src/assets'
 import { ELITE, ENEMIES, enemyHp, type EnemyKind } from '../src/data/enemies'
@@ -10,7 +11,7 @@ import type { Battle } from '../src/scenes/Battle'
 async function setup() {
   const g = await createTestGame({ ...gameOptions, seed: 6 })
   const battle = g.scene as Battle
-  battle.startWith('archer', 1)
+  battle.startWith('archer', v(375, 740))
   battle.stopSpawning()
   battle.heroes[0]!.cooldown = 1e9 // 英雄不攻击
   return { g, battle }

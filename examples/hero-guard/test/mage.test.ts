@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
+import { ZONES } from '../src/config'
 import { ENEMIES } from '../src/data/enemies'
 import { HEROES } from '../src/data/heroes'
 import { BRANCHES, BURN_DPS, FREEZE_TIME, isGeneric } from '../src/data/skills'
@@ -21,13 +22,13 @@ const dummy = (b: Battle, x: number, y: number, hp = 10000) => b.spawnEnemy('sli
 async function withMage() {
   const g = await createTestGame({ ...gameOptions, seed: 2 })
   const battle = g.scene as Battle
-  const mage = battle.startWith('mage', 1) as Mage
+  const mage = battle.startWith('mage', v(375, 740)) as Mage
   battle.stopSpawning()
   return { g, battle, mage }
 }
 
 describe('选英雄和解锁', () => {
-  it('开局弹出 3 张英雄卡；点卡片再点空槽位放下，然后开始第 1 波', async () => {
+  it('开局弹出 3 张英雄卡；点卡片英雄就出现在它的区域里，然后开始第 1 波', async () => {
     const g = await createTestGame({ ...gameOptions, seed: 1 })
     const battle = g.scene as Battle
     g.step(30)
@@ -39,12 +40,8 @@ describe('选英雄和解锁', () => {
       ['knight', true],
     ])
     g.tap(cards[1]!.x + 300, cards[1]!.y + 100) // 法师
-    expect([battle.state, battle.placing]).toEqual(['placing', 'mage'])
-    expect(battle.slots.every((s) => s.inputPickable)).toBe(true)
-    const s4 = battle.slots[4]!
-    g.tap(s4.x, s4.y)
-    expect(battle.slotOf(battle.heroes[0]!)).toBe(s4)
     expect(battle.heroes[0]).toBeInstanceOf(Mage)
+    expect(battle.heroes[0]!.zone).toBe(ZONES.rangedLeft)
     g.stepSeconds(1.2)
     expect([battle.state, battle.wave]).toEqual(['wave', 1])
   })
@@ -52,7 +49,7 @@ describe('选英雄和解锁', () => {
   it('第 3 波前从剩下的英雄里再选一个；第 6 波前再选最后一个；3 个都上场后不再弹', async () => {
     const g = await createTestGame({ ...gameOptions, seed: 1 })
     const battle = g.scene as Battle
-    battle.startWith('archer', 1)
+    battle.startWith('archer', v(375, 740))
     // 直接跳到第 2 波打完
     battle.wave = 2
     battle.state = 'gap'
@@ -60,7 +57,6 @@ describe('选英雄和解锁', () => {
     expect(battle.state).toBe('choosing')
     expect(battle.heroPicker!.cards.map((c) => c.kind)).toEqual(['mage', 'knight'])
     battle.heroPicker!.cards[0]!.clicked.emit(click)
-    battle.slots[3]!.clicked.emit(click)
     g.stepSeconds(1)
     expect([battle.heroes.map((h) => h.kind), battle.wave]).toEqual([['archer', 'mage'], 3])
     battle.stopSpawning()
@@ -71,7 +67,6 @@ describe('选英雄和解锁', () => {
     g.step(2)
     expect(battle.heroPicker!.cards.map((c) => c.kind)).toEqual(['knight'])
     battle.heroPicker!.cards[0]!.clicked.emit(click)
-    battle.slots[5]!.clicked.emit(click)
     g.stepSeconds(1)
     expect([battle.heroes.map((h) => h.kind), battle.wave]).toEqual([['archer', 'mage', 'knight'], 6])
     for (const e of battle.enemies) e.queueFree()

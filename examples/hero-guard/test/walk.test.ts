@@ -69,4 +69,28 @@ describe('走路动画', () => {
     g.stepSeconds(6) // 走回待命点，停下
     expect(archer.body.frame).toBe(0)
   })
+
+  it('英雄不会每帧追着慢慢移动的目标挪小碎步（起步有死区）：开局 20 秒里“走 / 停”切换很少', async () => {
+    for (const seed of [1, 4]) {
+      const g = await createTestGame({ ...gameOptions, seed })
+      const b = g.scene as Battle
+      b.startWith('archer')
+      b.placeHero('mage')
+      let toggles = 0
+      const last = new Map<unknown, string>()
+      for (let i = 0; i < 60 * 20; i++) {
+        g.step()
+        for (const h of b.heroes) {
+          const key = `${h.x.toFixed(2)},${h.y.toFixed(2)}`
+          const moved = last.get(h) !== key
+          const was = last.get(`${h.kind}-moving`) === '1'
+          if (i > 0 && moved !== was) toggles++
+          last.set(h, key)
+          last.set(`${h.kind}-moving`, moved ? '1' : '0')
+        }
+      }
+      // 修之前每 20 秒 300–500 次（每秒十几次：看起来在抖）
+      expect(toggles).toBeLessThan(60)
+    }
+  })
 })

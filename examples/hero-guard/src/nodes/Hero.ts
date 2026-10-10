@@ -97,6 +97,8 @@ export abstract class Hero extends Node2D {
   /** 走路帧：走过的距离（换帧用）、这一帧有没有走、呼吸的相位。 */
   private _walked = 0
   private _moving = false
+  /** 起步后一直走到目标点（见 `HERO_FEEL.walkStart`）。 */
+  private _walking = false
   private _breath = 0
   /** 朝向：1 朝右、-1 朝左（翻转整个英雄节点，武器的位置和旋转跟着镜像）。 */
   facing = 1
@@ -165,7 +167,7 @@ export abstract class Hero extends Node2D {
   protected moveGoal(zone: Zone): { x: number; y: number } | null {
     if (this.world.findTarget(this.x, this.y, this.stats.range)) return null
     const e = this.world.nearestEnemy(this.x, this.y)
-    if (!e) return this.home
+    if (!e || e.y < 0) return this.home // 还在屏幕上方、看不见的怪不追
     const dx = this.x - e.x
     const dy = this.y - e.y
     const d = Math.hypot(dx, dy) || 1
@@ -182,7 +184,11 @@ export abstract class Hero extends Node2D {
     const dx = gx - this.x
     const dy = gy - this.y
     const d = Math.hypot(dx, dy)
-    if (d < 1) return
+    if (d < 1 || (!this._walking && d < HERO_FEEL.walkStart)) {
+      this._walking = false
+      return
+    }
+    this._walking = d > this.speed * dt
     const step = Math.min(d, this.speed * dt)
     this.x += (dx / d) * step
     this.y += (dy / d) * step

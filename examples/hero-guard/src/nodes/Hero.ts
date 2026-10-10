@@ -15,8 +15,8 @@ export interface HeroWorld {
   findTarget(x: number, y: number, range: number): Enemy | null
   /** 离 (x, y) 最近的活着的怪物（远程射程内没目标时往它挪）。 */
   nearestEnemy(x: number, y: number): Enemy | null
-  /** 骑士要追的怪：站在区域里的地面怪里离城门最近的。 */
-  chaseTarget(zone: Zone): Enemy | null
+  /** 骑士要追的怪：从区域里够得着（区域往外扩 `reach`）的地面怪里离城门最近的。 */
+  chaseTarget(zone: Zone, reach: number): Enemy | null
   /** 射程内按离城门由近到远排好的怪物（最多 `n` 只，不含 `exclude`）。 */
   findTargets(x: number, y: number, range: number, n: number, exclude: Enemy | null): Enemy[]
   /** 从 (x, y) 向目标射一支箭。 */
@@ -476,9 +476,12 @@ export class Knight extends Hero {
     return HEROES.knight.armor * this.mods.damageTakenMul
   }
 
-  /** 追自己区域里离城门最近的地面怪：走到它在斩击距离内（留点余量）；区域里没怪就回待命的位置（区域中心）。 */
+  /**
+   * 追从区域里够得着的地面怪里离城门最近的那只（区域往外扩 0.8 个攻击距离：站在区域边上就砍得到）：
+   * 走到它在斩击距离内（留点余量，走不出区域）；没有就回待命的位置（区域中心）。
+   */
   protected override moveGoal(zone: Zone): { x: number; y: number } | null {
-    const e = this.world.chaseTarget(zone)
+    const e = this.world.chaseTarget(zone, this.stats.range * 0.8)
     if (!e) return this.home
     const dx = this.x - e.x
     const dy = this.y - e.y

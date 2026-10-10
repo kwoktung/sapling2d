@@ -67,7 +67,7 @@ describe('骑士', () => {
     const behind = still(battle, 375, 560) // 距离 180：斩击够不着，但目标被往上（沿路线往回）推 24 后就在 45 像素内
     while (knight.attacks < 1) g.step()
     g.step()
-    const dmg = 22 * 1.3
+    const dmg = HEROES.knight.damage * 1.3
     expect(10000 - target.hp).toBeCloseTo(dmg)
     expect(10000 - behind.hp).toBeCloseTo(dmg * 0.5)
     expect(target.y).toBeCloseTo(600 - 24)

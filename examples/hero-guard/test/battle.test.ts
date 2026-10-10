@@ -124,7 +124,8 @@ describe('波次和胜负', () => {
       if (battle.picker) battle.picker.cards[0]!.clicked.emit(click) // 升级就选第一张
       if (battle.heroPicker) battle.heroPicker.cards.find((c) => c.enabled)!.clicked.emit(click) // 第 3、6 波：选第一个能选的英雄
     }
-    expect([battle.state, battle.wave, battle.lives]).toEqual(['won', WAVE_COUNT, START.lives])
+    expect([battle.state, battle.wave]).toEqual(['won', WAVE_COUNT])
+    expect(battle.lives).toBeGreaterThanOrEqual(START.lives) // 升级可能点到“城墙修补”
     g.step()
     expect(battle.result!.result.won).toBe(true)
   })

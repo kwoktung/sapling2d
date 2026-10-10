@@ -2,8 +2,8 @@
 
 export const FIELD = {
   /** 怪物路线的横向范围。 */
-  left: 60,
-  right: 690,
+  left: 80,
+  right: 670,
   /** 出生的高度（屏幕上方之外）和底线：越过底线扣命。 */
   spawnY: -40,
   baseY: 1130,

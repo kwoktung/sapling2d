@@ -45,7 +45,7 @@ export const ENEMIES: Record<EnemyKind, EnemyBase> = {
   slimeKing: { name: '史莱姆王', hp: 2500, speed: 30, xp: 50, leak: 5, scale: 1, boss: true, immune: true, summon: { kind: 'slime', count: 4, every: 6 }, attack: { damage: 40, interval: 1.5 } },
   lich: {
     name: '骷髅巫妖',
-    hp: 6000,
+    hp: 5000,
     speed: 28,
     xp: 100,
     leak: 5,
@@ -62,7 +62,7 @@ export const ENEMIES: Record<EnemyKind, EnemyBase> = {
 export const ELITE = { hp: 3, xp: 3, leak: 2, scale: 1.35, attack: 2 }
 
 /** 每波血量乘以这个数的 (波次 - 1) 次方。 */
-export const HP_GROWTH = 1.12
+export const HP_GROWTH = 1.09
 
 /** 第 `wave` 波这种怪的血量：按波次成长（Boss 固定），精英 ×3。 */
 export function enemyHp(kind: EnemyKind, wave: number, elite = false): number {

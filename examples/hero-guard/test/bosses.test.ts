@@ -29,7 +29,7 @@ function pin(b: Battle, kind: 'slimeKing' | 'lich', x: number, y: number) {
 describe('Boss 通用', () => {
   it('血量固定（不随波次成长）、免疫控制；出场提示 + 顶部血条，打掉血条跟着变，死了隐藏', async () => {
     const { g, battle } = await setup()
-    expect([enemyHp('slimeKing', 10), enemyHp('lich', 20)]).toEqual([2500, 6000])
+    expect([enemyHp('slimeKing', 10), enemyHp('lich', 20)]).toEqual([ENEMIES.slimeKing.hp, ENEMIES.lich.hp])
     const king = pin(battle, 'slimeKing', 375, 300)
     expect(battle.controllable(king)).toBe(false)
     expect(battle.hud.message.text).toBe('史莱姆王 出现！')
@@ -79,7 +79,7 @@ describe('骷髅巫妖', () => {
     const { g, battle } = await setup()
     const lich = pin(battle, 'lich', 375, 300)
     battle.damage(lich, 100, { arrow: true })
-    expect(lich.hp).toBe(6000 - 50)
+    expect(lich.hp).toBe(ENEMIES.lich.hp - 50)
     g.stepSeconds(3) // 巫妖第 8 秒施法，只复活 6 秒内死的：在第 3 秒杀
     const skeletons = [0, 1, 2, 3].map((i) => battle.spawnEnemy('skeleton', linePath(300 + i * 30, 300, 100000), 1))
     const far = battle.spawnEnemy('skeleton', linePath(700, 900, 100000), 1)

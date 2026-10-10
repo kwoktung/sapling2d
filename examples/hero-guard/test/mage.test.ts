@@ -98,7 +98,7 @@ describe('法师', () => {
   it('烈焰：伤害 +25% ×2、半径 +30%；质变留下燃烧地面', async () => {
     const { g, battle, mage } = await withMage()
     learn(battle, 'mage.fire.1', 'mage.fire.2', 'mage.fire.3', 'mage.fire.4')
-    expect(mage.stats.damage).toBeCloseTo(18 * 1.25 * 1.25)
+    expect(mage.stats.damage).toBeCloseTo(HEROES.mage.damage * 1.25 * 1.25)
     expect(mage.blastRadius).toBeCloseTo(70 * 1.3)
     const e = dummy(battle, 375, 520)
     while (mage.attacks < 1) g.step()
@@ -138,11 +138,11 @@ describe('法师', () => {
     while (mage.casts < 3) g.step()
     mage.cooldown = 1e9
     g.stepSeconds(0.8)
-    // 第 3 次：闪电先打目标（18），再跳到最近的两个（10.8、6.48）；火球另外打目标 3 次
+    // 第 3 次：闪电先打目标（法师伤害），再跳到最近的两个（×0.6、×0.36）；火球另外打目标 3 次
     const lightning = es.map((e) => 10000 - e.hp)
-    expect(lightning[0]).toBeCloseTo(18 * 3 + 18, 1)
-    expect(lightning[1]).toBeCloseTo(18 * 0.6, 1)
-    expect(lightning[2]).toBeCloseTo(18 * 0.36, 1)
+    expect(lightning[0]).toBeCloseTo(HEROES.mage.damage * 4, 1)
+    expect(lightning[1]).toBeCloseTo(HEROES.mage.damage * 0.6, 1)
+    expect(lightning[2]).toBeCloseTo(HEROES.mage.damage * 0.36, 1)
     expect(lightning[3]).toBe(0) // 只跳 2 次
   })
 })

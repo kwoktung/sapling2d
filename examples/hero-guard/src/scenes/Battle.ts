@@ -297,12 +297,12 @@ export class Battle extends Scene implements HeroWorld {
     return best
   }
 
-  /** 骑士要追的怪：站在区域里的地面怪里离城门最近（剩余路程最短）的。 */
-  chaseTarget(zone: Zone): Enemy | null {
+  /** 骑士要追的怪：从区域里够得着（区域往外扩 `reach`）的地面怪里离城门最近（剩余路程最短）的。 */
+  chaseTarget(zone: Zone, reach: number): Enemy | null {
     let best: Enemy | null = null
     for (const e of this.enemies) {
       if (e.dead || e.leaked || ENEMIES[e.kind].flying) continue
-      if (e.x < zone.left || e.x > zone.right || e.y < zone.top || e.y > zone.bottom) continue
+      if (e.x < zone.left - reach || e.x > zone.right + reach || e.y < zone.top - reach || e.y > zone.bottom + reach) continue
       if (!best || e.remaining < best.remaining) best = e
     }
     return best

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { ART_SCALE } from '../src/assets'
-import { ELITE, ENEMIES, enemyHp, type EnemyKind } from '../src/data/enemies'
+import { ELITE, ENEMIES, enemyHp, HP_GROWTH, type EnemyKind } from '../src/data/enemies'
 import { WAVE_COUNT, WAVES } from '../src/data/waves'
 import { gameOptions } from '../src/game'
 import { linePath } from '../src/path'
@@ -105,7 +105,7 @@ describe('波次表', () => {
     expect(WAVES.flat().some((g) => g.kind === 'smallSlime')).toBe(false) // 小史莱姆只由分裂产生
   })
 
-  it('出怪时精英组生成精英；血量按波次成长 ×1.12', async () => {
+  it('出怪时精英组生成精英；血量按波次成长 ×HP_GROWTH', async () => {
     const { g, battle } = await setup()
     battle.manual = false
     battle.startWave(5)
@@ -116,6 +116,6 @@ describe('波次表', () => {
     const elites = battle.enemies.filter((e) => e.elite)
     expect(elites).toHaveLength(2)
     expect(elites[0]!.maxHp).toBe(enemyHp('slime', 5, true))
-    expect(enemyHp('slime', 5)).toBe(Math.round(40 * 1.12 ** 4))
+    expect(enemyHp('slime', 5)).toBe(Math.round(40 * HP_GROWTH ** 4))
   })
 })

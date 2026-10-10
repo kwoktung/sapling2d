@@ -79,7 +79,8 @@ describe('弓手的技能', () => {
     const es = [dummy(battle, 300, 500), dummy(battle, 375, 520), dummy(battle, 450, 540)]
     g.stepSeconds(0.6) // 一次攻击
     expect(archer.attacks).toBe(1)
-    expect(es.map((e) => e.hp)).toEqual([9988, 9988, 9988])
+    const d = HEROES.archer.damage
+    expect(es.map((e) => e.hp)).toEqual([10000 - d, 10000 - d, 10000 - d])
   })
 
   it('多重箭 3 级：伤害 +25%；狙击 3 级：射程 +15%', async () => {
@@ -95,8 +96,8 @@ describe('弓手的技能', () => {
     archer.mods.critChance = 1
     const e = dummy(battle, 375, 500)
     g.stepSeconds(0.6)
-    expect(e.hp).toBe(10000 - 12 * 2.5)
-    expect(g.dump()).toContain('text=30!')
+    expect(e.hp).toBe(10000 - HEROES.archer.damage * 2.5)
+    expect(g.dump()).toContain(`text=${HEROES.archer.damage * 2.5}!`)
   })
 
   it('爆头：每第 5 箭 6 倍伤害', async () => {
@@ -106,7 +107,7 @@ describe('弓手的技能', () => {
     const e = dummy(battle, 375, 500, 100000)
     while (archer.attacks < 5) g.step()
     g.stepSeconds(0.5)
-    expect(e.hp).toBe(100000 - 12 * 4 - 12 * HEADSHOT_MUL)
+    expect(e.hp).toBe(100000 - HEROES.archer.damage * (4 + HEADSHOT_MUL))
   })
 
   it('毒箭：中毒每 0.5 秒跳一次，层数叠加到上限，时间到了解除', async () => {
@@ -148,6 +149,7 @@ describe('弓手的技能', () => {
     archer.cooldown = 1e9
     g.stepSeconds(0.6)
     expect(col.map((e) => e.hp < 10000)).toEqual([true, true, true])
-    expect(col.map((e) => 10000 - e.hp)).toEqual([15, 15, 15]) // 伤害 12 × 1.25，每只只打一次
+    const d = HEROES.archer.damage * 1.25 // 每只只打一次
+    expect(col.map((e) => 10000 - e.hp)).toEqual([d, d, d])
   })
 })

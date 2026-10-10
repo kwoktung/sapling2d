@@ -18,8 +18,8 @@ const g = (kind: EnemyKind, count: number, interval: number, delay = 0, elite = 
  * 10 史莱姆王 · 11–14 混合 · 15 精英 · 16–19 混合 · 20 骷髅巫妖（打死它就胜利）。
  */
 export const WAVES: readonly (readonly SpawnGroup[])[] = [
-  /* 1 */ [g('slime', 8, 1)],
-  /* 2 */ [g('slime', 12, 0.8)],
+  /* 1 */ [g('slime', 6, 1.4)],
+  /* 2 */ [g('slime', 10, 1)],
   /* 3 */ [g('slime', 8, 1), g('bat', 6, 0.6, 3)],
   /* 4 */ [g('slime', 8, 0.9), g('skeleton', 5, 1.6, 2)],
   /* 5 精英 */ [g('slime', 12, 0.6), g('bat', 8, 0.5, 2), g('slime', 2, 3, 4, true)],

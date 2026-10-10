@@ -12,7 +12,8 @@
     "log-server": "node log-server.ts",
     "check": "tsc -p tsconfig.json && vitest run",
     "placeholders": "node scripts/gen-placeholders.mjs",
-    "art": "node scripts/art/pipeline.ts"
+    "art": "node scripts/art/pipeline.ts",
+    "balance": "BALANCE_REPORT=1 vitest run test/balance.test.ts --silent=false"
   },
   "dependencies": {
     "sapling2d": "workspace:*"

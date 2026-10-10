@@ -12,6 +12,12 @@ export interface PlayOptions {
   loop?: boolean
   /** 所在总线；默认音效走 SFX，音乐走 Music。 */
   bus?: AudioBus
+  /**
+   * 同一个声音最多同时播放几个（对应 Godot 的 max_polyphony）。已经有这么多个在播时，这次不播：
+   * 返回的 Voice 已经停止（`playing` 为 false），也不触发 finished。用于命中、爆炸这类一帧里可能触发几十次的音效。
+   * 默认不限。
+   */
+  maxVoices?: number
 }
 
 /**
@@ -30,7 +36,7 @@ export class Voice {
   private readonly _server: AudioServer
 
   /** @internal */
-  constructor(server: AudioServer, stream: AudioStream, options: Required<PlayOptions>) {
+  constructor(server: AudioServer, stream: AudioStream, options: Required<Omit<PlayOptions, 'maxVoices'>>) {
     this._server = server
     this.stream = stream
     this.bus = options.bus
@@ -57,6 +63,11 @@ export class Voice {
     this._handle?.stop()
     this._handle = null
     this._server._forget(this)
+  }
+
+  /** @internal 超过 maxVoices 没有播放。 */
+  _drop(): void {
+    this._playing = false
   }
 
   /** @internal */
@@ -143,6 +154,16 @@ export class AudioServer {
       loop: options.loop ?? false,
       bus: options.bus ?? (stream.kind === 'music' ? 'Music' : 'SFX'),
     })
+    const max = options.maxVoices
+    if (max !== undefined) {
+      if (!(max >= 0)) throw new Error(`audio.play: maxVoices must be a number >= 0, got ${max}.`)
+      let n = 0
+      for (const v of this._voices) if (v.stream === stream) n++
+      if (n >= max) {
+        voice._drop()
+        return voice
+      }
+    }
     this._voices.add(voice)
     if (stream.isLoaded) {
       this._start(voice)

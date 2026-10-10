@@ -51,7 +51,7 @@ export class Viewport {
   _version = 0
   /**
    * @internal 相机造成的画面偏移（设计像素）：世界坐标 + 偏移 = 设计坐标。没有相机时为 0。
-   * 由 SceneTree 在每帧 process 之后按当前相机更新。
+   * 由 `CameraManager` 在每帧 process 之后按当前相机更新。
    */
   _canvasX = 0
   _canvasY = 0

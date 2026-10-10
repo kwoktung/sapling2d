@@ -1,5 +1,5 @@
-import { Ease, Node2D, rect, Sprite2D, v, type Texture, type Tween, type Vector2 } from 'sapling2d'
-import { ASSETS } from '../assets'
+import { Ease, Node2D, rect, Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
+import { ART_SCALE, ASSETS } from '../assets'
 import { HEROES, RIG, type HeroKind } from '../data/heroes'
 import type { Enemy } from './Enemy'
 
@@ -18,14 +18,8 @@ export interface HeroStats {
   range: number
 }
 
-const LOOKS: Record<HeroKind, { body: Texture; weapon: Texture }> = {
-  archer: { body: ASSETS.archerBody, weapon: ASSETS.archerWeapon },
-  mage: { body: ASSETS.mageBody, weapon: ASSETS.mageWeapon },
-  knight: { body: ASSETS.knightBody, weapon: ASSETS.knightWeapon },
-}
-
-/** 身体图 96×96，脚底在图的下边缘：身体节点往上挪半张图，英雄节点的原点就在脚底。 */
-const BODY_HALF = 48
+/** 身体的缩放：图集按 2 倍存（`ART_SCALE`），`bodyFlip` 的英雄 x 取反。 */
+const bodyScale = (kind: HeroKind, sx: number, sy: number) => v((RIG[kind].bodyFlip ? -sx : sx) * ART_SCALE, sy * ART_SCALE)
 
 /**
  * 英雄：站在槽位上，冷却好了就攻击射程内离城门最近的怪物。身体和武器是两个精灵：
@@ -51,13 +45,15 @@ export abstract class Hero extends Node2D {
     readonly kind: HeroKind,
     position: Vector2,
   ) {
-    super({ position, zIndex: position.y, inputPickable: true, hitArea: rect(-46, -100, 92, 108) })
+    super({ position, zIndex: position.y, inputPickable: true, hitArea: rect(-50, -140, 100, 150) })
     const base = HEROES[kind]
     this.stats = { damage: base.damage, interval: base.interval, range: base.range }
-    this.rangeRing = this.add(new Sprite2D({ texture: ASSETS.range, visible: false, zIndex: -1, selfModulate: 0x9fe0ff }))
-    this.body = this.add(new Sprite2D({ texture: LOOKS[kind].body, position: v(0, -BODY_HALF) }))
+    this.rangeRing = this.add(new Sprite2D({ texture: ASSETS.range, visible: false, zIndex: -2, selfModulate: 0x9fe0ff }))
+    // 身体的锚点在脚底（美术管线设的 pivot），放在原点就站在槽位上；武器的锚点在握持处，挥动时绕着手转
+    this.body = this.add(new Sprite2D({ texture: ASSETS.heroes.get(`${kind}_body`), scale: bodyScale(kind, 1, 1) }))
     const rig = RIG[kind]
-    this.weapon = this.add(new Sprite2D({ texture: LOOKS[kind].weapon, position: v(rig.weaponX, rig.weaponY) }))
+    // 武器画在身体后面（zIndex −1）：拳头盖住握柄
+    this.weapon = this.add(new Sprite2D({ texture: ASSETS.heroes.get(`${kind}_weapon`), position: v(rig.weaponX, rig.weaponY), scale: v(ART_SCALE, ART_SCALE), zIndex: -1 }))
   }
 
   /** 显示 / 隐藏射程圈（按当前射程缩放）。 */
@@ -95,7 +91,7 @@ export abstract class Hero extends Node2D {
     this.facing = target.x < this.x ? -1 : 1
     this.scale = v(this.facing, 1)
     // 武器朝目标转过去（贴图朝上；节点翻转后在镜像的坐标里算，所以用 |dx|），限制在 ±70°
-    const aim = Math.atan2(Math.abs(target.x - this.x), -(target.y - (this.y - BODY_HALF)))
+    const aim = Math.atan2(Math.abs(target.x - this.x), -(target.y - (this.y + rig.weaponY)))
     this.weapon.rotation = Math.min(1.2, aim)
     const pose = (p: 'windup' | 'release' | 'rest') => {
       const o = this.weaponPose(p)
@@ -103,14 +99,14 @@ export abstract class Hero extends Node2D {
     }
     this._anim?.kill()
     this._anim = this.createTween()
-      .to(this.body, { scale: v(1.12, 0.86), y: -BODY_HALF + 6 }, windup, Ease.QuadOut)
+      .to(this.body, { scale: bodyScale(this.kind, 1.12, 0.86) }, windup, Ease.QuadOut)
       .parallel()
       .to(this.weapon, { position: pose('windup') }, windup, Ease.QuadOut)
       .call(() => this._release(target))
-      .to(this.body, { scale: v(0.92, 1.1), y: -BODY_HALF - 4 }, recover * 0.35, Ease.QuadOut)
+      .to(this.body, { scale: bodyScale(this.kind, 0.92, 1.1) }, recover * 0.35, Ease.QuadOut)
       .parallel()
       .to(this.weapon, { position: pose('release') }, recover * 0.35, Ease.QuadOut)
-      .to(this.body, { scale: v(1, 1), y: -BODY_HALF }, recover * 0.65, Ease.BackOut)
+      .to(this.body, { scale: bodyScale(this.kind, 1, 1) }, recover * 0.65, Ease.BackOut)
       .parallel()
       .to(this.weapon, { position: pose('rest') }, recover * 0.65, Ease.QuadOut)
       .call(() => (this._attacking = false))
@@ -130,8 +126,7 @@ export abstract class Hero extends Node2D {
     this._anim = null
     this._attacking = false
     const rig = RIG[this.kind]
-    this.body.scale = v(1, 1)
-    this.body.y = -BODY_HALF
+    this.body.scale = bodyScale(this.kind, 1, 1)
     this.weapon.position = v(rig.weaponX, rig.weaponY)
     this.weapon.rotation = 0
   }

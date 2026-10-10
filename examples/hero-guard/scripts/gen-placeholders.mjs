@@ -1,5 +1,5 @@
 // 生成骨架阶段的占位图：node scripts/gen-placeholders.mjs（美术到位后由 scripts/art/ 的管线替换）
-// - 英雄：身体（圆 + 眼睛，不拿武器）和武器分开两张图；怪物、槽位、箭、火花、光晕、路线虚线的点、射程圈
+// - 怪物、槽位、箭、火花、光晕、路线虚线的点、射程圈（英雄已经换成美术管线生成的图集）
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 
@@ -79,43 +79,6 @@ function ring(size, width, alpha = 255) {
   return c
 }
 const save = (name, c) => writeFileSync(new URL(name, OUT), png(c))
-
-// ---------------------------------------------------------------- 英雄（身体 + 武器）
-
-const BODY = 96
-/** 身体：Q 版的大圆头 + 小身子，脚底在图的下边缘附近（游戏里身体节点的原点在脚底）。 */
-function heroBody(color, outline, hat) {
-  const c = canvas(BODY, BODY)
-  ellipse(c, 0, 48, 76, 20, 16, color, outline) // 身子
-  ellipse(c, 0, 48, 42, 30, 30, color, outline) // 头
-  ellipse(c, 0, 48, 30, 30, 16, hat, outline, 3) // 帽子 / 兜帽
-  rect(c, 0, 37, 42, 6, 8, 0x1a1a1a) // 眼睛
-  rect(c, 0, 53, 42, 6, 8, 0x1a1a1a)
-  return c
-}
-save('hero_archer_body.png', heroBody(0x7ac46a, 0x24502a, 0x3f8a3a))
-save('hero_mage_body.png', heroBody(0xa880e0, 0x45246e, 0x6a3ab0))
-save('hero_knight_body.png', heroBody(0x8aa6cc, 0x2a3e5e, 0xb8c4d4))
-
-/** 弓：竖直的弓身 + 弓弦，握持点在图的中心。 */
-const bow = canvas(32, 84)
-for (let y = 0; y < 84; y++) {
-  const x = Math.round(20 - 12 * Math.sin((y / 83) * Math.PI))
-  rect(bow, 0, x - 2, y, 5, 1, 0x8a5a2a)
-}
-rect(bow, 0, 19, 2, 1, 80, 0xf0e8d0)
-save('hero_archer_weapon.png', bow)
-
-const staff = canvas(24, 96)
-rect(staff, 0, 10, 16, 4, 80, 0x6a4a2a)
-ellipse(staff, 0, 12, 12, 10, 10, 0xff9a30, 0xb04a10, 2)
-save('hero_mage_weapon.png', staff)
-
-const sword = canvas(24, 96)
-rect(sword, 0, 9, 4, 6, 64, 0xdde4ee)
-rect(sword, 0, 2, 66, 20, 5, 0x8a6a2a)
-rect(sword, 0, 10, 70, 4, 18, 0x5a3a1a)
-save('hero_knight_weapon.png', sword)
 
 // ---------------------------------------------------------------- 怪物和场地
 

@@ -141,6 +141,7 @@ interface Rect {
 async function packAll(): Promise<void> {
   const atlases = new Map<string, AssetSpec[]>()
   for (const a of ASSETS) {
+    if (!a.atlas) continue // 不打包的素材（候选图等）
     if (only && !ASSETS.some((b) => only.has(b.id) && b.atlas === a.atlas)) continue
     atlases.set(a.atlas, [...(atlases.get(a.atlas) ?? []), a])
   }

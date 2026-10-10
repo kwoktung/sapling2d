@@ -61,13 +61,16 @@ describe('chromaKey', () => {
 })
 
 describe('打包出的图集', () => {
-  it('引擎的 atlas() 能读；锚点在脚底时精灵的底边在节点原点', () => {
+  it('引擎的 atlas() 能读；身体的锚点在脚底（精灵底边在节点原点）、高度是显示尺寸的 2 倍；武器带握持点', () => {
     const data = JSON.parse(readFileSync(new URL('../public/assets/heroes.json', import.meta.url), 'utf8'))
     const a = atlas('heroes.png', data)
-    const t = a.get('archer_test')
-    expect(t.pivot!.equals({ x: 0.5, y: 1 } as never)).toBe(true)
-    const s = new Sprite2D({ texture: t })
-    expect(s.rect!.bottom).toBe(0)
-    expect(s.rect!.height).toBe(280)
+    for (const hero of ['archer', 'mage', 'knight']) {
+      const body = a.get(`${hero}_body`)
+      expect(body.pivot!.equals({ x: 0.5, y: 1 } as never)).toBe(true)
+      const s = new Sprite2D({ texture: body })
+      expect([s.rect!.bottom, s.rect!.height]).toEqual([0, 280])
+    }
+    // 握持点：剑在剑柄、法杖偏下；弓在正中间（引擎把正中心当作没有锚点）
+    expect([a.get('knight_weapon').pivot!.y, a.get('mage_weapon').pivot!.y, a.get('archer_weapon').pivot]).toEqual([0.86, 0.62, null])
   })
 })

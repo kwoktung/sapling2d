@@ -1,10 +1,10 @@
 {
  "frames": {
-  "archer_test": {
+  "archer_body": {
    "frame": {
     "x": 0,
     "y": 0,
-    "w": 191,
+    "w": 185,
     "h": 280
    },
    "rotated": false,
@@ -12,16 +12,136 @@
    "spriteSourceSize": {
     "x": 0,
     "y": 0,
-    "w": 191,
+    "w": 185,
     "h": 280
    },
    "sourceSize": {
-    "w": 191,
+    "w": 185,
     "h": 280
    },
    "pivot": {
     "x": 0.5,
     "y": 1
+   }
+  },
+  "archer_weapon": {
+   "frame": {
+    "x": 187,
+    "y": 0,
+    "w": 42,
+    "h": 200
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 42,
+    "h": 200
+   },
+   "sourceSize": {
+    "w": 42,
+    "h": 200
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "mage_body": {
+   "frame": {
+    "x": 231,
+    "y": 0,
+    "w": 177,
+    "h": 280
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 177,
+    "h": 280
+   },
+   "sourceSize": {
+    "w": 177,
+    "h": 280
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "mage_weapon": {
+   "frame": {
+    "x": 0,
+    "y": 282,
+    "w": 50,
+    "h": 260
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 50,
+    "h": 260
+   },
+   "sourceSize": {
+    "w": 50,
+    "h": 260
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.62
+   }
+  },
+  "knight_body": {
+   "frame": {
+    "x": 410,
+    "y": 0,
+    "w": 165,
+    "h": 280
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 165,
+    "h": 280
+   },
+   "sourceSize": {
+    "w": 165,
+    "h": 280
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "knight_weapon": {
+   "frame": {
+    "x": 52,
+    "y": 282,
+    "w": 52,
+    "h": 200
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 52,
+    "h": 200
+   },
+   "sourceSize": {
+    "w": 52,
+    "h": 200
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.86
    }
   }
  },
@@ -30,8 +150,8 @@
   "image": "heroes.png",
   "format": "RGBA8888",
   "size": {
-   "w": 191,
-   "h": 280
+   "w": 575,
+   "h": 542
   },
   "scale": "1"
  }

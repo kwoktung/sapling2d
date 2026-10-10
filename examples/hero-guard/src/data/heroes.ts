@@ -20,9 +20,13 @@ export const HEROES: Record<HeroKind, HeroBase> = {
   knight: { name: '骑士', role: '近战控制，击退和眩晕', damage: 22, interval: 1.1, range: 150 },
 }
 
-/** 武器挂在身体上的位置（相对身体节点的原点：脚底中心）和攻击动作的节奏。占位图的值，正式美术在 03 调。 */
-export const RIG: Record<HeroKind, { weaponX: number; weaponY: number; windup: number; recover: number }> = {
-  archer: { weaponX: 26, weaponY: -44, windup: 0.16, recover: 0.18 },
-  mage: { weaponX: 30, weaponY: -50, windup: 0.22, recover: 0.2 },
-  knight: { weaponX: 28, weaponY: -46, windup: 0.14, recover: 0.2 },
+/**
+ * 身体和武器怎么拼：武器的握持点放在身体空着的那只手上（相对英雄节点的原点：脚底中心，朝右时），攻击动作的节奏。
+ * `bodyFlip`：身体图里空手在左边的，翻过来让空手朝右（英雄朝右时武器在右手）。武器画在身体后面，拳头盖住握柄，看起来是握着的。
+ * 数值是在浏览器里把三个英雄放大并排、对着空拳调出来的。
+ */
+export const RIG: Record<HeroKind, { bodyFlip: boolean; weaponX: number; weaponY: number; windup: number; recover: number }> = {
+  archer: { bodyFlip: true, weaponX: 37, weaponY: -50, windup: 0.16, recover: 0.18 },
+  mage: { bodyFlip: false, weaponX: 36, weaponY: -65, windup: 0.22, recover: 0.2 },
+  knight: { bodyFlip: true, weaponX: 33, weaponY: -50, windup: 0.14, recover: 0.2 },
 }

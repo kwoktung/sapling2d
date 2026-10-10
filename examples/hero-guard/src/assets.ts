@@ -1,13 +1,14 @@
-import { tex } from 'sapling2d'
+import { atlas, tex } from 'sapling2d'
+import heroesData from '../public/assets/heroes.json'
 
-/** 所有资源（Battle 场景进场前加载）。骨架阶段是占位图（scripts/gen-placeholders.mjs），美术到位后换成图集。 */
+/**
+ * 所有资源（Battle 场景进场前加载）。
+ * - 图集由美术管线生成（`pnpm art`，见 scripts/art/README.md）：精灵按显示尺寸的 2 倍存，游戏里用 `ART_SCALE` 缩小；
+ * - 其余是占位图（scripts/gen-placeholders.mjs），美术到位后逐步换成图集。
+ */
 export const ASSETS = {
-  archerBody: tex('hero_archer_body.png'),
-  archerWeapon: tex('hero_archer_weapon.png'),
-  mageBody: tex('hero_mage_body.png'),
-  mageWeapon: tex('hero_mage_weapon.png'),
-  knightBody: tex('hero_knight_body.png'),
-  knightWeapon: tex('hero_knight_weapon.png'),
+  /** 英雄：`<hero>_body`（锚点在脚底）和 `<hero>_weapon`（锚点在握持处）。 */
+  heroes: atlas('heroes.png', heroesData),
   slime: tex('slime.png'),
   slot: tex('slot.png'),
   arrow: tex('arrow.png'),
@@ -16,3 +17,6 @@ export const ASSETS = {
   dot: tex('dot.png'),
   range: tex('range.png'),
 }
+
+/** 图集里的精灵是显示尺寸的 2 倍（高分屏清晰），显示时乘这个缩放。 */
+export const ART_SCALE = 0.5

@@ -687,6 +687,8 @@ export class Battle extends Scene implements HeroWorld {
         }
       }
       if (t !== e.target) e.attackIn = Math.min(data.attack.interval * 0.5, Math.max(e.attackIn, 0))
+      // 放弃目标（英雄阵亡、走远）：从当前位置接着往下走，不走回原来的路线
+      if (!t && e.target && (e.ox !== 0 || e.oy !== 0)) e.repath(this.pathFrom(e.x, e.y))
       e.target = t
       if (!t || e.held || !e.inReach) continue
       e.attackIn -= dt
@@ -695,6 +697,16 @@ export class Battle extends Scene implements HeroWorld {
       e.lunge()
       this.hurtHero(t, data.attack.damage * (e.elite ? ELITE.attack : 1))
     }
+  }
+
+  /** 从 (x, y) 出发往下走的新随机路线（离开路线的怪放弃目标、在路线外死掉的怪分裂 / 被复活时用）。 */
+  pathFrom(x: number, y: number): Curve2D {
+    return randomPath((a, b) => this.tree.rng.randfRange(a, b), x, y)
+  }
+
+  /** 怪现在走的路线和进度；离开了路线（在打英雄）就是从它当前位置出发的新路线。 */
+  private _routeOf(e: Enemy): { path: Curve2D; dist: number } {
+    return e.ox === 0 && e.oy === 0 ? { path: e.path, dist: e.dist } : { path: this.pathFrom(e.x, e.y), dist: 0 }
   }
 
   /** 英雄挨打：扣血、飘红字、音效；打死了墓碑出现、阵亡音效（怪下一帧自己放弃它）。 */
@@ -825,19 +837,21 @@ export class Battle extends Scene implements HeroWorld {
     }
     // 巫妖可以复活的怪：记下死在哪
     if (this.enemies.some((b) => !b.dead && ENEMIES[b.kind].revive?.kind === e.kind)) {
-      this.graves.push({ kind: e.kind, path: e.path, dist: e.dist, x: e.x, y: e.y, time: this.tree.time })
+      const route = this._routeOf(e)
+      this.graves.push({ kind: e.kind, path: route.path, dist: route.dist, x: e.x, y: e.y, time: this.tree.time })
     }
     if (e === this.boss) {
       this.boss = null
       // 打死最后一波的 Boss：胜利（不用等剩下的小怪）
       if (this.wave >= WAVE_COUNT && this.state !== 'lost') this.state = 'won'
     }
-    // 分裂：在原路线上前后错开出几只小怪（不显示路线预览）
+    // 分裂：在它的路线上前后错开出几只小怪（不显示路线预览；在路线外死的，路线从死的地方出发）
     const split = ENEMIES[e.kind].split
     if (split) {
+      const route = this._routeOf(e)
       for (let i = 0; i < split.count; i++) {
-        const child = this.spawnEnemy(split.kind, e.path, enemyHp(split.kind, Math.max(1, this.wave)), false, false)
-        child.dist = Math.max(0, e.dist + (i - (split.count - 1) / 2) * 30)
+        const child = this.spawnEnemy(split.kind, route.path, enemyHp(split.kind, Math.max(1, this.wave)), false, false)
+        child.dist = Math.max(0, route.dist + (i - (split.count - 1) / 2) * 30)
         child.pushBack(0)
       }
     }

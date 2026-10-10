@@ -121,7 +121,7 @@ describe('怪物仇恨', () => {
     expect(archer.hp).toBe(archer.maxHp)
   })
 
-  it('英雄阵亡后，围攻它的怪走回路线继续往下', async () => {
+  it('英雄阵亡后，围攻它的怪从当前位置接着往下走（不走回原来的路线）', async () => {
     const { g, battle } = await setup()
     const archer = battle.startWith('archer', v(375, 900))
     battle.stopSpawning()
@@ -131,12 +131,33 @@ describe('怪物仇恨', () => {
     const before = archer.hp
     while (archer.hp === before) g.step()
     expect(before - archer.hp).toBeCloseTo(ENEMIES.skeleton.attack!.damage * 2)
+    const oldPath = e.path
     archer.takeDamage(1e6)
-    const dist = e.dist
-    g.stepSeconds(2)
-    expect(e.target).toBe(null)
-    expect([e.ox, e.oy]).toEqual([0, 0])
-    expect(e.dist).toBeGreaterThan(dist)
+    g.step()
+    expect([e.target, e.ox, e.oy, e.path === oldPath]).toEqual([null, 0, 0, false])
+    // 新路线从它站的地方出发，一路往下（y 不减小）
+    let y = e.y
+    for (let i = 0; i < 120; i++) {
+      g.step()
+      expect(e.y).toBeGreaterThanOrEqual(y - 0.01)
+      y = e.y
+    }
+    expect(e.y).toBeGreaterThan(900)
+  })
+
+  it('在路线外（打英雄时）死掉的分裂史莱姆：小史莱姆从死的地方出来', async () => {
+    const { g, battle } = await setup()
+    const archer = battle.startWith('archer', v(375, 900))
+    battle.stopSpawning()
+    archer.cooldown = 1e9
+    const s = walker(battle, 'splitter', 450, 700)
+    g.stepSeconds(3)
+    expect(s.target).toBe(archer)
+    const at = { x: s.x, y: s.y }
+    battle.damage(s, 1e9)
+    const kids = battle.enemies.filter((e) => e.kind === 'smallSlime')
+    expect(kids).toHaveLength(2)
+    for (const k of kids) expect(Math.hypot(k.x - at.x, k.y - at.y)).toBeLessThan(40)
   })
 
   it('被击退后重新走回英雄身边', async () => {

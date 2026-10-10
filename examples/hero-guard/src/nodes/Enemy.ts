@@ -21,7 +21,8 @@ export interface EnemyLook {
 /**
  * 怪物：沿自己的 `Curve2D` 匀速前进（`dist` 是走过的距离，`remaining` 越小离城门越近）。
  * 有 `target`（Battle 按仇恨设置的英雄）时离开路线走过去，到了够得着的距离停下（Battle 结算攻击）；
- * 目标没了就走回离开时的那个路线点，再继续往下。位置 = 路线上的点 + 偏移（`ox`, `oy`），离开路线时路线进度不动。
+ * 位置 = 路线上的点 + 偏移（`ox`, `oy`），离开路线时路线进度不动。目标没了，Battle 给它一条从当前位置出发的新路线
+ * （`repath`），直接接着往下走，不走回原来的路线。
  * 走路是程序化的上下弹跳 + 落地时压扁；按前进方向翻转；受击闪白；受过伤才显示头顶血条。
  */
 export class Enemy extends Node2D {
@@ -69,7 +70,8 @@ export class Enemy extends Node2D {
 
   constructor(
     readonly kind: EnemyKind,
-    readonly path: Curve2D,
+    /** 走的路线（离开路线去打英雄、放弃之后会换成从当时位置出发的新路线，见 `repath`）。 */
+    public path: Curve2D,
     readonly maxHp: number,
     look: EnemyLook,
     phase: number,
@@ -181,7 +183,16 @@ export class Enemy extends Node2D {
     this._move(0)
   }
 
-  /** 走回离开路线时的那个点（偏移缩回 0）。 */
+  /** 换一条路线，从头开始走（离开路线打完英雄后，从当前位置出发的新路线）。偏移清零。 */
+  repath(path: Curve2D): void {
+    this.path = path
+    this.dist = 0
+    this.ox = 0
+    this.oy = 0
+    this._move(0, true)
+  }
+
+  /** 走回离开路线时的那个点（偏移缩回 0）。正常不会走到这里（Battle 放弃目标时会 `repath`），留作保险。 */
   private _return(step: number) {
     const d = Math.hypot(this.ox, this.oy)
     if (d <= step) {

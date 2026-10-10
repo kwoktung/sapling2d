@@ -1,6 +1,6 @@
 import { Camera2D, ColorRect, Ease, HitTester, Node2D, Particles2D, Scene, Sprite2D, type Curve2D, type PointerEvent2D, type Tween, v, Vector2 } from 'sapling2d'
 import { ASSETS } from '../assets'
-import { FEEL, FIELD, SLOTS, START, Z } from '../config'
+import { FEEL, FIELD, SLOTS, START, ULT, Z } from '../config'
 import { ENEMIES, enemyHp, type EnemyKind } from '../data/enemies'
 import { HERO_KINDS, HEROES, type HeroKind } from '../data/heroes'
 import {
@@ -31,6 +31,7 @@ import { Archer, Knight, Mage, type Hero, type HeroWorld, type Slash } from '../
 import { HeroPicker } from '../nodes/HeroPicker'
 import { Hud } from '../nodes/Hud'
 import { PathPreview } from '../nodes/PathPreview'
+import { AimRing, MeteorStrike, RainZone, UltBar } from '../nodes/Ultimates'
 import { UpgradePicker } from '../nodes/UpgradePicker'
 import { Slot } from '../nodes/Slot'
 import { randomPath } from '../path'
@@ -84,6 +85,14 @@ export class Battle extends Scene implements HeroWorld {
   placing: HeroKind | null = null
   /** 燃烧地面（Battle 每 0.5 秒对里面的敌人造成伤害）。 */
   readonly burns: BurnZone[] = []
+  /** 大招：每个英雄的能量、上次放大招的游戏时间、充能倍率（通用选项“大招充能 +25%”改它）。 */
+  readonly energy: Record<HeroKind, number> = { archer: 0, mage: 0, knight: 0 }
+  readonly lastUlt: Record<HeroKind, number> = { archer: -Infinity, mage: -Infinity, knight: -Infinity }
+  ultChargeMul = 1
+  ultBar!: UltBar
+  aimRing!: AimRing
+  /** 这次冲锋已经撞过的敌人。 */
+  private readonly _charged = new Set<Enemy>()
   readonly enemies: Enemy[] = []
   readonly heroes: Hero[] = []
   readonly slots: Slot[] = []
@@ -126,8 +135,17 @@ export class Battle extends Scene implements HeroWorld {
     )
     this.camera = this.add(new Camera2D({ position: v(375, 667) }))
     this.hud = this.add(new Hud())
+    this.aimRing = this.add(new AimRing())
+    this.ultBar = this.add(new UltBar())
+    this.ultBar.aimMove.connect((kind, at) => this._aimAt(kind, at), this)
+    this.ultBar.aimEnd.connect((kind, at) => this._aimEnd(kind, at), this)
+    this.ultBar.cast.connect((kind) => kind === 'knight' && this.knightCharge(), this)
     this._updateHud()
     this.openHeroPicker('选择你的第一位英雄')
+  }
+
+  override exitTree() {
+    this.tree.timeScale = 1 // 打击停顿中结束这一局（重开）时，不要把停住的时间带到下一局
   }
 
   // ---------------------------------------------------------------- 选英雄
@@ -211,7 +229,7 @@ export class Battle extends Scene implements HeroWorld {
   }
 
   private _beginDrag(hero: Hero, e: PointerEvent2D) {
-    if (this._drag || this.state === 'won' || this.state === 'lost' || this.state === 'choosing' || this.state === 'placing') return
+    if (this._drag || hero.busy || this.state === 'won' || this.state === 'lost' || this.state === 'choosing' || this.state === 'placing') return
     this._drag = { hero, dx: hero.x - e.position.x, dy: hero.y - e.position.y }
     hero.dragging = true
     hero.cancelAttack()
@@ -345,7 +363,7 @@ export class Battle extends Scene implements HeroWorld {
 
   private _arrowHit(e: Enemy, shot: Shot) {
     if (shot.poison) this.poison(e, shot.poison.dps, shot.poison.time, shot.poison.maxStacks, 1)
-    this.damage(e, shot.damage, { crit: shot.crit || shot.headshot, ignoreArmor: shot.headshot })
+    this.damage(e, shot.damage, { crit: shot.crit || shot.headshot, ignoreArmor: shot.headshot, source: 'archer' })
   }
 
   // ---------------------------------------------------------------- 法师
@@ -370,7 +388,7 @@ export class Battle extends Scene implements HeroWorld {
       if (e.dead || (e.x - f.x) ** 2 + (e.y - 20 - f.y) ** 2 > r2) continue
       if (b.slowPct > 0) this.slow(e, b.slowPct, b.slowTime)
       if (b.freeze) this._frostHit(e)
-      this.damage(e, b.damage)
+      this.damage(e, b.damage, { source: 'mage' })
     }
     if (b.burnGround) this.burns.push(this.add(new BurnZone(f.x, f.y + 20, b.radius, BURN_TIME)))
     this._burst(f.x, f.y, b.radius, 0xff8030)
@@ -387,7 +405,7 @@ export class Battle extends Scene implements HeroWorld {
       this.add(new Bolt(fromX, fromY, t.x, t.y - 24, this.tree.rng.randfRange(-14, 14)))
       fromX = t.x
       fromY = t.y - 24
-      this.damage(t, dmg)
+      this.damage(t, dmg, { source: 'mage' })
       dmg *= falloff
       // 下一跳：离这里最近、没打过的敌人
       let next: Enemy | null = null
@@ -429,14 +447,14 @@ export class Battle extends Scene implements HeroWorld {
         e.pushBack(s.knockback)
         if (s.stunChance > 0 && this.tree.rng.randf() < s.stunChance) this.stun(e, s.stunTime)
       }
-      this.damage(e, s.damage)
+      this.damage(e, s.damage, { source: 'knight' })
     }
     if (s.collide) {
       for (const e of hit) {
         if (e.dead || !this.controllable(e)) continue
         for (const o of this.enemies) {
           if (o === e || o.dead || hit.includes(o)) continue
-          if ((o.x - e.x) ** 2 + (o.y - e.y) ** 2 <= COLLIDE_RADIUS ** 2) this.damage(o, s.damage * COLLIDE_MUL)
+          if ((o.x - e.x) ** 2 + (o.y - e.y) ** 2 <= COLLIDE_RADIUS ** 2) this.damage(o, s.damage * COLLIDE_MUL, { source: 'knight' })
         }
       }
     }
@@ -555,7 +573,7 @@ export class Battle extends Scene implements HeroWorld {
         e.poisonTick -= dt
         if (e.poisonTick <= 0) {
           e.poisonTick += POISON_TICK
-          this.damage(e, e.poisonStacks * e.poisonDps * POISON_TICK, { dot: true })
+          this.damage(e, e.poisonStacks * e.poisonDps * POISON_TICK, { dot: true, source: 'archer' })
         }
         if (e.poisonLeft <= 0 && !e.dead) {
           e.poisonStacks = 0
@@ -573,7 +591,7 @@ export class Battle extends Scene implements HeroWorld {
     for (const z of this.burns) {
       if (!z.burning) continue
       const r2 = z.radius * z.radius
-      for (const e of enemies) if (!e.dead && (e.x - z.x) ** 2 + (e.y - z.y) ** 2 <= r2) this.damage(e, BURN_DPS * POISON_TICK, { dot: true })
+      for (const e of enemies) if (!e.dead && (e.x - z.x) ** 2 + (e.y - z.y) ** 2 <= r2) this.damage(e, BURN_DPS * POISON_TICK, { dot: true, source: 'mage' })
     }
     for (let i = this.burns.length - 1; i >= 0; i--) if (!this.burns[i]!.burning) this.burns.splice(i, 1)
   }
@@ -592,8 +610,9 @@ export class Battle extends Scene implements HeroWorld {
    * 扣血、飘字、火花；打死了加经验、碎片。`crit` 飘字大一号带感叹号，`dot`（中毒等持续伤害）绿色、没有火花。
    * `ignoreArmor`：08 的护甲（弓箭伤害减半）用。
    */
-  damage(e: Enemy, amount: number, opts: { crit?: boolean; dot?: boolean; ignoreArmor?: boolean } = {}): void {
+  damage(e: Enemy, amount: number, opts: { crit?: boolean; dot?: boolean; ignoreArmor?: boolean; source?: HeroKind } = {}): void {
     if (e.dead) return
+    if (opts.source) this.chargeUlt(opts.source, Math.min(amount, e.hp))
     const killed = e.damage(amount)
     const text = opts.crit ? `${Math.round(amount)}!` : String(Math.round(amount))
     this._float(text, e.x, e.y - 50, opts.dot ? 0x90ff70 : opts.crit ? 0xffb030 : killed ? 0xffd040 : 0xffffff, opts.crit ? 1.4 : opts.dot ? 0.8 : 1)
@@ -634,8 +653,102 @@ export class Battle extends Scene implements HeroWorld {
     }
   }
 
+  // ---------------------------------------------------------------- 大招
+
+  /** 英雄造成伤害时积攒能量。 */
+  chargeUlt(kind: HeroKind, damage: number): void {
+    this.energy[kind] = Math.min(ULT.energyMax, this.energy[kind] + (damage / ULT.damagePerEnergy) * this.ultChargeMul)
+  }
+
+  /** 能不能放：英雄在场上、能量满了、离上次放够 12 秒、不在升级弹窗里。 */
+  canUlt(kind: HeroKind): boolean {
+    return !!this.heroOf(kind) && this.energy[kind] >= ULT.energyMax && this.tree.time - this.lastUlt[kind] >= ULT.minInterval && !this.picker && (this.state === 'wave' || this.state === 'gap')
+  }
+
+  private _consume(kind: HeroKind) {
+    this.energy[kind] = 0
+    this.lastUlt[kind] = this.tree.time
+  }
+
+  private _aimAt(kind: HeroKind, design: Vector2) {
+    const at = this.tree.viewport.designToWorld(design)
+    this.aimRing.showAt(at.x, at.y, kind === 'archer' ? ULT.rain.radius : ULT.meteor.radius)
+  }
+
+  private _aimEnd(kind: HeroKind, design: Vector2 | null) {
+    this.aimRing.visible = false
+    if (!design) return
+    const at = this.tree.viewport.designToWorld(design)
+    if (kind === 'archer') this.arrowRain(at.x, at.y)
+    else if (kind === 'mage') this.meteor(at.x, at.y)
+  }
+
+  /** 弓手箭雨：2 秒内 10 轮，每轮对圈里所有敌人造成弓手伤害 × 2.5。 */
+  arrowRain(x: number, y: number): boolean {
+    const archer = this.heroOf('archer')
+    if (!archer || !this.canUlt('archer')) return false
+    this._consume('archer')
+    const damage = archer.stats.damage * ULT.rain.mul
+    this.add(
+      new RainZone(x, y, ULT.rain.radius, (cx, cy, r) => {
+        for (const e of this.enemies) if (!e.dead && (e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r) this.damage(e, damage)
+      }, (a, b) => this.tree.rng.randfRange(a, b)),
+    )
+    return true
+  }
+
+  /** 法师陨石：0.8 秒后落地，半径内敌人受法师伤害 × 16，屏幕震动 + 打击停顿。 */
+  meteor(x: number, y: number): boolean {
+    const mage = this.heroOf('mage')
+    if (!mage || !this.canUlt('mage')) return false
+    this._consume('mage')
+    const damage = mage.stats.damage * ULT.meteor.mul
+    this.add(
+      new MeteorStrike(x, y, ULT.meteor.radius, (cx, cy) => {
+        const r2 = ULT.meteor.radius ** 2
+        for (const e of this.enemies) if (!e.dead && (e.x - cx) ** 2 + (e.y - cy) ** 2 <= r2) this.damage(e, damage)
+        this._burst(cx, cy, ULT.meteor.radius, 0xff6020)
+        this.shake(FEEL.shake * 1.6, FEEL.shakeTime * 1.4)
+        this.hitStop(ULT.meteor.hitStop)
+      }),
+    )
+    return true
+  }
+
+  /** 骑士冲锋：竖直冲到顶再回来，沿线的敌人受骑士伤害 × 4、击退 60、眩晕 1.5 秒（幽灵只受伤害）。 */
+  knightCharge(): boolean {
+    const knight = this.heroOf('knight') as Knight | null
+    if (!knight || !this.canUlt('knight')) return false
+    this._consume('knight')
+    this._charged.clear()
+    knight.charge(ULT.charge.topY, ULT.charge.time, () => this._charged.clear())
+    return true
+  }
+
+  chargeSweep(knight: Hero, y0: number, y1: number): void {
+    const half = ULT.charge.width / 2
+    const lo = Math.min(y0, y1) - 30
+    const hi = Math.max(y0, y1) + 30
+    for (const e of this.enemies) {
+      if (e.dead || this._charged.has(e) || Math.abs(e.x - knight.x) > half || e.y < lo || e.y > hi) continue
+      this._charged.add(e)
+      if (this.controllable(e)) {
+        e.pushBack(ULT.charge.knockback)
+        this.stun(e, ULT.charge.stun)
+      }
+      this.damage(e, knight.stats.damage * ULT.charge.mul)
+    }
+  }
+
+  /** 打击停顿：游戏时间停一小会儿（按真实时间恢复；用 timeout.connect 不用 await，无头测试里也能恢复）。 */
+  hitStop(seconds: number): void {
+    this.tree.timeScale = 0
+    this.tree.createTimer(seconds, { ignoreTimeScale: true }).timeout.connect(() => (this.tree.timeScale = 1), this)
+  }
+
   /** 弹出三选一：游戏暂停，选完继续。没有可选的节点时这次升级直接跳过。 */
   openPicker(): void {
+    this.ultBar.cancelAim()
     const offers = drawOffers(availableNodes(this.placedKinds, this.branchLevels), 3, (n) => this.tree.rng.randiRange(0, n - 1))
     const level = this.level - this.pendingLevels + 1
     this.pendingLevels--
@@ -772,6 +885,7 @@ export class Battle extends Scene implements HeroWorld {
   }
 
   private _updateHud() {
+    for (const k of HERO_KINDS) this.ultBar.buttons[k].update(!!this.heroOf(k), this.energy[k] / ULT.energyMax, this.canUlt(k))
     const h = this._hud
     if (h.lives === this.lives && h.wave === this.wave && h.level === this.level && h.levelXp === this.levelXp) return
     h.lives = this.lives

@@ -61,3 +61,18 @@ export const Z = {
   /** 拖动中的英雄画在最上面。 */
   dragging: 2300,
 }
+
+/** 大招（spec 的起始值）。 */
+export const ULT = {
+  energyMax: 100,
+  /** 英雄每造成这么多伤害 +1 能量。 */
+  damagePerEnergy: 5,
+  /** 同一个英雄两次大招之间至少隔多久（后期伤害高时不至于连放）。 */
+  minInterval: 12,
+  /** 弓手箭雨：半径、持续时间、几轮、每轮伤害 = 弓手伤害 × mul。 */
+  rain: { radius: 120, time: 2, volleys: 10, mul: 2.5 },
+  /** 法师陨石：半径、落地前的延迟、伤害 = 法师伤害 × mul。 */
+  meteor: { radius: 160, delay: 0.8, mul: 16, hitStop: 0.08 },
+  /** 骑士冲锋：沿线的宽度、伤害 = 骑士伤害 × mul、击退、眩晕、冲到顶再回来的总时间。 */
+  charge: { width: 80, mul: 4, knockback: 60, stun: 1.5, time: 0.7, topY: 120 },
+}

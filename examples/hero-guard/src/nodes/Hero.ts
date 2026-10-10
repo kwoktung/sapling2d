@@ -22,6 +22,8 @@ export interface HeroWorld {
   slash(hero: Hero, target: Enemy, s: Slash): void
   /** 嘲讽光环：半径内的敌人停下。 */
   tauntAura(x: number, y: number): void
+  /** 骑士冲锋这一帧从 y0 冲到 y1：沿线的敌人受伤、击退、眩晕（每次冲锋每只一次）。 */
+  chargeSweep(knight: Hero, y0: number, y1: number): void
   /** [0, 1) 的随机数（tree.rng，测试可复现）。 */
   random(): number
 }
@@ -90,9 +92,12 @@ export abstract class Hero extends Node2D {
     this.rangeRing.visible = show
   }
 
+  /** 放大招中（骑士冲锋）：不攻击、不能拖。 */
+  busy = false
+
   override process(dt: number) {
     this.cooldown -= dt
-    if (this.dragging || this._attacking || this.cooldown > 0) return
+    if (this.dragging || this.busy || this._attacking || this.cooldown > 0) return
     const target = this.world.findTarget(this.x, this.y, this.stats.range)
     if (!target) return
     this.cooldown = this.stats.interval
@@ -289,9 +294,35 @@ export class Knight extends Hero {
     this.stats.interval = base.interval * this.mods.intervalMul
   }
 
+  /** 冲锋：竖直冲到 `topY` 再冲回原位（总共 `time` 秒），每帧把这段移动交给 `chargeSweep`；结束时回调 `done`。 */
+  charge(topY: number, time: number, done: () => void): void {
+    this.cancelAttack()
+    this.busy = true
+    const homeY = this.y
+    const z = this.zIndex
+    this.zIndex = 2300
+    this._chargeY = homeY
+    this.createTween()
+      .to(this, { y: topY }, time * 0.45, Ease.QuadIn)
+      .to(this, { y: homeY }, time * 0.55, Ease.QuadOut)
+      .call(() => {
+        this.busy = false
+        this.zIndex = z
+        this._chargeY = null
+        done()
+      })
+  }
+
+  /** 冲锋中上一帧的 y（null 表示没在冲锋）。 */
+  private _chargeY: number | null = null
+
   override process(dt: number) {
     super.process(dt)
-    if (!this.mods.taunt || this.dragging) return
+    if (this._chargeY !== null) {
+      this.world.chargeSweep(this, this._chargeY, this.y)
+      this._chargeY = this.y
+    }
+    if (!this.mods.taunt || this.dragging || this.busy) return
     this._tauntIn -= dt
     if (this._tauntIn <= 0) {
       this._tauntIn += TAUNT_EVERY

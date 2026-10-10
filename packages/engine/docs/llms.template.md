@@ -250,7 +250,7 @@ shake(camera: Camera2D, strength: number, duration: number) {
 <!-- example:color-rect#test -->
 
 - `ColorRect`（继承 Node2D）：`size`、`color`（0xRRGGBB）。原点在**左上角**（和 Godot 一样，和 `Sprite2D` 默认居中不同）：血条改 `scale.x` 就从左往右缩。
-- 透明度用 `alpha`；`color`、`size` 都能补间（颜色按 RGB 通道插值）。没有 `hitArea` 时点击区域就是这个矩形（无头模式下也是），所以也能当简单的按钮底板。
+- 透明度用 `alpha`；`color`、`size` 都能补间（颜色按 RGB 通道插值）。没有 `hitArea` 时点击区域就是这个矩形（无头模式下也是），所以也能当简单的按钮底板。**当按钮或遮罩用时要设 `inputPickable: true`**：不设的话照常画出来，但点不到、也挡不住下面的点击，没有任何提示。
 - 和贴图一起合批绘制（白色贴图染色），几十个血条不会增加绘制调用。圆、圆环之类的形状用贴图加 `modulate`。
 
 ### 场景切换与存档
@@ -446,4 +446,4 @@ for (let i = 0; i < bullets.length; i++) {
 ## 更多
 
 - 术语表：仓库根目录 `CONTEXT.md`；架构决策：`docs/adr/`；微信环境实测：`spikes/wechat/REPORT.md`。
-- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/plane`（飞机大战：图集、帧动画、粒子、用 HitTester 做碰撞、暂停）、`examples/platformer`（横版跳跃：Tiled 关卡、CharacterBody2D、Camera2D、CanvasLayer 的 HUD、屏幕按钮、像素风、横屏）、`examples/spinblade`（俯视角转刀：摇杆、俯视角 CharacterBody2D、旋转矩形的命中判定（游戏自己的 KnifeCollider）、打击停顿、屏幕震动、粒子、ColorRect 血条、Boss）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。
+- 示例：`examples/merge`（合成大西瓜，含无头测试）、`examples/plane`（飞机大战：图集、帧动画、粒子、用 HitTester 做碰撞、暂停）、`examples/platformer`（横版跳跃：Tiled 关卡、CharacterBody2D、Camera2D、CanvasLayer 的 HUD、屏幕按钮、像素风、横屏）、`examples/spinblade`（俯视角转刀：摇杆、俯视角 CharacterBody2D、旋转矩形的命中判定（游戏自己的 KnifeCollider）、打击停顿、屏幕震动、粒子、ColorRect 血条、Boss）、`examples/towerdefense`（竖版塔防灰盒：随机曲线路径、带每帧时长的攻击动画和出手帧结算、对象池、三选一升级卡片）、`examples/physics`、`examples/sprite`；项目模板：`templates/game`。

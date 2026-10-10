@@ -1,0 +1,25 @@
+{
+  "name": "example-towerdefense",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "dev:wechat": "vite build -c vite.wechat.config.ts --watch",
+    "build:wechat": "vite build -c vite.wechat.config.ts",
+    "log-server": "node log-server.ts",
+    "check": "tsc -p tsconfig.json && vitest run",
+    "assets": "node scripts/gen-assets.mjs"
+  },
+  "dependencies": {
+    "sapling2d": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "7.0.2",
+    "vite": "8.3.3",
+    "vitest": "5.0.3"
+  }
+}

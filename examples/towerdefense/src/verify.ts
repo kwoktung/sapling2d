@@ -1,6 +1,6 @@
 import type { Game } from 'sapling2d'
 import { snapshot } from 'sapling2d/wechat'
-import { CurvePath } from './path'
+import { linePath } from './path'
 import { Battle } from './scenes/Battle'
 
 const wait = (s: number) => new Promise((r) => setTimeout(r, s * 1000))
@@ -16,7 +16,7 @@ export async function runVerify(game: Game): Promise<void> {
   battle.stopSpawning()
   battle.gold = 1e6
   for (const [i, kind] of [[4, 'archer'], [5, 'mage'], [6, 'knight'], [7, 'knight']] as const) battle.placeHero(battle.slots[i]!, kind)
-  const enemies = [150, 300, 450].map((x) => battle.spawnEnemy(CurvePath.line(x, 560, 3000), 1e6, 0))
+  const enemies = [150, 300, 450].map((x) => battle.spawnEnemy(linePath(x, 560, 3000), 1e6, 0))
   await wait(1.5)
   game.tree.timeScale = 0
   const [archer, mage, knight] = battle.heroes

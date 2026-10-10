@@ -22,8 +22,6 @@ export const PATH = {
   jitterY: 40,
   /** 相邻两个控制点横向最多差多少：越大越弯。 */
   maxDx: 260,
-  /** 每段曲线采样多少个点（弧长表的精度）。 */
-  samplesPerSegment: 16,
 }
 
 export const START = { gold: 150, lives: 10 }

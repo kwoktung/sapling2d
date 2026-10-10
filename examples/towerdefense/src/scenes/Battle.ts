@@ -7,7 +7,7 @@ import { Hero, type HeroWorld } from '../nodes/Hero'
 import { Hud } from '../nodes/Hud'
 import { Projectile } from '../nodes/Projectile'
 import { UpgradePicker } from '../nodes/UpgradePicker'
-import { CurvePath } from '../path'
+import { randomPath } from '../path'
 import { baseStats, drawUpgrades, type HeroKind, type HeroStats, type Upgrade } from '../skills'
 
 export type BattleState = 'wave' | 'picking' | 'lost'
@@ -97,7 +97,7 @@ export class Battle extends Scene implements HeroWorld {
   }
 
   /** 生成一只怪：默认走一条新的随机路径。 */
-  spawnEnemy(path = CurvePath.random((a, b) => this.tree.rng.randfRange(a, b)), hp = WAVE.hp(Math.max(1, this.round)), speed = WAVE.speed(Math.max(1, this.round))): Enemy {
+  spawnEnemy(path = randomPath((a, b) => this.tree.rng.randfRange(a, b)), hp = WAVE.hp(Math.max(1, this.round)), speed = WAVE.speed(Math.max(1, this.round))): Enemy {
     const e = this.add(new Enemy(path, hp, speed, WAVE.reward(Math.max(1, this.round))))
     this.enemies.push(e)
     return e

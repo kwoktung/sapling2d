@@ -105,6 +105,19 @@
 
 <!-- example:hit-tester -->
 
+### 曲线路径（Curve2D）
+
+塔防怪物的行进路线、弯曲的弹道、巡逻路线：按**走过的距离**取点，弯道上也是匀速。
+
+<!-- example:curve -->
+
+<!-- example:curve#test -->
+
+- `Curve2D.catmullRom(points, { closed?, bakeInterval? })`：平滑地经过每一个控制点（centripetal 参数化：普通的 uniform Catmull-Rom 在控制点间距不均时会打结、出尖角，随机生成的路线尤其容易）。`Curve2D.polyline(points, { closed? })`：直线段相连。控制点可以是 `Vector2` 或任何带 `x` / `y` 的对象；相邻的重复点自动去掉。
+- `length`（像素）；`sample(distance, out)` 把位置写进 `out` 并返回它（`out` 每帧复用，不分配）；`angleAt(distance)` 是前进方向（弧度，0 朝右，和 `rotation` 一致）。开放曲线超出 [0, length] 时停在端点；`closed: true` 时首尾相接、距离绕回起点（巡逻）。
+- 创建时预先采样成折线（间距 `bakeInterval`，默认 5 像素），之后取点是二分查找。曲线不可变：每只怪一条随机路线就各建一条（建一条约几十个点，很便宜），不要每帧新建。
+- 只是数据，不是节点：节点自己记 `dist`，每帧 `dist += speed * dt` 再 `sample`。减速、冰冻就是改 `speed`；“谁离终点最近”就是 `length - dist` 最小的那个；击退就是 `dist -= …`。
+
 ### 计时器与补间
 
 <!-- example:timer-tween -->
@@ -367,6 +380,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 | `TouchScreenButton` | 屏幕按钮（继承 Sprite2D） | `action` `texturePressed` `passbyPress` `isPressed` `hitArea`；信号 `pressed` `released` |
 | `TouchJoystick` | 摇杆（继承 Node2D） | `mode`（`dynamic` / `fixed`）`actions` `radius` `deadzone` `region` `texture` `textureKnob` `vectorX` `vectorY` `vector` `isPressed`；信号 `pressed` `released` |
 | `TiledMap`（资源，不是节点） | Tiled 关卡 | `tiledMap(path)`；`createLayers()` `createLayer(name)` `objects(layer?)` `objectLayers` `layerNames` `width` `height` `tileSize` `pixelWidth` `pixelHeight` `tileSets` `properties` |
+| `Curve2D`（不是节点） | 曲线路径，按距离取点 | `Curve2D.catmullRom(points, { closed?, bakeInterval? })` `Curve2D.polyline(points)`；`length` `sample(distance, out)` `angleAt(distance)` `closed` |
 | `HitTester`（不是节点） | 两组对象之间的圆 / 矩形命中判定 | `forEachHit(as, bs, hit)`（`hit` 返回 true 表示 a 用掉了）、`HitTester.compact(list)`；对象需要 `x` `y` `hitShape`，可选 `dead` |
 | `CollisionShape2D` | 碰撞形状（必须是刚体 / 区域的直接子节点） | `shape`：`circle(r)` `rectangle(w, h)` `polygon(points)`；`disabled` |
 | `Timer` | 计时器 | `waitTime` `oneShot` `autostart` `start()` `stop()` `timeLeft`；信号 `timeout` |

@@ -93,7 +93,17 @@ async function generate(a: AssetSpec): Promise<void> {
 }
 
 async function genAll(): Promise<void> {
-  const todo = selected.filter((a) => flag('force') || !rawFile(a.id))
+  // 挑定的图（from）直接拷成原图
+  for (const a of selected) {
+    if (!a.from || (rawFile(a.id) && !flag('force'))) continue
+    const src = join(ART, a.from)
+    if (!existsSync(src)) throw new Error(`${a.id}: from ${a.from} does not exist`)
+    const old = rawFile(a.id)
+    if (old) unlinkSync(old)
+    writeFileSync(join(RAW, `${a.id}${src.slice(src.lastIndexOf('.'))}`), readFileSync(src))
+    console.log(`  from  ${a.id} ← ${a.from}`)
+  }
+  const todo = selected.filter((a) => !a.from && (flag('force') || !rawFile(a.id)))
   // edit 模式依赖 refs 里的原图：先做 generate，再做 edit
   for (const batch of [todo.filter((a) => a.mode === 'generate'), todo.filter((a) => a.mode === 'edit')]) {
     for (let i = 0; i < batch.length; i += CONCURRENCY) await Promise.all(batch.slice(i, i + CONCURRENCY).map(generate))

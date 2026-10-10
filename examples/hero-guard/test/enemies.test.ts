@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createTestGame } from 'sapling2d/testing'
+import { ART_SCALE } from '../src/assets'
 import { ELITE, ENEMIES, enemyHp, type EnemyKind } from '../src/data/enemies'
 import { WAVE_COUNT, WAVES } from '../src/data/waves'
 import { gameOptions } from '../src/game'
@@ -87,7 +88,7 @@ describe('精英', () => {
     const { g, battle } = await setup()
     const e = battle.spawnEnemy('slime', linePath(300, 1120, 1300), undefined, true)
     expect([e.maxHp, e.xp, e.leak, e.elite]).toEqual([ENEMIES.slime.hp * ELITE.hp, ENEMIES.slime.xp * ELITE.xp, 2, true])
-    expect(e.body.scale.x).toBeCloseTo(ELITE.scale, 1)
+    expect(e.body.scale.x).toBeCloseTo(ELITE.scale * ART_SCALE, 1)
     g.stepSeconds(4)
     expect(battle.lives).toBe(18)
   })

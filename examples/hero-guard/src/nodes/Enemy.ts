@@ -1,13 +1,11 @@
 import { ColorRect, Node2D, Sprite2D, v, type Curve2D, type Texture } from 'sapling2d'
+import { ART_SCALE, ASSETS } from '../assets'
 import { ENEMY_FEEL } from '../config'
-import { ASSETS } from '../assets'
 import { ELITE, ENEMIES, type EnemyKind } from '../data/enemies'
 
-/** 怪物的贴图和脚底到贴图中心的距离（身体节点的原点在脚底）。 */
+/** 怪物的贴图：图集的帧，锚点在脚底（美术管线设的 pivot），按 2 倍存（显示时乘 `ART_SCALE`）。 */
 export interface EnemyLook {
   texture: Texture
-  /** 贴图高度的一半：身体精灵往上挪这么多，脚底正好在节点位置。 */
-  halfHeight: number
 }
 
 /**
@@ -42,8 +40,6 @@ export class Enemy extends Node2D {
   leaked = false
   private _flashLeft = 0
   private _hop: number
-  /** 脚底到身体贴图中心的距离（已乘缩放）。 */
-  private readonly _halfHeight: number
   private readonly _p = { x: 0, y: 0 }
 
   /** 显示的缩放（精灵放大）。 */
@@ -63,13 +59,15 @@ export class Enemy extends Node2D {
     this.abilityIn = ENEMIES[kind].summon?.every ?? ENEMIES[kind].revive?.every ?? 0
     this.hp = maxHp
     this._hop = phase
-    if (elite) this.add(new Sprite2D({ texture: ASSETS.glow, position: v(0, -look.halfHeight * k), scale: v(k * 1.5, k * 1.5), selfModulate: 0xffc030, blendMode: 'add', zIndex: -1 }))
-    this.body = this.add(new Sprite2D({ texture: look.texture, position: v(0, -look.halfHeight), scale: v(k, k) }))
+    // 身体显示出来的高度（已乘缩放）：血条放在它上面
+    const height = look.texture.height * ART_SCALE * k
+    if (elite) this.add(new Sprite2D({ texture: ASSETS.glow, position: v(0, -height / 2), scale: v((height / 64) * 1.4, (height / 64) * 1.4), selfModulate: 0xffc030, blendMode: 'add', zIndex: -1 }))
+    // 锚点在脚底：身体放在原点，弹跳时往上挪
+    this.body = this.add(new Sprite2D({ texture: look.texture, scale: v(k * ART_SCALE, k * ART_SCALE) }))
     this.barBack = this.add(
-      new ColorRect({ size: v(ENEMY_FEEL.barWidth, ENEMY_FEEL.barHeight), color: 0x301818, position: v(-ENEMY_FEEL.barWidth / 2, -look.halfHeight * 2 * k - 14), visible: false }),
+      new ColorRect({ size: v(ENEMY_FEEL.barWidth, ENEMY_FEEL.barHeight), color: 0x301818, position: v(-ENEMY_FEEL.barWidth / 2, -height - 14), visible: false }),
     )
     this.barBack.add(this.barFill)
-    this._halfHeight = look.halfHeight * k
     this._move(0)
   }
 
@@ -104,9 +102,9 @@ export class Enemy extends Node2D {
     if (!this.held) this._hop += dt * ENEMY_FEEL.hopRate * Math.PI * (1 - this.slowPct)
     const s = Math.abs(Math.sin(this._hop))
     const squash = (1 - s) * ENEMY_FEEL.squash
-    const k = this._sizeScale
-    this.body.y = -this._halfHeight - s * ENEMY_FEEL.hopHeight
-    this.body.scale = v(k * (1 + squash), k * (1 - squash))
+    const k = this._sizeScale * ART_SCALE
+    this.body.y = -s * ENEMY_FEEL.hopHeight
+    this.body.scale = v(k * (1 + squash), k * (1 - squash)) // 朝向用 flipH，不用负的缩放
     if (this._flashLeft > 0) {
       this._flashLeft = Math.max(0, this._flashLeft - dt)
       this.body.flash = this._flashLeft / ENEMY_FEEL.flashTime

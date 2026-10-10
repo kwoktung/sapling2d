@@ -1,0 +1,206 @@
+{
+ "frames": {
+  "enemy_slime": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 130,
+    "h": 128
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 130,
+    "h": 128
+   },
+   "sourceSize": {
+    "w": 130,
+    "h": 128
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "enemy_bat": {
+   "frame": {
+    "x": 0,
+    "y": 130,
+    "w": 154,
+    "h": 120
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 154,
+    "h": 120
+   },
+   "sourceSize": {
+    "w": 154,
+    "h": 120
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "enemy_skeleton": {
+   "frame": {
+    "x": 156,
+    "y": 0,
+    "w": 130,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 130,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 130,
+    "h": 168
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "enemy_splitter": {
+   "frame": {
+    "x": 0,
+    "y": 252,
+    "w": 109,
+    "h": 144
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 109,
+    "h": 144
+   },
+   "sourceSize": {
+    "w": 109,
+    "h": 144
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "enemy_shaman": {
+   "frame": {
+    "x": 156,
+    "y": 170,
+    "w": 112,
+    "h": 168
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 112,
+    "h": 168
+   },
+   "sourceSize": {
+    "w": 112,
+    "h": 168
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "enemy_ghost": {
+   "frame": {
+    "x": 288,
+    "y": 0,
+    "w": 142,
+    "h": 160
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 142,
+    "h": 160
+   },
+   "sourceSize": {
+    "w": 142,
+    "h": 160
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "enemy_slimeKing": {
+   "frame": {
+    "x": 0,
+    "y": 398,
+    "w": 283,
+    "h": 340
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 283,
+    "h": 340
+   },
+   "sourceSize": {
+    "w": 283,
+    "h": 340
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "enemy_lich": {
+   "frame": {
+    "x": 432,
+    "y": 0,
+    "w": 300,
+    "h": 380
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 300,
+    "h": 380
+   },
+   "sourceSize": {
+    "w": 300,
+    "h": 380
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  }
+ },
+ "meta": {
+  "app": "hero-guard/scripts/art",
+  "image": "enemies.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 732,
+   "h": 738
+  },
+  "scale": "1"
+ }
+}

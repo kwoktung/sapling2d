@@ -1,5 +1,5 @@
 // 生成骨架阶段的占位图：node scripts/gen-placeholders.mjs（美术到位后由 scripts/art/ 的管线替换）
-// - 怪物、槽位、箭、火花、光晕、路线虚线的点、射程圈、刀光（英雄已经换成美术管线生成的图集）
+// - 槽位、箭、火花、光晕、路线虚线的点、射程圈、刀光（英雄和怪物已经换成美术管线生成的图集）（英雄已经换成美术管线生成的图集）
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 
@@ -81,76 +81,6 @@ function ring(size, width, alpha = 255) {
 const save = (name, c) => writeFileSync(new URL(name, OUT), png(c))
 
 // ---------------------------------------------------------------- 怪物和场地
-
-/** 史莱姆：底宽顶圆的一团，脚底在下边缘。 */
-const slime = canvas(64, 56)
-ellipse(slime, 0, 32, 34, 28, 21, 0x6ad06a, 0x206a30)
-rect(slime, 0, 21, 28, 6, 8, 0x1a1a1a)
-rect(slime, 0, 37, 28, 6, 8, 0x1a1a1a)
-save('slime.png', slime)
-
-/** 蝙蝠：深紫色的身子 + 两只尖翅膀。 */
-const bat = canvas(80, 52)
-for (const side of [-1, 1]) for (let i = 0; i < 26; i++) rect(bat, 0, 40 + side * (10 + i) - (side < 0 ? 1 : 0), 18 + Math.abs(i - 13) * 0.8, 1, 18 - Math.abs(i - 13), 0x5a2a7a)
-ellipse(bat, 0, 40, 28, 14, 14, 0x7a3aa0, 0x2a0a40)
-rect(bat, 0, 33, 24, 4, 5, 0xffe040)
-rect(bat, 0, 43, 24, 4, 5, 0xffe040)
-save('bat.png', bat)
-
-/** 骷髅战士：骨白色的头 + 灰色头盔 + 身子。 */
-const skeleton = canvas(64, 76)
-ellipse(skeleton, 0, 32, 58, 18, 16, 0xb8b8c0, 0x404048)
-ellipse(skeleton, 0, 32, 28, 20, 20, 0xeeeae0, 0x404048)
-ellipse(skeleton, 0, 32, 16, 20, 9, 0x808890, 0x303038, 2)
-rect(skeleton, 0, 22, 26, 7, 8, 0x1a1a1a)
-rect(skeleton, 0, 35, 26, 7, 8, 0x1a1a1a)
-save('skeleton.png', skeleton)
-
-/** 分裂史莱姆：蓝紫色、带一道裂缝。 */
-const splitter = canvas(64, 56)
-ellipse(splitter, 0, 32, 34, 28, 21, 0x7a8ae0, 0x2a3a8a)
-rect(splitter, 0, 31, 14, 2, 30, 0x2a3a8a)
-rect(splitter, 0, 19, 28, 6, 8, 0x1a1a1a)
-rect(splitter, 0, 39, 28, 6, 8, 0x1a1a1a)
-save('splitter.png', splitter)
-
-/** 哥布林萨满：绿皮肤、尖耳朵、头顶的骨饰。 */
-const shaman = canvas(72, 72)
-ellipse(shaman, 0, 36, 56, 16, 14, 0x8a5a3a, 0x3a2010)
-ellipse(shaman, 0, 36, 30, 20, 18, 0x7ab04a, 0x2a4a10)
-for (const side of [-1, 1]) for (let i = 0; i < 12; i++) rect(shaman, 0, 36 + side * (18 + i) - (side < 0 ? 1 : 0), 26 - i / 3, 1, 6, 0x7ab04a)
-rect(shaman, 0, 29, 6, 14, 8, 0xeeeae0)
-rect(shaman, 0, 27, 26, 6, 6, 0xff4030)
-rect(shaman, 0, 39, 26, 6, 6, 0xff4030)
-save('shaman.png', shaman)
-
-/** 幽灵：白色的布单 + 黑眼睛（游戏里半透明）。 */
-const ghost = canvas(60, 70)
-ellipse(ghost, 0, 30, 28, 24, 24, 0xf0f4ff, 0x8090b0)
-rect(ghost, 0, 6, 28, 48, 34, 0xf0f4ff)
-for (let i = 0; i < 4; i++) ellipse(ghost, 0, 12 + i * 12, 62, 6, 6, 0xf0f4ff, 0xf0f4ff, 1)
-rect(ghost, 0, 20, 24, 7, 10, 0x1a1a2a)
-rect(ghost, 0, 34, 24, 7, 10, 0x1a1a2a)
-save('ghost.png', ghost)
-
-/** 史莱姆王：大一号的史莱姆 + 金冠。 */
-const king = canvas(150, 130)
-ellipse(king, 0, 75, 82, 66, 46, 0x5ac05a, 0x1a5a28, 5)
-for (let i = 0; i < 5; i++) rect(king, 0, 45 + i * 13, 22 - (i % 2) * 8, 9, 22 + (i % 2) * 8, 0xffd040)
-rect(king, 0, 45, 38, 61, 10, 0xffd040)
-rect(king, 0, 52, 72, 12, 16, 0x1a1a1a)
-rect(king, 0, 86, 72, 12, 16, 0x1a1a1a)
-save('slime_king.png', king)
-
-/** 骷髅巫妖：紫色长袍 + 骷髅头 + 发绿光的眼睛。 */
-const lich = canvas(130, 160)
-ellipse(lich, 0, 65, 118, 46, 40, 0x5a2a8a, 0x200a3a, 5)
-rect(lich, 0, 22, 110, 86, 46, 0x5a2a8a)
-ellipse(lich, 0, 65, 52, 32, 32, 0xeeeae0, 0x404048, 4)
-ellipse(lich, 0, 65, 34, 40, 18, 0x3a1a5a, 0x200a3a, 3)
-rect(lich, 0, 50, 50, 10, 10, 0x60ff80)
-rect(lich, 0, 70, 50, 10, 10, 0x60ff80)
-save('lich.png', lich)
 
 const slot = canvas(110, 110)
 ellipse(slot, 0, 55, 55, 52, 52, 0x3a4a3a, 0x6a806a, 5)

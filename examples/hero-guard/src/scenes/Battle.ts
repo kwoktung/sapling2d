@@ -54,17 +54,17 @@ export const UNLOCK_WAVES: readonly number[] = [3, 6]
 /** 中毒每隔多久跳一次伤害。 */
 const POISON_TICK = 0.5
 
-/** 怪物的贴图和脚底到贴图中心的距离（占位图的尺寸；12 换成美术管线的图集）。 */
+/** 怪物的贴图：`enemies` 图集的帧（小史莱姆用史莱姆的图，在数据里缩小）。 */
 const LOOKS: Record<EnemyKind, EnemyLook> = {
-  slime: { texture: ASSETS.slime, halfHeight: 28 },
-  bat: { texture: ASSETS.bat, halfHeight: 26 },
-  skeleton: { texture: ASSETS.skeleton, halfHeight: 38 },
-  splitter: { texture: ASSETS.splitter, halfHeight: 28 },
-  smallSlime: { texture: ASSETS.slime, halfHeight: 28 },
-  shaman: { texture: ASSETS.shaman, halfHeight: 36 },
-  ghost: { texture: ASSETS.ghost, halfHeight: 35 },
-  slimeKing: { texture: ASSETS.slimeKing, halfHeight: 65 },
-  lich: { texture: ASSETS.lich, halfHeight: 80 },
+  slime: { texture: ASSETS.enemies.get('enemy_slime') },
+  bat: { texture: ASSETS.enemies.get('enemy_bat') },
+  skeleton: { texture: ASSETS.enemies.get('enemy_skeleton') },
+  splitter: { texture: ASSETS.enemies.get('enemy_splitter') },
+  smallSlime: { texture: ASSETS.enemies.get('enemy_slime') },
+  shaman: { texture: ASSETS.enemies.get('enemy_shaman') },
+  ghost: { texture: ASSETS.enemies.get('enemy_ghost') },
+  slimeKing: { texture: ASSETS.enemies.get('enemy_slimeKing') },
+  lich: { texture: ASSETS.enemies.get('enemy_lich') },
 }
 
 /** 死掉的、巫妖可以复活的怪：在哪条路线的哪里、什么时候死的。 */

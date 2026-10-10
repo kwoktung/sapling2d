@@ -1,4 +1,5 @@
 import { atlas, tex } from 'sapling2d'
+import enemiesData from '../public/assets/enemies.json'
 import heroesData from '../public/assets/heroes.json'
 
 /**
@@ -9,14 +10,8 @@ import heroesData from '../public/assets/heroes.json'
 export const ASSETS = {
   /** 英雄：`<hero>_body`（锚点在脚底）和 `<hero>_weapon`（锚点在握持处）。 */
   heroes: atlas('heroes.png', heroesData),
-  slime: tex('slime.png'),
-  bat: tex('bat.png'),
-  skeleton: tex('skeleton.png'),
-  splitter: tex('splitter.png'),
-  shaman: tex('shaman.png'),
-  ghost: tex('ghost.png'),
-  slimeKing: tex('slime_king.png'),
-  lich: tex('lich.png'),
+  /** 怪物和 Boss：`enemy_<kind>`（锚点在脚底）。小史莱姆用 `enemy_slime` 缩小。 */
+  enemies: atlas('enemies.png', enemiesData),
   slot: tex('slot.png'),
   arrow: tex('arrow.png'),
   glow: tex('glow.png'),

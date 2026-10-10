@@ -22,6 +22,11 @@ export interface AssetSpec {
   atlas?: string
   /** 锚点（0–1，相对抠图裁边后的图）：身体放脚底 (0.5, 1)，武器放握持点。不设就是中心。 */
   pivot?: { x: number; y: number }
+  /**
+   * 原图直接用这个文件（相对 art/，通常是 refs/ 里挑定的候选图），不调用 API。
+   * AI 每次生成都不一样：挑定之后用它固定下来，以后重新抠图、打包结果不变。`prompt` 留着记录它是怎么来的。
+   */
+  from?: string
 }
 
 /** 风格锚点（相对 art/）：生成模式的素材都附上它，保证风格统一。03 从候选里选定的弓手（refs/ 进 git）。 */
@@ -75,6 +80,47 @@ const HERO_PARTS: AssetSpec[] = (['archer', 'mage', 'knight'] as const).flatMap(
   ]
 })
 
+/** 怪物和 Boss：提示词、背景色（紫色、蓝紫色的用绿色背景）、显示高度。都朝右（游戏里按行进方向翻转）。 */
+const ENEMY_ART: Record<string, { prompt: string; height: number; background?: string }> = {
+  slime: { prompt: 'A cute round green slime monster with big shiny eyes and a small mischievous smile, glossy jelly body.', height: 64 },
+  bat: { prompt: 'A small cute purple bat monster with spread wings and glowing yellow eyes, flying.', height: 60, background: '#00FF00' },
+  skeleton: { prompt: 'A cute chibi skeleton warrior monster wearing a dented iron helmet, holding a small rusty sword and a wooden shield, walking.', height: 84 },
+  splitter: { prompt: 'A cute bluish-violet slime monster with a visible crack down the middle of its body, as if about to split in two, worried eyes.', height: 72, background: '#00FF00' },
+  shaman: { prompt: 'A cute chibi goblin shaman monster with green skin and pointy ears, wearing a bone headdress and a tattered brown robe, holding a staff with a glowing green crystal.', height: 84 },
+  ghost: { prompt: 'A cute white sheet ghost monster with a wavy bottom edge, big dark eyes and a playful spooky expression, floating.', height: 80 },
+  slimeKing: { prompt: 'A huge cute green slime king boss monster wearing a big golden crown with red gems, a royal red cape draped over its back, confident grin.', height: 170 },
+  lich: { prompt: 'A cute but menacing chibi lich boss monster: a skeleton in a flowing dark purple robe with gold trim, glowing green eyes, holding a tall bone staff topped with a green skull flame.', height: 190, background: '#00FF00' },
+}
+
+/**
+ * 12：怪物和 Boss。每种先按提示词生成 2 张候选，用户挑定的那张存进 `refs/enemy_<kind>.jpg`（`from`）。
+ * 萨满挑定的那张水晶有光晕（和背景混成粉色），基于它再编辑一次去掉光晕。小史莱姆用史莱姆的图缩小。
+ */
+const ENEMY_PARTS: AssetSpec[] = Object.entries(ENEMY_ART).map(([kind, e]) => {
+  const common = {
+    id: `enemy_${kind}`,
+    displayHeight: e.height,
+    atlas: 'enemies',
+    pivot: { x: 0.5, y: 1 },
+    ...(e.background ? { background: e.background } : {}),
+  }
+  if (kind === 'shaman') {
+    return {
+      ...common,
+      mode: 'edit' as const,
+      refs: ['refs/enemy_shaman_src.jpg'],
+      prompt: 'Edit this image: remove the glow and sparkles around the green crystal on the staff, keep the crystal itself. Keep everything else exactly the same.',
+    }
+  }
+  return {
+    ...common,
+    mode: 'generate' as const,
+    from: `refs/enemy_${kind}.jpg`,
+    prompt: `${e.prompt} Facing slightly to the right. A monster for the heroes to fight, same chibi style as the reference hero.`,
+  }
+})
+
 export const ASSETS: AssetSpec[] = [
+  ...ENEMY_PARTS,
   ...HERO_PARTS,
 ]

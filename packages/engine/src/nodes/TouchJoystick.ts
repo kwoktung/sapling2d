@@ -63,7 +63,7 @@ export class TouchJoystick extends Node2D {
   /** 摇杆的输出（已经扣掉死区，长度不超过 1）。没按着时是 0。 */
   vectorX = 0
   vectorY = 0
-  /** @internal 按着它的指针（由 Input 调用 `_press` / `_release` 维护）。 */
+  /** @internal 按着它的指针（由 `VirtualControls` 调用 `_press` / `_release` 维护）。 */
   _pointerId: number | null = null
   private readonly _base: Sprite2D | null
   private readonly _knob: Sprite2D | null
@@ -106,7 +106,7 @@ export class TouchJoystick extends Node2D {
     this.tree.input._removeStick(this)
   }
 
-  /** @internal Input 拾取时调用：这个位置（CanvasLayer 里是设计坐标）的按下归不归它。 */
+  /** @internal 拾取时由 `VirtualControls` 调用：这个位置（CanvasLayer 里是设计坐标）的按下归不归它。 */
   _accepts(point: Vector2): boolean {
     if (this._pointerId !== null) return false
     if (this.mode === 'fixed') return this.hitTest(this.toLocal(point))
@@ -157,7 +157,7 @@ export class TouchJoystick extends Node2D {
     this.released.emit()
   }
 
-  /** @internal Input 更新动作状态时调用。 */
+  /** @internal 更新动作状态时由 `VirtualControls` 调用。 */
   _strengthOf(action: string): number {
     const a = this.actions
     if (this._pointerId === null) return 0

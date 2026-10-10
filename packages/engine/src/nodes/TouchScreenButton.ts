@@ -36,7 +36,7 @@ export class TouchScreenButton extends Sprite2D {
   readonly pressed = new Signal()
   /** 松开（最后一个手指离开）时触发。 */
   readonly released = new Signal()
-  /** @internal 正按住它的指针 id（由 Input 维护）。 */
+  /** @internal 正按住它的指针 id（由 `VirtualControls` 维护）。 */
   readonly _pointerIds = new Set<number>()
   private _normalTexture: Texture | null = null
 
@@ -65,7 +65,7 @@ export class TouchScreenButton extends Sprite2D {
     this.tree.input._removeButton(this)
   }
 
-  /** @internal 由 Input 在第一个手指按住 / 最后一个手指离开时调用。 */
+  /** @internal 由 `VirtualControls` 在第一个手指按住 / 最后一个手指离开时调用。 */
   _setPressed(pressed: boolean): void {
     if (pressed) {
       if (this.texturePressed) {

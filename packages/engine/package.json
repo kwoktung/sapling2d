@@ -91,7 +91,7 @@
     "bench:bullets:profile:jitless": "SAPLING_BENCH=1 SAPLING_JITLESS=1 vitest run bench/bullets-profile",
     "llms": "node scripts/build-llms.ts",
     "build": "tsdown",
-    "prepublishOnly": "pnpm build && pnpm test"
+    "prepublishOnly": "node scripts/check-publish.ts && pnpm build && pnpm test"
   },
   "dependencies": {
     "pixi.js": "~8.22.0",

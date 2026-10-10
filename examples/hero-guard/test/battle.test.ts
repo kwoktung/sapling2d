@@ -146,6 +146,7 @@ describe('波次和胜负', () => {
     for (let i = 0; i < 60 * 600 && battle.state !== 'won'; i++) {
       g.step()
       for (const e of battle.enemies) if (!e.dead) battle.damage(e, 1e9)
+      if (battle.picker) battle.picker.cards[0]!.clicked.emit({ pointerId: 0, position: v(0, 0), localPosition: v(0, 0) }) // 升级就选第一张
     }
     expect([battle.state, battle.wave, battle.lives]).toEqual(['won', WAVE_COUNT, START.lives])
     expect(battle.hud.message.text).toContain('胜利')

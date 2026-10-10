@@ -3,17 +3,22 @@ import { ASSETS } from '../assets'
 import { FEEL, FIELD, SLOTS, START, Z } from '../config'
 import { ENEMIES, enemyHp, type EnemyKind } from '../data/enemies'
 import type { HeroKind } from '../data/heroes'
+import { availableNodes, drawOffers, POISON_CLOUD_RADIUS, POISON_CLOUD_STACKS, xpToNext, type BranchLevels, type SkillNode } from '../data/skills'
 import { WAVE_COUNT, WAVES, type SpawnGroup } from '../data/waves'
-import { Arrow } from '../nodes/Arrow'
+import { Arrow, PIERCE_RADIUS, type Shot } from '../nodes/Arrow'
 import { Enemy, type EnemyLook } from '../nodes/Enemy'
 import { FloatText } from '../nodes/FloatText'
 import { Archer, type Hero, type HeroWorld } from '../nodes/Hero'
 import { Hud } from '../nodes/Hud'
 import { PathPreview } from '../nodes/PathPreview'
+import { UpgradePicker } from '../nodes/UpgradePicker'
 import { Slot } from '../nodes/Slot'
 import { randomPath } from '../path'
 
 export type BattleState = 'wave' | 'gap' | 'won' | 'lost'
+
+/** 中毒每隔多久跳一次伤害。 */
+const POISON_TICK = 0.5
 
 const LOOKS: Record<EnemyKind, EnemyLook> = {
   slime: { texture: ASSETS.slime, halfHeight: 28 },
@@ -37,9 +42,16 @@ export class Battle extends Scene implements HeroWorld {
   state: BattleState = 'gap'
   lives = START.lives
   wave = 0
-  /** 这一局拿到的经验（05 用来升级）和击杀数。 */
+  /** 这一局拿到的总经验、等级、这一级已经攒了多少、还有几次升级没选。 */
   xp = 0
+  level = 1
+  levelXp = 0
+  pendingLevels = 0
   kills = 0
+  /** 每条分支点到第几级（`'archer.multishot' → 2`）、点过的节点（按顺序，结束画面的构筑回顾用）。 */
+  readonly branchLevels: BranchLevels = new Map()
+  readonly taken: SkillNode[] = []
+  picker: UpgradePicker | null = null
   readonly enemies: Enemy[] = []
   readonly heroes: Hero[] = []
   readonly slots: Slot[] = []
@@ -57,7 +69,7 @@ export class Battle extends Scene implements HeroWorld {
   private readonly _arrows: Arrow[] = []
   private readonly _floats: FloatText[] = []
   private _shake: Tween | null = null
-  private _hud = { lives: -1, wave: -1 }
+  private _hud = { lives: -1, wave: -1, level: -1, levelXp: -1 }
   /** 拖动中的英雄、按下时手指相对英雄的偏移。 */
   private _drag: { hero: Hero; dx: number; dy: number } | null = null
 
@@ -92,6 +104,15 @@ export class Battle extends Scene implements HeroWorld {
     hero.pointerMove.connect((e) => this._dragTo(hero, e), this)
     hero.pointerUp.connect((e) => this._endDrag(hero, e), this)
     return hero
+  }
+
+  heroOf(kind: HeroKind): Hero | null {
+    return this.heroes.find((h) => h.kind === kind) ?? null
+  }
+
+  /** 已上场的英雄种类（三选一只出这些英雄的技能）。 */
+  get placedKinds(): Set<HeroKind> {
+    return new Set(this.heroes.map((h) => h.kind))
   }
 
   slotOf(hero: Hero): Slot | null {
@@ -178,7 +199,23 @@ export class Battle extends Scene implements HeroWorld {
     return best
   }
 
-  shootArrow(x: number, y: number, target: Enemy, damage: number): void {
+  findTargets(x: number, y: number, range: number, n: number, exclude: Enemy | null): Enemy[] {
+    if (n <= 0) return []
+    const r2 = range * range
+    const out: Enemy[] = []
+    for (const e of this.enemies) {
+      if (e === exclude || e.dead || e.leaked) continue
+      if ((e.x - x) ** 2 + (e.y - y) ** 2 <= r2) out.push(e)
+    }
+    out.sort((a, b) => a.remaining - b.remaining)
+    return out.slice(0, n)
+  }
+
+  random(): number {
+    return this.tree.rng.randf()
+  }
+
+  shootArrow(x: number, y: number, target: Enemy, shot: Shot, range: number): void {
     let a: Arrow | undefined
     for (let i = 0; i < this._arrows.length; i++) {
       if (!this._arrows[i]!.active) {
@@ -189,14 +226,65 @@ export class Battle extends Scene implements HeroWorld {
     if (!a) {
       a = this.add(new Arrow())
       a.onArrive = this._onArrow
+      a.onPierce = this._onPierce
       this._arrows.push(a)
     }
-    a.launch(x, y, target, damage)
+    a.launch(x, y, target, shot, range)
   }
 
   private readonly _onArrow = (a: Arrow) => {
     const t = a.target
-    if (t && !t.dead && !t.leaked) this.damage(t, a.damage)
+    if (t && !t.dead && !t.leaked) this._arrowHit(t, a.shot)
+  }
+
+  /** 穿透箭每帧：碰到的、还没打过的敌人都打一次。 */
+  private readonly _onPierce = (a: Arrow) => {
+    const r2 = PIERCE_RADIUS * PIERCE_RADIUS
+    const enemies = this.enemies
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i]!
+      if (e.dead || a.hit.has(e)) continue
+      const dx = e.x - a.x
+      const dy = e.y - 24 - a.y
+      if (dx * dx + dy * dy > r2) continue
+      a.hit.add(e)
+      this._arrowHit(e, a.shot)
+    }
+  }
+
+  private _arrowHit(e: Enemy, shot: Shot) {
+    if (shot.poison) this.poison(e, shot.poison.dps, shot.poison.time, shot.poison.maxStacks, 1)
+    this.damage(e, shot.damage, { crit: shot.crit || shot.headshot, ignoreArmor: shot.headshot })
+  }
+
+  /** 加 `stacks` 层毒（不超过上限），刷新持续时间；伤害按最强的那一份毒算。 */
+  poison(e: Enemy, dps: number, time: number, maxStacks: number, stacks: number): void {
+    if (e.dead) return
+    if (e.poisonStacks === 0) e.poisonTick = POISON_TICK
+    e.poisonStacks = Math.min(maxStacks, e.poisonStacks + stacks)
+    e.poisonLeft = time
+    e.poisonDps = Math.max(e.poisonDps, dps)
+    e.body.selfModulate = 0xb0ff90
+  }
+
+  /** 每帧结算怪物身上的持续状态（中毒每 0.5 秒跳一次伤害）。 */
+  private _tickStatuses(dt: number) {
+    const enemies = this.enemies
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i]!
+      if (e.dead || e.poisonStacks === 0) continue
+      e.poisonLeft -= dt
+      e.poisonTick -= dt
+      if (e.poisonTick <= 0) {
+        e.poisonTick += POISON_TICK
+        this.damage(e, e.poisonStacks * e.poisonDps * POISON_TICK, { dot: true })
+      }
+      if (e.poisonLeft <= 0 && !e.dead) {
+        e.poisonStacks = 0
+        e.poisonDps = 0
+        e.body.selfModulate = 0xffffff
+      }
+    }
   }
 
   // ---------------------------------------------------------------- 怪物
@@ -209,20 +297,74 @@ export class Battle extends Scene implements HeroWorld {
     return e
   }
 
-  /** 扣血、飘字、火花；打死了加经验、碎片。 */
-  damage(e: Enemy, amount: number): void {
+  /**
+   * 扣血、飘字、火花；打死了加经验、碎片。`crit` 飘字大一号带感叹号，`dot`（中毒等持续伤害）绿色、没有火花。
+   * `ignoreArmor`：08 的护甲（弓箭伤害减半）用。
+   */
+  damage(e: Enemy, amount: number, opts: { crit?: boolean; dot?: boolean; ignoreArmor?: boolean } = {}): void {
+    if (e.dead) return
     const killed = e.damage(amount)
-    this._float(String(Math.round(amount)), e.x, e.y - 50, killed ? 0xffd040 : 0xffffff)
+    const text = opts.crit ? `${Math.round(amount)}!` : String(Math.round(amount))
+    this._float(text, e.x, e.y - 50, opts.dot ? 0x90ff70 : opts.crit ? 0xffb030 : killed ? 0xffd040 : 0xffffff, opts.crit ? 1.4 : opts.dot ? 0.8 : 1)
     if (!killed) {
-      this.sparks.position = v(e.x, e.y - 24)
-      this.sparks.emit(FEEL.sparks)
+      if (!opts.dot) {
+        this.sparks.position = v(e.x, e.y - 24)
+        this.sparks.emit(FEEL.sparks)
+      }
       return
     }
-    this.xp += ENEMIES[e.kind].xp
     this.kills++
     this.debris.position = v(e.x, e.y - 24)
     this.debris.emit(FEEL.debris)
     e.queueFree()
+    // 毒雾：中毒的敌人死亡时，周围的敌人中毒
+    const archer = this.heroOf('archer') as Archer | null
+    if (e.poisonStacks > 0 && archer?.mods.poisonCloud) {
+      const m = archer.mods
+      for (const o of this.enemies) {
+        if (o !== e && !o.dead && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 <= POISON_CLOUD_RADIUS ** 2) this.poison(o, m.poisonDps, m.poisonTime, m.poisonStacks, POISON_CLOUD_STACKS)
+      }
+      this.sparks.position = v(e.x, e.y - 24)
+      this.sparks.emit(FEEL.sparks * 2)
+    }
+    this.gainXp(ENEMIES[e.kind].xp)
+  }
+
+  // ---------------------------------------------------------------- 经验和升级
+
+  /** 加经验；够了就升级（可能一次升好几级，三选一依次弹出）。 */
+  gainXp(n: number): void {
+    this.xp += n
+    this.levelXp += n
+    while (this.levelXp >= xpToNext(this.level)) {
+      this.levelXp -= xpToNext(this.level)
+      this.level++
+      this.pendingLevels++
+    }
+  }
+
+  /** 弹出三选一：游戏暂停，选完继续。没有可选的节点时这次升级直接跳过。 */
+  openPicker(): void {
+    const offers = drawOffers(availableNodes(this.placedKinds, this.branchLevels), 3, (n) => this.tree.rng.randiRange(0, n - 1))
+    const level = this.level - this.pendingLevels + 1
+    this.pendingLevels--
+    if (!offers.length) return
+    this.tree.paused = true
+    this.picker = this.add(new UpgradePicker(offers, level))
+    this.picker.picked.connect((node) => this.applySkill(node), this)
+  }
+
+  /** 点一个技能节点：改对应英雄的修正值。 */
+  applySkill(node: SkillNode): void {
+    this.branchLevels.set(`${node.hero}.${node.branch}`, node.level)
+    this.taken.push(node)
+    const hero = this.heroOf(node.hero)
+    if (hero instanceof Archer) {
+      node.apply(hero.mods)
+      hero.refreshStats()
+    }
+    this.picker = null
+    this.tree.paused = false
   }
 
   // ---------------------------------------------------------------- 波次
@@ -247,6 +389,7 @@ export class Battle extends Scene implements HeroWorld {
       return
     }
     if (!this.manual) this._advanceWaves(dt)
+    this._tickStatuses(dt)
     const enemies = this.enemies
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i]!
@@ -257,6 +400,7 @@ export class Battle extends Scene implements HeroWorld {
       }
     }
     HitTester.compact(enemies)
+    if (this.pendingLevels > 0 && !this.picker && this.state !== 'won' && this.state !== 'lost') this.openPicker()
     this._updateHud()
   }
 
@@ -298,7 +442,7 @@ export class Battle extends Scene implements HeroWorld {
 
   // ---------------------------------------------------------------- 手感
 
-  private _float(text: string, x: number, y: number, color: number) {
+  private _float(text: string, x: number, y: number, color: number, size = 1) {
     let f: FloatText | undefined
     for (let i = 0; i < this._floats.length; i++) {
       if (!this._floats[i]!.active) {
@@ -312,6 +456,7 @@ export class Battle extends Scene implements HeroWorld {
       this._floats.push(f)
     }
     f.show(text, x, y, color)
+    f.scale = v(size, size)
   }
 
   /** 屏幕震动：Tween 抖相机的 offset（上一次没抖完先停掉）。 */
@@ -328,13 +473,16 @@ export class Battle extends Scene implements HeroWorld {
 
   private _updateHud() {
     const h = this._hud
-    if (h.lives === this.lives && h.wave === this.wave) return
+    if (h.lives === this.lives && h.wave === this.wave && h.level === this.level && h.levelXp === this.levelXp) return
     h.lives = this.lives
     h.wave = this.wave
+    h.level = this.level
+    h.levelXp = this.levelXp
     this.hud.update(this.lives, this.wave, WAVE_COUNT)
+    this.hud.updateXp(this.level, this.levelXp / xpToNext(this.level))
   }
 
   protected override dumpProps(): Record<string, unknown> {
-    return { ...super.dumpProps(), state: this.state, wave: this.wave, lives: this.lives, xp: this.xp }
+    return { ...super.dumpProps(), state: this.state, wave: this.wave, lives: this.lives, level: this.level, xp: this.xp }
   }
 }

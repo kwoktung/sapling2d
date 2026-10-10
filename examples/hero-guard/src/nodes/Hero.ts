@@ -1,17 +1,23 @@
 import { Ease, Node2D, rect, Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
 import { ART_SCALE, ASSETS } from '../assets'
 import { HEROES, RIG, type HeroKind } from '../data/heroes'
+import { archerMods, HEADSHOT_EVERY, HEADSHOT_MUL, type ArcherMods } from '../data/skills'
+import type { Shot } from './Arrow'
 import type { Enemy } from './Enemy'
 
 /** 英雄需要的场景接口（Battle 实现）。 */
 export interface HeroWorld {
   /** 射程内离城门最近（剩余路程最短）的怪物；没有时为 null。 */
   findTarget(x: number, y: number, range: number): Enemy | null
+  /** 射程内按离城门由近到远排好的怪物（最多 `n` 只，不含 `exclude`）。 */
+  findTargets(x: number, y: number, range: number, n: number, exclude: Enemy | null): Enemy[]
   /** 从 (x, y) 向目标射一支箭。 */
-  shootArrow(x: number, y: number, target: Enemy, damage: number): void
+  shootArrow(x: number, y: number, target: Enemy, shot: Shot, range: number): void
+  /** [0, 1) 的随机数（tree.rng，测试可复现）。 */
+  random(): number
 }
 
-/** 英雄这一局的数值：从基础数值复制一份，技能树（05 起）改的是它。 */
+/** 英雄这一局的数值：基础数值乘上技能的修正（`refreshStats()` 重新算）。 */
 export interface HeroStats {
   damage: number
   interval: number
@@ -131,19 +137,49 @@ export abstract class Hero extends Node2D {
     this.weapon.rotation = 0
   }
 
+  /** 技能改了修正值之后重新算 `stats`。 */
+  abstract refreshStats(): void
+
   protected override dumpProps(): Record<string, unknown> {
     return { ...super.dumpProps(), kind: this.kind, attacks: this.attacks }
   }
 }
 
-/** 弓手：单体追踪箭，射程最远。 */
+/**
+ * 弓手：单体追踪箭，射程最远。技能（`mods`）：多重箭（打不同目标）、暴击、每第 5 箭爆头、毒箭、穿透。
+ * 每支箭的效果在出手时算好（`Shot`），飞到时由 Battle 结算。
+ */
 export class Archer extends Hero {
+  readonly mods: ArcherMods = archerMods()
+  /** 射出过多少支箭（爆头按它数）。 */
+  shots = 0
+
   constructor(world: HeroWorld, position: Vector2) {
     super(world, 'archer', position)
   }
 
+  override refreshStats(): void {
+    const base = HEROES.archer
+    this.stats.damage = base.damage * this.mods.damageMul
+    this.stats.range = base.range * this.mods.rangeMul
+  }
+
   protected override release(target: Enemy): void {
-    this.world.shootArrow(this.x + this.facing * RIG.archer.weaponX, this.y + RIG.archer.weaponY, target, this.stats.damage)
+    const x = this.x + this.facing * RIG.archer.weaponX
+    const y = this.y + RIG.archer.weaponY
+    const m = this.mods
+    const targets = [target, ...this.world.findTargets(this.x, this.y, this.stats.range, m.arrows - 1, target)]
+    for (const t of targets) this.world.shootArrow(x, y, t, this._shot(), this.stats.range)
+  }
+
+  /** 这一支箭的效果：爆头（每第 5 箭）、暴击（掷骰）、毒、穿透。 */
+  private _shot(): Shot {
+    const m = this.mods
+    this.shots++
+    const headshot = m.headshot && this.shots % HEADSHOT_EVERY === 0
+    const crit = !headshot && m.critChance > 0 && this.world.random() < m.critChance
+    const damage = this.stats.damage * (headshot ? HEADSHOT_MUL : crit ? m.critMul : 1)
+    return { damage, crit, headshot, poison: m.poisonDps > 0 ? { dps: m.poisonDps, time: m.poisonTime, maxStacks: m.poisonStacks } : null, pierce: m.pierce }
   }
 
   protected override weaponPose(phase: 'windup' | 'release' | 'rest'): { dx: number; dy: number } {

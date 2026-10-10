@@ -20,6 +20,11 @@ export class Enemy extends Node2D {
   dist = 0
   hp: number
   dead = false
+  /** 中毒：层数、剩余时间、每层每秒伤害、离下一次跳伤害还有多久（Battle 每帧结算）。 */
+  poisonStacks = 0
+  poisonLeft = 0
+  poisonDps = 0
+  poisonTick = 0
   /** 越过底线了（Battle 扣命后移除）。 */
   leaked = false
   private _flashLeft = 0

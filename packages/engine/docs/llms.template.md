@@ -117,7 +117,7 @@
 
 - `sheet(path, { columns, rows })`：等大格子的网格图集，`frame(i)` / `frames(start, end)`（含两端）/ `count`。帧尺寸 = 整张图尺寸 / 列数（行数），图片加载后才确定，无头模式下为 0。
 - `atlas(path, data)`：打包图集，`data` 是 TexturePacker 等工具导出的 JSON（Hash 或 Array 格式，直接 import）。`get(name)` / `frames(prefix)`（数字自然排序）/ `names` / `has`。尺寸来自 JSON，无头模式下也正确；支持裁剪透明边（trimmed），不支持旋转打包。
-- 图集的帧就是 `Texture`，可以给任何 `Sprite2D`；同一张图的帧共用一份显存，绘制时能合批。`static assets` 里放 `sheet` / `atlas`，切换场景时按整张图判断是否卸载。
+- 图集的帧就是 `Texture`，可以给任何 `Sprite2D`；同一张图的帧共用一份显存，绘制时能合批。`static assets` 里放 `sheet` / `atlas` / `aseprite`，切换场景时按整张图判断是否卸载。
 - `AnimatedSprite2D`：`frames` + `fps`（默认 10）+ `loop`（默认 true），或 `animations: { 名字: { frames, fps, loop } }`。`play(name?)` / `pause()` / `stop()`（回到第 0 帧）、`frame`（可赋值）、`frameCount`、`speedScale`、`isPlaying`、`animation`；信号 `frameChanged`、`animationFinished`（不循环的动画播完，参数是动画名）。`texture` 由动画控制，不要直接赋值。
 
 #### 每帧时长（攻击动作的节奏）
@@ -129,6 +129,26 @@
 - `durations: number[]`（秒）代替 `fps`，让帧长短不一：长度和 `frames` 相同、每个值 > 0；和 `fps` 只能二选一。只有一套动画时的简写也能用（`frames` + `durations`）。
 - `getAnimationDuration(name?)`：一轮的总秒数；`getFrameTime(name, frame)`：这一帧开始的时间点。两者都**不算** `speedScale`，实际时间要除以它。
 - 命中帧在 `frameChanged` 里按 `frame` 判断：一次推进跨过好几帧时（`speedScale` 很大、帧很短），每一帧都会触发，不会被跳过。
+
+#### Aseprite 动画
+
+美术在 Aseprite 里用 tag 分段、调每帧时长、用 slice 标挂点（枪口、剑尖）；导出 png + json 之后程序不用改任何数字。导出命令（`--list-tags` 和 `--list-slices` 不能漏）：
+
+```sh
+aseprite -b hero.aseprite --sheet public/assets/hero.png --data src/hero.json --format json-array --list-tags --list-slices --sheet-type packed
+```
+
+<!-- example:aseprite -->
+
+<!-- example:aseprite#test -->
+
+- `aseprite<Tag>(path, data)`：`data` 是导出的 JSON（Array 或 Hash 格式，直接 import），放进 `static assets` 加载，和 `atlas()` 一样按整张图卸载。类型参数是 tag 的名字，只用于类型检查（从 JSON 推断不出来）。
+- 帧按导出顺序编号：`frame(i)` / `frames(start, end)` / `count` / `duration(i)`（秒），贴图路径是 `hero.png#3`。支持裁剪透明边，不支持旋转打包。
+- `animation(tag?, { loop })`：一个 tag 的 `SpriteAnimation`（`frames` + `durations`）；不传 tag 时是全部帧。`animations({ tag: { loop } })`：所有 tag。
+  - 方向 `forward` / `reverse` / `pingpong` / `pingpong_reverse` 展开成帧序列；循环的 pingpong 往回走时不重复两端（和 Aseprite 播放一致）。
+  - tag 没设播放次数（repeat）时循环；设了 N 次就展开 N 遍、不循环（pingpong 每走一趟算一次）。`loop` 覆盖它：攻击这类只播一次的动作写 `{ attack: { loop: false } }`（不循环的 pingpong 走一个来回）。
+- `slice(name, frame)`：slice 在这一帧的 `{ bounds, pivot }`，**以精灵中心为原点**，直接加到精灵位置上（`flipH` 时 x 取反）。`frame` 传播放中精灵的 `sprite.texture`（`sprite.frame` 是动画里的序号，不是图里的帧号），或者图里的帧号。key 从它的帧开始生效直到下一个 key；之前没有 key 时返回 null。返回的对象共用，不要修改。
+- 导出时漏了 `--list-tags` / `--list-slices`，用到 tag / slice 时会报错提示。仓库里提交导出好的 png + json，不需要每台机器都装 Aseprite。
 
 ### 图块地图（TileMap）
 

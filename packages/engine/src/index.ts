@@ -50,6 +50,16 @@ export { ColorRect, type ColorRectOptions } from './nodes/ColorRect'
 export { Particles2D, type Particles2DOptions } from './nodes/Particles2D'
 export { Label, type LabelOptions, type LabelStroke, type HorizontalAlignment, type VerticalAlignment } from './nodes/Label'
 export { Texture, tex, SpriteSheet, sheet, Atlas, atlas, type AssetMap, type AtlasData, type AtlasFrameData } from './core/assets'
+export {
+  AsepriteSheet,
+  aseprite,
+  type AsepriteData,
+  type AsepriteFrameData,
+  type AsepriteTagData,
+  type AsepriteSliceData,
+  type AsepriteSliceKey,
+  type AsepriteAnimationOptions,
+} from './core/aseprite'
 export { AudioStream, sfx, music } from './audio/AudioStream'
 export { Storage } from './storage/Storage'
 export { MemoryStorageBackend, type StorageBackend } from './storage/backend'

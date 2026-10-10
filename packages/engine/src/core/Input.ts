@@ -190,6 +190,8 @@ export class Input {
         if (e.type === 'keydown') this._keysDown.add(e.code)
         else this._keysDown.delete(e.code)
       } else {
+        // 同一个指针还按着又收到按下：上一次的抬起丢了。先按取消处理并更新动作（先松开再按下），新的按下才有“刚按下”
+        if (e.type === 'pointerdown' && this._pointer.cancelStale(e.pointerId)) this._actions.update(this._source)
         this._pointer.handle(e)
       }
       this._actions.update(this._source)

@@ -15,7 +15,7 @@ const g = (kind: EnemyKind, count: number, interval: number, delay = 0, elite = 
 
 /**
  * 每一波的组成（spec 的出场顺序）：1–2 史莱姆 · 3 蝙蝠 · 4 骷髅 · 5 精英 · 6 分裂史莱姆 · 7 萨满 · 8 幽灵 · 9 混合 ·
- * 10 Boss · 11–14 混合 · 15 精英 · 16–19 混合 · 20 Boss。第 10、20 波的 Boss 在 09 加，现在是一大波混合怪。
+ * 10 史莱姆王 · 11–14 混合 · 15 精英 · 16–19 混合 · 20 骷髅巫妖（打死它就胜利）。
  */
 export const WAVES: readonly (readonly SpawnGroup[])[] = [
   /* 1 */ [g('slime', 8, 1)],
@@ -27,7 +27,7 @@ export const WAVES: readonly (readonly SpawnGroup[])[] = [
   /* 7 */ [g('skeleton', 6, 1.3), g('shaman', 3, 3, 2), g('slime', 10, 0.7, 1)],
   /* 8 */ [g('ghost', 8, 1), g('bat', 8, 0.5, 3), g('slime', 8, 0.8)],
   /* 9 */ [g('skeleton', 8, 1), g('splitter', 6, 1.2, 2), g('shaman', 3, 3, 4), g('bat', 10, 0.4, 6)],
-  /* 10 Boss（09） */ [g('slime', 20, 0.4), g('skeleton', 8, 1, 3), g('slime', 3, 3, 6, true)],
+  /* 10 史莱姆王 */ [g('slime', 10, 0.6), g('slimeKing', 1, 1, 3), g('bat', 8, 0.6, 10)],
   /* 11 */ [g('ghost', 10, 0.8), g('skeleton', 8, 1, 2), g('shaman', 4, 2.5, 3)],
   /* 12 */ [g('splitter', 10, 0.9), g('bat', 14, 0.35, 2), g('slime', 12, 0.5)],
   /* 13 */ [g('skeleton', 12, 0.8), g('shaman', 5, 2, 2), g('ghost', 8, 0.8, 5)],
@@ -37,5 +37,5 @@ export const WAVES: readonly (readonly SpawnGroup[])[] = [
   /* 17 */ [g('skeleton', 16, 0.6), g('bat', 20, 0.25, 3), g('shaman', 6, 1.5, 5)],
   /* 18 */ [g('splitter', 16, 0.6), g('ghost', 14, 0.6, 2), g('slime', 3, 2.5, 4, true)],
   /* 19 */ [g('skeleton', 18, 0.5), g('ghost', 16, 0.5, 2), g('shaman', 8, 1.2, 3), g('bat', 20, 0.25, 6)],
-  /* 20 Boss（09） */ [g('skeleton', 20, 0.5), g('ghost', 16, 0.5, 3), g('skeleton', 4, 3, 6, true)],
+  /* 20 骷髅巫妖 */ [g('skeleton', 12, 0.6), g('lich', 1, 1, 4), g('ghost', 12, 0.6, 8), g('skeleton', 3, 4, 12, true)],
 ]

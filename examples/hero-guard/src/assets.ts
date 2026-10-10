@@ -15,6 +15,8 @@ export const ASSETS = {
   splitter: tex('splitter.png'),
   shaman: tex('shaman.png'),
   ghost: tex('ghost.png'),
+  slimeKing: tex('slime_king.png'),
+  lich: tex('lich.png'),
   slot: tex('slot.png'),
   arrow: tex('arrow.png'),
   glow: tex('glow.png'),

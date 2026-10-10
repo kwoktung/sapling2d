@@ -35,6 +35,9 @@ export class Enemy extends Node2D {
   /** 眩晕、嘲讽（骑士）：剩余时间，期间停下。 */
   stunLeft = 0
   tauntLeft = 0
+  /** Boss 的技能（召唤 / 复活）还有多久放下一次；巫妖已经复活了几只。 */
+  abilityIn: number
+  revives = 0
   /** 越过底线了（Battle 扣命后移除）。 */
   leaked = false
   private _flashLeft = 0
@@ -57,6 +60,7 @@ export class Enemy extends Node2D {
   ) {
     super({ alpha: ENEMIES[kind].alpha ?? 1 })
     const k = (this._sizeScale = ENEMIES[kind].scale * (elite ? ELITE.scale : 1))
+    this.abilityIn = ENEMIES[kind].summon?.every ?? ENEMIES[kind].revive?.every ?? 0
     this.hp = maxHp
     this._hop = phase
     if (elite) this.add(new Sprite2D({ texture: ASSETS.glow, position: v(0, -look.halfHeight * k), scale: v(k * 1.5, k * 1.5), selfModulate: 0xffc030, blendMode: 'add', zIndex: -1 }))

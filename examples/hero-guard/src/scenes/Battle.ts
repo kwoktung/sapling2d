@@ -57,6 +57,18 @@ const LOOKS: Record<EnemyKind, EnemyLook> = {
   smallSlime: { texture: ASSETS.slime, halfHeight: 28 },
   shaman: { texture: ASSETS.shaman, halfHeight: 36 },
   ghost: { texture: ASSETS.ghost, halfHeight: 35 },
+  slimeKing: { texture: ASSETS.slimeKing, halfHeight: 65 },
+  lich: { texture: ASSETS.lich, halfHeight: 80 },
+}
+
+/** 死掉的、巫妖可以复活的怪：在哪条路线的哪里、什么时候死的。 */
+interface Grave {
+  kind: EnemyKind
+  path: Curve2D
+  dist: number
+  x: number
+  y: number
+  time: number
 }
 
 /** 护甲：弓箭伤害乘这个数。 */
@@ -101,6 +113,10 @@ export class Battle extends Scene implements HeroWorld {
   ultChargeMul = 1
   ultBar!: UltBar
   aimRing!: AimRing
+  /** 场上的 Boss（顶部血条显示它）。 */
+  boss: Enemy | null = null
+  /** 最近死掉的、可以被复活的怪（巫妖用）。 */
+  readonly graves: Grave[] = []
   /** 这次冲锋已经撞过的敌人。 */
   private readonly _charged = new Set<Enemy>()
   readonly enemies: Enemy[] = []
@@ -544,6 +560,48 @@ export class Battle extends Scene implements HeroWorld {
       e.frozenLeft > 0 ? 0x80c0ff : e.stunLeft > 0 ? 0xfff080 : e.tauntLeft > 0 ? 0xffb070 : e.slowPct > 0 ? 0xbfe0ff : e.poisonStacks > 0 ? 0xb0ff90 : 0xffffff
   }
 
+  /** Boss 的技能：史莱姆王召唤、骷髅巫妖复活。 */
+  private _tickBosses(dt: number) {
+    const now = this.tree.time
+    for (let i = this.graves.length - 1; i >= 0; i--) if (now - this.graves[i]!.time > 10) this.graves.splice(i, 1)
+    for (const b of [...this.enemies]) {
+      const data = ENEMIES[b.kind]
+      if (b.dead || (!data.summon && !data.revive)) continue
+      b.abilityIn -= dt
+      if (b.abilityIn > 0) continue
+      if (data.summon) {
+        b.abilityIn += data.summon.every
+        for (let n = 0; n < data.summon.count; n++) this.spawnEnemy(data.summon.kind, randomPath((x, y) => this.tree.rng.randfRange(x, y), b.x, b.y))
+        this._pulse(b, 0x80ff80, 160)
+      }
+      if (data.revive) {
+        const r = data.revive
+        b.abilityIn += r.every
+        const left = r.total - b.revives
+        const near = this.graves
+          .filter((g) => g.kind === r.kind && now - g.time <= r.within && (g.x - b.x) ** 2 + (g.y - b.y) ** 2 <= r.radius * r.radius)
+          .sort((p, q) => q.time - p.time)
+          .slice(0, Math.max(0, Math.min(r.perCast, left)))
+        for (const g of near) {
+          this.graves.splice(this.graves.indexOf(g), 1)
+          const e = this.spawnEnemy(g.kind, g.path, undefined, false, false)
+          e.dist = g.dist
+          e.pushBack(0)
+          this._pulse(e, 0x60ff80, 60)
+          b.revives++
+        }
+        if (near.length) this._pulse(b, 0x60ff80, r.radius)
+      }
+    }
+  }
+
+  /** 一圈放大淡出的光（技能提示）。 */
+  private _pulse(at: Enemy, color: number, radius: number) {
+    const k = (radius * 2) / 256
+    const ring = this.fx.add(new Sprite2D({ texture: ASSETS.range, position: v(at.x, at.y - 30), scale: v(k * 0.3, k * 0.3), selfModulate: color }))
+    ring.createTween().to(ring, { scale: v(k, k), alpha: 0 }, 0.5, Ease.QuadOut).call(() => ring.queueFree())
+  }
+
   /** 治疗光环的计时：每 0.5 秒结算一次（开局先等 0.5 秒）。 */
   private _healTick = POISON_TICK
 
@@ -620,6 +678,7 @@ export class Battle extends Scene implements HeroWorld {
       if (changed && !e.dead) this._tint(e)
     }
     this._tickHeal(dt)
+    this._tickBosses(dt)
     // 燃烧地面：每 0.5 秒对里面的敌人造成伤害
     if (!this.burns.length) return
     this._burnTick -= dt
@@ -640,6 +699,11 @@ export class Battle extends Scene implements HeroWorld {
     if (preview) this.add(new PathPreview(path))
     const e = this.add(new Enemy(kind, path, hp ?? enemyHp(kind, Math.max(1, this.wave), elite), LOOKS[kind], this.tree.rng.randfRange(0, Math.PI), elite))
     this.enemies.push(e)
+    if (ENEMIES[kind].boss) {
+      this.boss = e
+      this.hud.flash(`${ENEMIES[kind].name} 出现！`, 1.6)
+      this.shake(FEEL.shake * 1.4, FEEL.shakeTime * 1.6)
+    }
     return e
   }
 
@@ -676,6 +740,18 @@ export class Battle extends Scene implements HeroWorld {
       }
       this.sparks.position = v(e.x, e.y - 24)
       this.sparks.emit(FEEL.sparks * 2)
+    }
+    // 巫妖可以复活的怪：记下死在哪
+    if (this.enemies.some((b) => !b.dead && ENEMIES[b.kind].revive?.kind === e.kind)) {
+      this.graves.push({ kind: e.kind, path: e.path, dist: e.dist, x: e.x, y: e.y, time: this.tree.time })
+    }
+    if (e === this.boss) {
+      this.boss = null
+      // 打死最后一波的 Boss：胜利（不用等剩下的小怪）
+      if (this.wave >= WAVE_COUNT && this.state !== 'lost') {
+        this.state = 'won'
+        this.hud.flash('胜利！\n点屏幕再来一局', 0)
+      }
     }
     // 分裂：在原路线上前后错开出几只小怪（不显示路线预览）
     const split = ENEMIES[e.kind].split
@@ -935,6 +1011,8 @@ export class Battle extends Scene implements HeroWorld {
 
   private _updateHud() {
     for (const k of HERO_KINDS) this.ultBar.buttons[k].update(!!this.heroOf(k), this.energy[k] / ULT.energyMax, this.canUlt(k))
+    const b = this.boss
+    this.hud.updateBoss(b && !b.dead ? ENEMIES[b.kind].name : null, b ? b.hp / b.maxHp : 0)
     const h = this._hud
     if (h.lives === this.lives && h.wave === this.wave && h.level === this.level && h.levelXp === this.levelXp) return
     h.lives = this.lives

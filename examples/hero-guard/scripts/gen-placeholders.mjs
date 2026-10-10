@@ -133,6 +133,25 @@ rect(ghost, 0, 20, 24, 7, 10, 0x1a1a2a)
 rect(ghost, 0, 34, 24, 7, 10, 0x1a1a2a)
 save('ghost.png', ghost)
 
+/** 史莱姆王：大一号的史莱姆 + 金冠。 */
+const king = canvas(150, 130)
+ellipse(king, 0, 75, 82, 66, 46, 0x5ac05a, 0x1a5a28, 5)
+for (let i = 0; i < 5; i++) rect(king, 0, 45 + i * 13, 22 - (i % 2) * 8, 9, 22 + (i % 2) * 8, 0xffd040)
+rect(king, 0, 45, 38, 61, 10, 0xffd040)
+rect(king, 0, 52, 72, 12, 16, 0x1a1a1a)
+rect(king, 0, 86, 72, 12, 16, 0x1a1a1a)
+save('slime_king.png', king)
+
+/** 骷髅巫妖：紫色长袍 + 骷髅头 + 发绿光的眼睛。 */
+const lich = canvas(130, 160)
+ellipse(lich, 0, 65, 118, 46, 40, 0x5a2a8a, 0x200a3a, 5)
+rect(lich, 0, 22, 110, 86, 46, 0x5a2a8a)
+ellipse(lich, 0, 65, 52, 32, 32, 0xeeeae0, 0x404048, 4)
+ellipse(lich, 0, 65, 34, 40, 18, 0x3a1a5a, 0x200a3a, 3)
+rect(lich, 0, 50, 50, 10, 10, 0x60ff80)
+rect(lich, 0, 70, 50, 10, 10, 0x60ff80)
+save('lich.png', lich)
+
 const slot = canvas(110, 110)
 ellipse(slot, 0, 55, 55, 52, 52, 0x3a4a3a, 0x6a806a, 5)
 save('slot.png', slot)

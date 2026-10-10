@@ -1,10 +1,9 @@
-import { ColorRect, Node2D, Sprite2D, v } from 'sapling2d'
+import { ColorRect, Node2D, Sprite2D, v, type Curve2D } from 'sapling2d'
 import { ASSETS } from '../assets'
 import { ENEMY } from '../config'
-import type { CurvePath } from '../path'
 
 /**
- * 怪物：沿 CurvePath 匀速前进（按弧长）。`dist` 是走过的距离，`remaining` 越小越靠近底线（英雄优先打它）。
+ * 怪物：沿 `Curve2D` 匀速前进（按弧长）。`dist` 是走过的距离，`remaining` 越小越靠近底线（英雄优先打它）。
  * 受击时闪白（`Sprite2D.flash`）、沿路径往回推一点；头顶血条。
  */
 export class Enemy extends Node2D {
@@ -18,10 +17,10 @@ export class Enemy extends Node2D {
   leaked = false
   private _flashLeft = 0
   /** 复用的采样结果：每帧不分配。 */
-  private readonly _p = { x: 0, y: 0, dirX: 0 }
+  private readonly _p = { x: 0, y: 0 }
 
   constructor(
-    readonly path: CurvePath,
+    readonly path: Curve2D,
     readonly maxHp: number,
     public speed: number,
     readonly reward: number,
@@ -68,7 +67,7 @@ export class Enemy extends Node2D {
     this.path.sample(this.dist, p)
     this.x = p.x
     this.y = p.y
-    if (p.dirX !== 0) this.body.flipH = p.dirX < 0
+    this.body.flipH = Math.cos(this.path.angleAt(this.dist)) < 0
     // 引擎缺口（验证清单 ySort）：下面的怪画在上面，每帧手动设 zIndex
     this.zIndex = p.y
   }

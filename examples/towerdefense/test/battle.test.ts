@@ -3,7 +3,7 @@ import { createTestGame } from 'sapling2d/testing'
 import { START, WAVE } from '../src/config'
 import { gameOptions } from '../src/game'
 import { Hero } from '../src/nodes/Hero'
-import { CurvePath } from '../src/path'
+import { linePath } from '../src/path'
 import { Battle } from '../src/scenes/Battle'
 import { ATTACK, baseStats } from '../src/skills'
 
@@ -19,7 +19,7 @@ const slotAt = (b: Battle, x: number, y: number) => b.slots.find((s) => s.x === 
 
 /** 一只站着不动的怪（速度 0），放在 (x, y)。 */
 function dummy(b: Battle, x: number, y: number, hp = 1000) {
-  const e = b.spawnEnemy(CurvePath.line(x, y, y + 2000), hp, 0)
+  const e = b.spawnEnemy(linePath(x, y, y + 2000), hp, 0)
   return e
 }
 
@@ -162,7 +162,7 @@ describe('失败', () => {
   it('怪走到底线扣命，命用完失败；点屏幕重来', async () => {
     const { g, battle } = await start()
     battle.lives = 2
-    for (let i = 0; i < 2; i++) battle.spawnEnemy(CurvePath.line(100 + i * 100, 1000, 1200), 10, 400)
+    for (let i = 0; i < 2; i++) battle.spawnEnemy(linePath(100 + i * 100, 1000, 1200), 10, 400)
     g.stepSeconds(1)
     expect([battle.lives, battle.state]).toEqual([0, 'lost'])
     expect(battle.hud.message.text).toContain('失败')

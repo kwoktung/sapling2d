@@ -165,6 +165,66 @@ describe('AnimatedSprite2D', () => {
     expect(s.frame).toBe(2)
   })
 
+  it('durations：每帧按自己的时长推进；循环和 animationFinished 照常', async () => {
+    const s = new AnimatedSprite2D({
+      animations: {
+        attack: { frames, durations: [0.1, 0.5, 0.05, 0.2], loop: false },
+        spin: { frames: frames.slice(0, 2), durations: [0.1, 0.3] },
+      },
+      autoplay: true,
+    })
+    const finished: string[] = []
+    s.animationFinished.connect((name) => finished.push(name))
+    const g = await setup(s)
+    g.step(6) // 0.1
+    expect(s.frame).toBe(1)
+    g.step(29) // 0.583：还在第 1 帧（到 0.6 才换）
+    expect(s.frame).toBe(1)
+    g.step(1) // 0.6
+    expect(s.frame).toBe(2)
+    g.step(3) // 0.65
+    expect(s.frame).toBe(3)
+    g.step(12) // 0.85：播完
+    expect([s.frame, s.isPlaying, finished]).toEqual([3, false, ['attack']])
+
+    s.play('spin')
+    g.step(6)
+    expect(s.frame).toBe(1)
+    g.step(18) // 一圈 0.4 秒：回到 0
+    expect(s.frame).toBe(0)
+  })
+
+  it('speedScale 很大、一次跨过好几帧时，每一帧都触发 frameChanged（命中帧不会被跳过）', async () => {
+    const s = new AnimatedSprite2D({ frames, durations: [0.05, 0.01, 0.01, 0.05], loop: false, autoplay: true, speedScale: 10 })
+    const seen: number[] = []
+    s.frameChanged.connect(() => seen.push(s.frame))
+    const g = await setup(s)
+    g.step() // 1/60 × 10 ≈ 0.167 秒：整套动画（0.12 秒）在一次推进里播完
+    expect(seen).toEqual([1, 2, 3])
+    expect(s.isPlaying).toBe(false)
+  })
+
+  it('getAnimationDuration / getFrameTime：不算 speedScale；名字和帧号检查', () => {
+    const s = new AnimatedSprite2D({
+      animations: { idle: { frames, fps: 8 }, attack: { frames, durations: [0.1, 0.2, 0.04, 0.16] } },
+      speedScale: 3,
+    })
+    expect(s.getAnimationDuration()).toBeCloseTo(0.5) // 当前动画 idle：4 帧 × 1/8
+    expect(s.getAnimationDuration('attack')).toBeCloseTo(0.5)
+    expect([0, 1, 2, 3].map((i) => s.getFrameTime('attack', i))).toEqual([0, 0.1, expect.closeTo(0.3), expect.closeTo(0.34)])
+    expect(() => s.getFrameTime('attack', 4)).toThrow(/frame 4 out of range for animation "attack" \(0–3\)/)
+    // @ts-expect-error 不存在的动画名
+    expect(() => s.getAnimationDuration('jump')).toThrow(/unknown animation "jump"/)
+  })
+
+  it('durations 参数错误时报错', () => {
+    expect(() => new AnimatedSprite2D({ frames, durations: [0.1, 0.1] })).toThrow(/animation "default" has 4 frames but 2 durations/)
+    expect(() => new AnimatedSprite2D({ frames, durations: [0.1, 0, 0.1, 0.1] })).toThrow(/duration of frame 1 must be > 0, got 0/)
+    expect(() => new AnimatedSprite2D({ animations: { hit: { frames, fps: 10, durations: [1, 1, 1, 1] } } })).toThrow(
+      /animation "hit": pass either `fps` or `durations`, not both/,
+    )
+  })
+
   it('dump 显示当前帧和播放状态；构造参数错误时报错', async () => {
     const s = new AnimatedSprite2D({ name: 'Boom', frames, autoplay: true })
     const g = await setup(s)

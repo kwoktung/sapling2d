@@ -1,13 +1,15 @@
 import { Ease, Node2D, rect, Sprite2D, v, type Tween, type Vector2 } from 'sapling2d'
 import { ART_SCALE, ASSETS } from '../assets'
 import { HEROES, RIG, type HeroKind } from '../data/heroes'
-import { archerMods, HEADSHOT_EVERY, HEADSHOT_MUL, KNOCKBACK, knightMods, mageMods, TAUNT_EVERY, type ArcherMods, type KnightMods, type MageMods } from '../data/skills'
+import { archerMods, HEADSHOT_EVERY, HEADSHOT_MUL, KNOCKBACK, knightMods, mageMods, TAUNT_EVERY, type ArcherMods, type KnightMods, type MageMods, type RunMods } from '../data/skills'
 import type { Shot } from './Arrow'
 import type { Blast } from './Effects'
 import type { Enemy } from './Enemy'
 
 /** 英雄需要的场景接口（Battle 实现）。 */
 export interface HeroWorld {
+  /** 这一局的全局倍率（通用选项）。 */
+  readonly run: RunMods
   /** 射程内离城门最近（剩余路程最短）的怪物；没有时为 null。 */
   findTarget(x: number, y: number, range: number): Enemy | null
   /** 射程内按离城门由近到远排好的怪物（最多 `n` 只，不含 `exclude`）。 */
@@ -171,8 +173,20 @@ export abstract class Hero extends Node2D {
   /** 这个英雄这一局的技能修正值（`data/skills.ts` 里对应的 `HeroMods[kind]`）。 */
   abstract readonly mods: object
 
-  /** 技能改了修正值之后重新算 `stats`。 */
-  abstract refreshStats(): void
+  /** 重新算 `stats`：基础数值 → 这个英雄的技能修正（`applyMods`）→ 全局倍率（通用选项的伤害、攻速）。技能或通用选项变了之后调用。 */
+  refreshStats(): void {
+    const base = HEROES[this.kind]
+    const s = this.stats
+    s.damage = base.damage
+    s.interval = base.interval
+    s.range = base.range
+    this.applyMods(s)
+    s.damage *= this.world.run.damageMul
+    s.interval /= this.world.run.attackSpeedMul
+  }
+
+  /** 按这个英雄的技能修正改 `stats`（已经是基础数值）。 */
+  protected abstract applyMods(stats: HeroStats): void
 
   protected override dumpProps(): Record<string, unknown> {
     return { ...super.dumpProps(), kind: this.kind, attacks: this.attacks }
@@ -192,10 +206,9 @@ export class Archer extends Hero {
     super(world, 'archer', position)
   }
 
-  override refreshStats(): void {
-    const base = HEROES.archer
-    this.stats.damage = base.damage * this.mods.damageMul
-    this.stats.range = base.range * this.mods.rangeMul
+  protected override applyMods(s: HeroStats): void {
+    s.damage *= this.mods.damageMul
+    s.range *= this.mods.rangeMul
   }
 
   protected override release(target: Enemy): void {
@@ -240,8 +253,8 @@ export class Mage extends Hero {
     super(world, 'mage', position)
   }
 
-  override refreshStats(): void {
-    this.stats.damage = HEROES.mage.damage * this.mods.damageMul
+  protected override applyMods(s: HeroStats): void {
+    s.damage *= this.mods.damageMul
   }
 
   get blastRadius(): number {
@@ -287,11 +300,10 @@ export class Knight extends Hero {
     super(world, 'knight', position)
   }
 
-  override refreshStats(): void {
-    const base = HEROES.knight
-    this.stats.damage = base.damage * this.mods.damageMul
-    this.stats.range = base.range * this.mods.rangeMul
-    this.stats.interval = base.interval * this.mods.intervalMul
+  protected override applyMods(s: HeroStats): void {
+    s.damage *= this.mods.damageMul
+    s.range *= this.mods.rangeMul
+    s.interval *= this.mods.intervalMul
   }
 
   /** 冲锋：竖直冲到 `topY` 再冲回原位（总共 `time` 秒），每帧把这段移动交给 `chargeSweep`；结束时回调 `done`。 */

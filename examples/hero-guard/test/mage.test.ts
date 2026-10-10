@@ -3,7 +3,7 @@ import { v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { ENEMIES } from '../src/data/enemies'
 import { HEROES } from '../src/data/heroes'
-import { BRANCHES, BURN_DPS, FREEZE_TIME } from '../src/data/skills'
+import { BRANCHES, BURN_DPS, FREEZE_TIME, isGeneric } from '../src/data/skills'
 import { gameOptions } from '../src/game'
 import { Mage } from '../src/nodes/Hero'
 import { linePath } from '../src/path'
@@ -86,7 +86,7 @@ describe('选英雄和解锁', () => {
     const { g, battle } = await withMage()
     battle.gainXp(100)
     g.step()
-    expect(battle.picker!.offers.every((o) => o.hero === 'mage')).toBe(true)
+    expect(battle.picker!.offers.every((o) => isGeneric(o) || o.hero === 'mage')).toBe(true)
   })
 })
 

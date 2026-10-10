@@ -132,13 +132,17 @@ describe('波次和胜负', () => {
     expect(battle.enemies.length + battle.kills).toBe(WAVES[0]![0]!.count)
   })
 
-  it('命用完失败；点屏幕重来', async () => {
+  it('命用完失败：弹出结束画面，点“再来一局”重开', async () => {
     const { g, battle } = await manual()
     battle.lives = 2
     for (let i = 0; i < 2; i++) battle.spawnEnemy('slime', linePath(100 + i * 500, FIELD.baseY - 20, FIELD.baseY + 200), 1e6)
     g.stepSeconds(5)
     expect([battle.lives, battle.state]).toEqual([0, 'lost'])
-    g.tap(375, 300)
+    g.step()
+    expect(battle.result!.result.won).toBe(false)
+    const btn = battle.result!.button
+    const p = btn.toGlobal(btn.rect.position.add(v(160, 50)))
+    g.tap(p.x, p.y)
     for (let i = 0; i < 20 && g.scene === battle; i++) await settle()
     expect((g.scene as Battle).lives).toBe(START.lives)
   })
@@ -155,6 +159,7 @@ describe('波次和胜负', () => {
       if (battle.state === 'placing') battle.slots.find((s) => !s.hero)!.clicked.emit(click) // 放在第一个空槽位
     }
     expect([battle.state, battle.wave, battle.lives]).toEqual(['won', WAVE_COUNT, START.lives])
-    expect(battle.hud.message.text).toContain('胜利')
+    g.step()
+    expect(battle.result!.result.won).toBe(true)
   })
 })

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { v } from 'sapling2d'
 import { createTestGame } from 'sapling2d/testing'
 import { HEROES } from '../src/data/heroes'
-import { BRANCHES, HEADSHOT_MUL, xpToNext } from '../src/data/skills'
+import { BRANCHES, GENERIC, HEADSHOT_MUL, isGeneric, xpToNext } from '../src/data/skills'
 import { gameOptions } from '../src/game'
 import { Archer } from '../src/nodes/Hero'
 import { linePath } from '../src/path'
@@ -27,37 +27,39 @@ const dummy = (b: Battle, x: number, y: number, hp = 10000) => b.spawnEnemy('sli
 const click = { pointerId: 0, position: v(0, 0), localPosition: v(0, 0) }
 
 describe('经验和升级', () => {
-  it('经验够了就升级：游戏暂停、弹出三选一（只有已上场英雄的分支、每条的第 1 级）；选完继续', async () => {
+  it('经验够了就升级：游戏暂停、弹出三选一（已上场英雄每条分支的第 1 级，或通用选项）；选完继续', async () => {
     const { g, battle } = await manual()
     battle.gainXp(xpToNext(1) + 3)
     expect([battle.level, battle.levelXp, battle.pendingLevels]).toEqual([2, 3, 1])
     g.step()
     expect(g.tree.paused).toBe(true)
     const offers = battle.picker!.offers
-    expect(offers.map((n) => n.id).sort()).toEqual(['archer.multishot.1', 'archer.poison.1', 'archer.sniper.1'])
+    expect(offers).toHaveLength(3)
+    for (const o of offers) expect(isGeneric(o) || ['archer.multishot.1', 'archer.poison.1', 'archer.sniper.1'].includes(o.id)).toBe(true)
     g.step(10) // 暂停中界面照常（卡片弹出动画），游戏不动
     const card = battle.picker!.cards[1]!
     g.tap(card.x + 100, card.y + 100)
     expect(g.tree.paused).toBe(false)
     expect(battle.taken.map((n) => n.id)).toEqual([card.node.id])
-    expect(battle.branchLevels.get(`archer.${card.node.branch}`)).toBe(1)
+    if (!isGeneric(card.node)) expect(battle.branchLevels.get(`archer.${card.node.branch}`)).toBe(1)
   })
 
-  it('一次升好几级：依次弹出；分支点满后不再出现；全部点满时升级直接跳过', async () => {
+  it('一次升好几级：依次弹出；分支点满后不再出现；全部点满后只剩通用选项', async () => {
     const { g, battle } = await manual()
     learn(battle, 'archer.multishot.1', 'archer.multishot.2', 'archer.multishot.3', 'archer.multishot.4')
     battle.gainXp(xpToNext(1) + xpToNext(2))
     expect(battle.pendingLevels).toBe(2)
     for (let n = 0; n < 2; n++) {
       g.step()
-      expect(battle.picker!.offers.some((o) => o.branch === 'multishot')).toBe(false)
+      expect(battle.picker!.offers.some((o) => !isGeneric(o) && o.branch === 'multishot')).toBe(false)
       battle.picker!.cards[0]!.clicked.emit(click)
     }
     expect(battle.pendingLevels).toBe(0)
     learn(battle, ...['sniper', 'poison'].flatMap((b) => [1, 2, 3, 4].map((l) => `archer.${b}.${l}`)).filter((id) => !battle.taken.some((t) => t.id === id)))
-    battle.gainXp(xpToNext(battle.level))
+    battle.gainXp(xpToNext(battle.level) / battle.run.xpMul + 1)
     g.step()
-    expect([battle.picker, battle.pendingLevels, g.tree.paused]).toEqual([null, 0, false])
+    expect(battle.picker!.offers.every((o) => isGeneric(o))).toBe(true)
+    void GENERIC
   })
 
   it('击杀加经验，升级界面上的经验条跟着变', async () => {

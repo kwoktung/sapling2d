@@ -1,9 +1,14 @@
-import { key, pointerPress } from 'sapling2d'
+import { key } from 'sapling2d'
 import { Battle } from './scenes/Battle'
 
 declare module 'sapling2d' {
   interface ActionRegistry {
     confirm: true
+  }
+  interface StorageRegistry {
+    /** 到过的最高波次、胜利次数。 */
+    bestWave: number
+    wins: number
   }
 }
 
@@ -12,7 +17,7 @@ export const gameOptions = {
   main: Battle,
   background: 0x2f4a2a,
   actions: {
-    /** 胜负画面：点屏幕或按空格再来一局。 */
-    confirm: [pointerPress(), key('Space'), key('Enter')],
+    /** 结束画面：按空格 / 回车再来一局（手机上点“再来一局”按钮）。 */
+    confirm: [key('Space'), key('Enter')],
   },
 }

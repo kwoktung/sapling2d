@@ -11,15 +11,20 @@ import {
   COLLIDE_MUL,
   COLLIDE_RADIUS,
   drawOffers,
+  isGeneric,
   FREEZE_HITS,
   FREEZE_TIME,
   FREEZE_WINDOW,
   POISON_CLOUD_RADIUS,
   POISON_CLOUD_STACKS,
+  runMods,
   TAUNT_RADIUS,
   TAUNT_TIME,
   xpToNext,
   type BranchLevels,
+  type GenericOption,
+  type Offer,
+  type RunMods,
   type SkillNode,
 } from '../data/skills'
 import { WAVE_COUNT, WAVES, type SpawnGroup } from '../data/waves'
@@ -31,6 +36,7 @@ import { Archer, Knight, Mage, type Hero, type HeroWorld, type Slash } from '../
 import { HeroPicker } from '../nodes/HeroPicker'
 import { Hud } from '../nodes/Hud'
 import { PathPreview } from '../nodes/PathPreview'
+import { ResultPanel } from '../nodes/ResultPanel'
 import { AimRing, MeteorStrike, RainZone, UltBar } from '../nodes/Ultimates'
 import { UpgradePicker } from '../nodes/UpgradePicker'
 import { Slot } from '../nodes/Slot'
@@ -98,9 +104,14 @@ export class Battle extends Scene implements HeroWorld {
   levelXp = 0
   pendingLevels = 0
   kills = 0
-  /** 每条分支点到第几级（`'archer.multishot' → 2`）、点过的节点（按顺序，结束画面的构筑回顾用）。 */
+  /** 每条分支点到第几级（`'archer.multishot' → 2`）、选过的选项（按顺序，结束画面的构筑回顾用）。 */
   readonly branchLevels: BranchLevels = new Map()
-  readonly taken: SkillNode[] = []
+  readonly taken: Offer[] = []
+  /** 这一局的全局倍率（通用选项改它）。 */
+  readonly run: RunMods = runMods()
+  /** 这一局打了多久（秒，只算波次中和波次间）。 */
+  runTime = 0
+  result: ResultPanel | null = null
   picker: UpgradePicker | null = null
   heroPicker: HeroPicker | null = null
   /** 选好了、等着点槽位放下的英雄。 */
@@ -110,7 +121,6 @@ export class Battle extends Scene implements HeroWorld {
   /** 大招：每个英雄的能量、上次放大招的游戏时间、充能倍率（通用选项“大招充能 +25%”改它）。 */
   readonly energy: Record<HeroKind, number> = { archer: 0, mage: 0, knight: 0 }
   readonly lastUlt: Record<HeroKind, number> = { archer: -Infinity, mage: -Infinity, knight: -Infinity }
-  ultChargeMul = 1
   ultBar!: UltBar
   aimRing!: AimRing
   /** 场上的 Boss（顶部血条显示它）。 */
@@ -235,6 +245,7 @@ export class Battle extends Scene implements HeroWorld {
     const hero = this.add(kind === 'archer' ? new Archer(this, slot.position) : kind === 'mage' ? new Mage(this, slot.position) : new Knight(this, slot.position))
     slot.hero = hero
     this.heroes.push(hero)
+    hero.refreshStats() // 之前选过的通用选项（全体伤害、攻速）也要算上
     hero.pointerDown.connect((e) => this._beginDrag(hero, e), this)
     hero.pointerMove.connect((e) => this._dragTo(hero, e), this)
     hero.pointerUp.connect((e) => this._endDrag(hero, e), this)
@@ -748,10 +759,7 @@ export class Battle extends Scene implements HeroWorld {
     if (e === this.boss) {
       this.boss = null
       // 打死最后一波的 Boss：胜利（不用等剩下的小怪）
-      if (this.wave >= WAVE_COUNT && this.state !== 'lost') {
-        this.state = 'won'
-        this.hud.flash('胜利！\n点屏幕再来一局', 0)
-      }
+      if (this.wave >= WAVE_COUNT && this.state !== 'lost') this.state = 'won'
     }
     // 分裂：在原路线上前后错开出几只小怪（不显示路线预览）
     const split = ENEMIES[e.kind].split
@@ -767,8 +775,9 @@ export class Battle extends Scene implements HeroWorld {
 
   // ---------------------------------------------------------------- 经验和升级
 
-  /** 加经验；够了就升级（可能一次升好几级，三选一依次弹出）。 */
-  gainXp(n: number): void {
+  /** 加经验（乘上通用选项的经验倍率）；够了就升级（可能一次升好几级，三选一依次弹出）。 */
+  gainXp(raw: number): void {
+    const n = raw * this.run.xpMul
     this.xp += n
     this.levelXp += n
     while (this.levelXp >= xpToNext(this.level)) {
@@ -782,7 +791,7 @@ export class Battle extends Scene implements HeroWorld {
 
   /** 英雄造成伤害时积攒能量。 */
   chargeUlt(kind: HeroKind, damage: number): void {
-    this.energy[kind] = Math.min(ULT.energyMax, this.energy[kind] + (damage / ULT.damagePerEnergy) * this.ultChargeMul)
+    this.energy[kind] = Math.min(ULT.energyMax, this.energy[kind] + (damage / ULT.damagePerEnergy) * this.run.ultChargeMul)
   }
 
   /** 能不能放：英雄在场上、能量满了、离上次放够 12 秒、不在升级弹窗里。 */
@@ -874,13 +883,33 @@ export class Battle extends Scene implements HeroWorld {
   /** 弹出三选一：游戏暂停，选完继续。没有可选的节点时这次升级直接跳过。 */
   openPicker(): void {
     this.ultBar.cancelAim()
-    const offers = drawOffers(availableNodes(this.placedKinds, this.branchLevels), 3, (n) => this.tree.rng.randiRange(0, n - 1))
+    const offers = drawOffers(availableNodes(this.placedKinds, this.branchLevels), 3, () => this.tree.rng.randf())
     const level = this.level - this.pendingLevels + 1
     this.pendingLevels--
     if (!offers.length) return
     this.tree.paused = true
     this.picker = this.add(new UpgradePicker(offers, level))
-    this.picker.picked.connect((node) => this.applySkill(node), this)
+    this.picker.picked.connect((offer) => this.applyOffer(offer), this)
+  }
+
+  /** 选了三选一里的一个：技能节点或通用选项。 */
+  applyOffer(offer: Offer): void {
+    if (isGeneric(offer)) this.applyGeneric(offer)
+    else this.applySkill(offer)
+  }
+
+  /** 通用选项：改全局倍率（所有英雄重新算数值）或回复命。 */
+  applyGeneric(g: GenericOption): void {
+    this.taken.push(g)
+    const run = this.run
+    if (g.effect === 'attackSpeed') run.attackSpeedMul += g.amount
+    else if (g.effect === 'damage') run.damageMul += g.amount
+    else if (g.effect === 'ultCharge') run.ultChargeMul += g.amount
+    else if (g.effect === 'xp') run.xpMul += g.amount
+    else if (g.effect === 'lives') this.lives += g.amount
+    for (const h of this.heroes) h.refreshStats()
+    this.picker = null
+    this.tree.paused = false
   }
 
   /** 点一个技能节点：改对应英雄的修正值。 */
@@ -914,10 +943,13 @@ export class Battle extends Scene implements HeroWorld {
   }
 
   override process(dt: number) {
-    if ((this.state === 'won' || this.state === 'lost') && this.tree.input.isActionJustPressed('confirm')) {
-      void this.tree.changeScene(Battle)
+    if (this.state === 'won' || this.state === 'lost') {
+      this._updateHud() // 最后扣掉的命也显示出来
+      if (!this.result) this._showResult()
+      else if (this.tree.input.isActionJustPressed('confirm')) this.restart()
       return
     }
+    if (this.state === 'wave' || this.state === 'gap') this.runTime += dt
     if (!this.manual) this._advanceWaves(dt)
     this._tickStatuses(dt)
     const enemies = this.enemies
@@ -930,7 +962,9 @@ export class Battle extends Scene implements HeroWorld {
       }
     }
     HitTester.compact(enemies)
-    if (this.pendingLevels > 0 && !this.picker && this.state !== 'won' && this.state !== 'lost') this.openPicker()
+    // 这一帧里漏怪可能刚把状态改成失败（TypeScript 的类型收窄看不到，所以断言一下）
+    const state = this.state as BattleState
+    if (this.pendingLevels > 0 && !this.picker && state !== 'won' && state !== 'lost') this.openPicker()
     this._updateHud()
   }
 
@@ -962,7 +996,6 @@ export class Battle extends Scene implements HeroWorld {
     if (pending || this.enemies.some((e) => !e.dead)) return
     if (this.wave >= WAVE_COUNT) {
       this.state = 'won'
-      this.hud.flash('胜利！\n点屏幕再来一局', 0)
       return
     }
     this.state = 'gap'
@@ -975,7 +1008,23 @@ export class Battle extends Scene implements HeroWorld {
     this.shake(FEEL.shake, FEEL.shakeTime)
     if (this.lives > 0) return
     this.state = 'lost'
-    this.hud.flash('失败\n点屏幕再来一局', 0)
+  }
+
+  /** 结束：存最高波次和胜利次数，弹出结束画面（胜负、数据、构筑回顾、再来一局）。 */
+  private _showResult() {
+    const storage = this.tree.storage
+    const won = this.state === 'won'
+    const bestWave = Math.max(storage.get('bestWave', 0), this.wave)
+    const wins = storage.get('wins', 0) + (won ? 1 : 0)
+    storage.set('bestWave', bestWave)
+    storage.set('wins', wins)
+    this.ultBar.cancelAim()
+    this.result = this.add(new ResultPanel({ won, wave: this.wave, kills: this.kills, time: this.runTime, bestWave, wins, taken: this.taken }))
+    this.result.restart.connect(() => this.restart(), this)
+  }
+
+  restart(): void {
+    void this.tree.changeScene(Battle)
   }
 
   // ---------------------------------------------------------------- 手感

@@ -185,6 +185,45 @@ export const BRANCHES: Branch[] = [
   ]),
 ]
 
+/** 通用选项（不属于某个英雄，可以重复出现）：效果类型 + 数值，由 Battle 执行。 */
+export interface GenericOption {
+  id: string
+  name: string
+  desc: string
+  effect: 'attackSpeed' | 'damage' | 'lives' | 'ultCharge' | 'xp'
+  amount: number
+}
+
+export const GENERIC: GenericOption[] = [
+  { id: 'generic.attackSpeed', name: '战意', desc: '全体英雄攻速 +10%', effect: 'attackSpeed', amount: 0.1 },
+  { id: 'generic.damage', name: '锋芒', desc: '全体英雄伤害 +10%', effect: 'damage', amount: 0.1 },
+  { id: 'generic.lives', name: '城墙修补', desc: '回复 3 条命', effect: 'lives', amount: 3 },
+  { id: 'generic.ultCharge', name: '蓄能', desc: '大招充能速度 +25%', effect: 'ultCharge', amount: 0.25 },
+  { id: 'generic.xp', name: '求知', desc: '获得的经验 +20%', effect: 'xp', amount: 0.2 },
+]
+
+/** 通用选项在抽卡池里的权重（技能节点是 1）。 */
+export const GENERIC_WEIGHT = 0.35
+
+/** 这一局的全局倍率（通用选项改它；每个英雄算数值时都乘上）。 */
+export interface RunMods {
+  attackSpeedMul: number
+  damageMul: number
+  ultChargeMul: number
+  xpMul: number
+}
+
+export function runMods(): RunMods {
+  return { attackSpeedMul: 1, damageMul: 1, ultChargeMul: 1, xpMul: 1 }
+}
+
+/** 三选一里的一个选项：某个英雄的技能节点，或通用选项。 */
+export type Offer = SkillNode | GenericOption
+
+export function isGeneric(o: Offer): o is GenericOption {
+  return 'effect' in o
+}
+
 /** 每条分支点到第几级了：`branchLevels.get('archer.multishot')`。 */
 export type BranchLevels = Map<string, number>
 
@@ -199,11 +238,19 @@ export function availableNodes(placed: ReadonlySet<HeroKind>, levels: BranchLeve
   return out
 }
 
-/** 随机抽 n 个不同的节点（`pick(n)` 返回 [0, n) 的整数，传 tree.rng 的方法以便测试复现）。 */
-export function drawOffers(pool: readonly SkillNode[], n: number, pick: (max: number) => number): SkillNode[] {
-  const left = [...pool]
-  const out: SkillNode[] = []
-  while (out.length < n && left.length) out.push(left.splice(pick(left.length), 1)[0]!)
+/**
+ * 按权重随机抽 n 个不同的选项：技能节点权重 1，通用选项 `GENERIC_WEIGHT`。
+ * `randf()` 返回 [0, 1)，传 tree.rng 的方法以便测试复现。
+ */
+export function drawOffers(nodes: readonly SkillNode[], n: number, randf: () => number, generic: readonly GenericOption[] = GENERIC): Offer[] {
+  const left: { offer: Offer; weight: number }[] = [...nodes.map((offer) => ({ offer, weight: 1 })), ...generic.map((offer) => ({ offer, weight: GENERIC_WEIGHT }))]
+  const out: Offer[] = []
+  while (out.length < n && left.length) {
+    let r = randf() * left.reduce((sum, x) => sum + x.weight, 0)
+    let i = 0
+    while (i < left.length - 1 && r >= left[i]!.weight) r -= left[i++]!.weight
+    out.push(left.splice(i, 1)[0]!.offer)
+  }
   return out
 }
 

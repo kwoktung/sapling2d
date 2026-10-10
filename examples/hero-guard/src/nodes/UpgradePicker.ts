@@ -1,21 +1,27 @@
 import { CanvasLayer, ColorRect, Ease, Label, Signal, v } from 'sapling2d'
 import { HEROES } from '../data/heroes'
-import type { SkillNode } from '../data/skills'
+import { isGeneric, type Offer } from '../data/skills'
 
 const CARD_W = 580
 const CARD_H = 210
 
 const HERO_COLORS: Record<string, number> = { archer: 0x2f5a2a, mage: 0x4a2f6a, knight: 0x2f405a }
 
-/** 一张卡片：英雄名 · 分支名、等级（第 4 级标“质变”）、效果描述。点一下选中。占位外观，13 换成九宫格边框。 */
+/** 一张卡片：英雄名 · 分支名、等级（第 4 级标“质变”）或“通用”、效果描述。点一下选中。占位外观，13 换成九宫格边框。 */
 class Card extends ColorRect {
-  constructor(readonly node: SkillNode) {
-    super({ size: v(CARD_W, CARD_H), color: HERO_COLORS[node.hero] ?? 0x2c2440, inputPickable: true })
-    const evolve = node.level === 4
+  /** 测试里按 node 取：保持旧名字。 */
+  readonly node: Offer
+
+  constructor(readonly offer: Offer) {
+    super({ size: v(CARD_W, CARD_H), color: isGeneric(offer) ? 0x4a4030 : (HERO_COLORS[offer.hero] ?? 0x2c2440), inputPickable: true })
+    this.node = offer
+    const evolve = !isGeneric(offer) && offer.level === 4
     this.add(new ColorRect({ size: v(CARD_W, 8), color: evolve ? 0xff8040 : 0xffc040 }))
-    this.add(new Label({ text: `${HEROES[node.hero].name} · ${node.name}`, fontSize: 40, fontWeight: 'bold', color: 0xffe8a0, align: 'left', position: v(28, 34) }))
-    this.add(new Label({ text: evolve ? '质变' : `Lv ${node.level}`, fontSize: 32, fontWeight: 'bold', color: evolve ? 0xff9a50 : 0xffffff, align: 'right', position: v(CARD_W - 28, 38) }))
-    this.add(new Label({ text: node.desc, fontSize: 30, color: 0xffffff, align: 'left', position: v(28, 118), wrapWidth: CARD_W - 56 }))
+    const title = isGeneric(offer) ? offer.name : `${HEROES[offer.hero].name} · ${offer.name}`
+    const tag = isGeneric(offer) ? '通用' : evolve ? '质变' : `Lv ${offer.level}`
+    this.add(new Label({ text: title, fontSize: 40, fontWeight: 'bold', color: 0xffe8a0, align: 'left', position: v(28, 34) }))
+    this.add(new Label({ text: tag, fontSize: 32, fontWeight: 'bold', color: evolve ? 0xff9a50 : 0xffffff, align: 'right', position: v(CARD_W - 28, 38) }))
+    this.add(new Label({ text: offer.desc, fontSize: 30, color: 0xffffff, align: 'left', position: v(28, 118), wrapWidth: CARD_W - 56 }))
   }
 }
 
@@ -24,11 +30,11 @@ class Card extends ColorRect {
  * 半透明遮罩挡住下面的点击；卡片从下往上弹出；选一张就发出 `picked` 并关闭。
  */
 export class UpgradePicker extends CanvasLayer {
-  readonly picked = new Signal<[node: SkillNode]>()
+  readonly picked = new Signal<[offer: Offer]>()
   readonly cards: Card[] = []
 
   constructor(
-    readonly offers: readonly SkillNode[],
+    readonly offers: readonly Offer[],
     readonly level: number,
   ) {
     super({ name: 'UpgradePicker', layer: 20, processMode: 'always' })
@@ -52,7 +58,7 @@ export class UpgradePicker extends CanvasLayer {
     })
   }
 
-  private _pick(node: SkillNode) {
+  private _pick(node: Offer) {
     if (this.isQueuedForDeletion) return
     this.picked.emit(node)
     this.queueFree()

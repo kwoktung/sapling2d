@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createTestGame } from 'sapling2d/testing'
 import { HEROES } from '../src/data/heroes'
-import { BRANCHES, TAUNT_EVERY } from '../src/data/skills'
+import { availableNodes, BRANCHES, isGeneric, TAUNT_EVERY } from '../src/data/skills'
 import { gameOptions } from '../src/game'
 import { Knight } from '../src/nodes/Hero'
 import { linePath } from '../src/path'
@@ -92,6 +92,7 @@ describe('骑士', () => {
     const { g, battle } = await withKnight()
     battle.gainXp(1000)
     g.step()
-    expect(battle.picker!.offers.map((o) => o.branch).sort()).toEqual(['guard', 'smash', 'whirl'])
+    expect(availableNodes(battle.placedKinds, battle.branchLevels).map((o) => o.branch).sort()).toEqual(['guard', 'smash', 'whirl'])
+    expect(battle.picker!.offers.every((o) => isGeneric(o) || o.hero === 'knight')).toBe(true)
   })
 })

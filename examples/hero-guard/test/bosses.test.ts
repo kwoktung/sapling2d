@@ -116,6 +116,6 @@ describe('骷髅巫妖', () => {
     battle.damage(lich, 1e6)
     expect(battle.state).toBe('won')
     g.step()
-    expect(battle.hud.message.text).toContain('胜利')
+    expect(battle.result!.result.won).toBe(true)
   })
 })

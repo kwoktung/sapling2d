@@ -11,6 +11,7 @@
 ## WeChat Mini Game
 
 - Build with `saplingWechat({ entry })` from `sapling2d/vite` in a separate Vite config (see `examples/wechat-tree`): `pnpm dev:wechat` (watch) writes `dist-wechat/`; open that folder in WeChat DevTools (it recompiles on change). The CLI is `/Applications/wechatwebdevtools.app/Contents/MacOS/cli open --project <dist-wechat>` once the IDE service port is enabled.
+- Assets: `public/assets/boot/**` goes into the main package (the loading screen's assets must live there); everything else goes into one subpackage (`assets-sub/`) that `WechatPlatform` downloads while the loading screen is up. Limits: main package 4 MB, total 30 MB. Subpackage behaviour on devices: `spikes/wechat-subpackage/REPORT.md`.
 - Set `WX_APPID` (mini games reject `touristappid`; use a test account). Dev builds inline sourcemaps and exceed 4 MB, so they only run in the simulator; real-device preview needs `SAPLING_RELEASE=1`.
 - To read device logs from the terminal: run `pnpm log-server` and build with `SAPLING_LOG_URL=http://<LAN IP>:7777/log`; console output and uncaught errors are forwarded (the phone must have 开发调试 enabled).
 - The simulator differs from devices (globals, timer units, WebGL quirks); see `spikes/wechat/REPORT.md` before trusting simulator-only results.

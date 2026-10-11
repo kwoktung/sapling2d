@@ -4,6 +4,7 @@ import type { ScreenInfo } from '../../core/Viewport'
 import type { LoadedImage, Platform } from '../Platform'
 import { _createClock } from './clock'
 import { screenCanvas } from './polyfills'
+import { _setCurrentAssetPaths, WechatAssetPaths, type WechatAssetManifest } from './assets'
 import { WechatAudioBackend } from './audio'
 import { WechatStorageBackend } from './storage'
 import { subscribeTouches } from './touch'
@@ -15,11 +16,22 @@ import { subscribeTouches } from './touch'
  * 各项的真机实测结论见 spikes/wechat/REPORT.md。
  */
 export class WechatPlatform implements Platform {
-  readonly audio = new WechatAudioBackend(wx)
+  /** 资源从主包还是分包读（清单由 saplingWechat 构建时写入）。 */
+  readonly assets = new WechatAssetPaths(wx, GameGlobal.__saplingAssets as WechatAssetManifest | undefined)
+  readonly audio = new WechatAudioBackend(wx, this.assets)
   readonly storage = new WechatStorageBackend(wx)
   /** 上屏 canvas（第一次 wx.createCanvas() 的结果）。 */
   readonly canvas = screenCanvas
   private readonly _clock = _createClock(wx.getPerformance(), () => Date.now())
+
+  constructor() {
+    _setCurrentAssetPaths(this.assets)
+  }
+
+  /** 启动时下载资源分包（启动页显示之后、加载入口场景的资源之前）。 */
+  prepareAssets(onProgress: (done: number) => void): Promise<void> {
+    return this.assets.prepare(onProgress)
+  }
 
   now(): number {
     return this._clock()
@@ -50,26 +62,32 @@ export class WechatPlatform implements Platform {
     return () => wx.offWindowResize?.(handler)
   }
 
-  /** 包内文本文件：`assets/<path>`。 */
+  /** 包内文本文件（主包或资源分包）。 */
   loadText(path: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      wx.getFileSystemManager().readFile({
-        filePath: `assets/${path}`,
-        encoding: 'utf8',
-        success: (res) => resolve(String(res.data)),
-        fail: (err) => reject(new Error(`cannot load assets/${path}: ${err.errMsg}`)),
-      })
-    })
+    return this.assets.resolve(path).then(
+      (file) =>
+        new Promise((resolve, reject) => {
+          wx.getFileSystemManager().readFile({
+            filePath: file,
+            encoding: 'utf8',
+            success: (res) => resolve(String(res.data)),
+            fail: (err) => reject(new Error(`cannot load ${file}: ${err.errMsg}`)),
+          })
+        }),
+    )
   }
 
-  /** 包内图片：`assets/<path>`（构建时 public/assets 被拷贝到小游戏工程的 assets/）。 */
+  /** 包内图片（构建时 public/assets 被拷贝到小游戏工程：`boot/` 在主包，其余在资源分包）。 */
   loadImage(path: string): Promise<LoadedImage> {
-    return new Promise((resolve, reject) => {
-      const img = wx.createImage()
-      img.onload = () => resolve({ resource: img, width: img.width, height: img.height })
-      img.onerror = (err) => reject(new Error(`cannot load assets/${path}: ${JSON.stringify(err)}`))
-      img.src = `assets/${path}`
-    })
+    return this.assets.resolve(path).then(
+      (file) =>
+        new Promise((resolve, reject) => {
+          const img = wx.createImage()
+          img.onload = () => resolve({ resource: img, width: img.width, height: img.height })
+          img.onerror = (err) => reject(new Error(`cannot load ${file}: ${JSON.stringify(err)}`))
+          img.src = file
+        }),
+    )
   }
 
   /** wx.onTouchStart / Move / End / Cancel → 统一的指针事件（多点触控）。小游戏没有键盘。 */

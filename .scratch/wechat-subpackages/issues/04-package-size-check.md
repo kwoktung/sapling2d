@@ -12,3 +12,7 @@
 - [ ] 开发构建（内联 sourcemap）照旧只打印 `game.js` 大小和各包大小，不报错
 - [ ] 测试：用临时目录构造文件，验证统计、警告和报错的阈值
 - [ ] `pnpm check` 通过
+
+## Comments
+
+**03 里发现（2026-10-11）：** `cli preview` 报的主包大小比我们的文件大：wechat-tree 发布构建 `game.js` 845 KB + logo 9 KB，CLI 报 main 1.7 MB。最可能是开发者工具按 `setting.es6: true` 把 ES6 转成 ES5，`game.js` 体积翻倍；上限按上传后的大小算，所以检查不能只看原始文件大小。先确认原因（试 `es6: false`，看真机能不能跑、CLI 报多大），再决定是改设置还是在检查里留余量。`cli preview --info-output <json>` 能拿到上传后的各包大小，可以拿来对照。

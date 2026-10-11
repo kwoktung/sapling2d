@@ -1,6 +1,6 @@
-import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, type Dirent } from 'node:fs'
 import { createServer, type Server } from 'node:http'
-import { join, resolve, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import type { Plugin } from 'vite'
 
 export interface SaplingWechatOptions {
@@ -16,8 +16,14 @@ export interface SaplingWechatOptions {
   orientation?: 'portrait' | 'landscape' | 'landscapeLeft' | 'landscapeRight'
   /** iOS 高性能模式（有 JIT），默认 true。见 spikes/wechat/REPORT.md。 */
   iOSHighPerformance?: boolean
-  /** 资源目录（相对于 root），会被拷贝到输出目录的 assets/。默认 `public/assets`。 */
+  /** 资源目录（相对于 root），会被拷贝进小游戏工程。默认 `public/assets`。 */
   assetsDir?: string
+  /**
+   * 哪些资源放在主包（启动页和 startGame 完成前用到的资源），其余放进资源分包，启动页显示后再下载。
+   * glob（相对于资源目录，支持 `*`、`**`、`?`）或函数。默认 `'boot/**'`。
+   * 主包上限 4 MB（含 game.js），所有包合计 30 MB。
+   */
+  mainAssets?: string | string[] | ((path: string) => boolean)
   /**
    * 发布构建：压缩、不带 sourcemap。默认读环境变量 SAPLING_RELEASE=1。
    * 开发构建带内联 sourcemap，体积会超过 4MB，只能在模拟器里跑；真机预览必须用发布构建。
@@ -33,6 +39,14 @@ export interface SaplingWechatOptions {
 
 const VIRTUAL_ENTRY = '__sapling2d_wechat_entry__.js'
 const RESOLVED_VIRTUAL_ENTRY = '\0' + VIRTUAL_ENTRY
+/** 资源清单（哪些在主包）：在虚拟入口里最先导入，WechatPlatform 创建时读 `GameGlobal.__saplingAssets`。 */
+const VIRTUAL_MANIFEST = '__sapling2d_wechat_assets__.js'
+const RESOLVED_VIRTUAL_MANIFEST = '\0' + VIRTUAL_MANIFEST
+
+/** 主包资源的目录；资源分包的名字和目录（目录里必须有 game.js，见 spikes/wechat-subpackage/REPORT.md）。 */
+const MAIN_ASSETS_DIR = 'assets'
+const SUBPACKAGE_NAME = 'assets'
+const SUBPACKAGE_DIR = 'assets-sub'
 
 const NO_EVAL_CALL = '(function () { throw new Error("[sapling2d] new Function is not allowed in WeChat Mini Games") })('
 
@@ -61,12 +75,17 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
   const logUrl = options.logUrl === undefined ? (process.env.SAPLING_LOG_URL ?? null) : options.logUrl
   let root = ''
   let outDir = ''
+  let assetsRoot = ''
+  const isMain = mainAssetsMatcher(options.mainAssets ?? 'boot/**')
+  /** 写进 game.js 的主包资源清单（构建开始时的资源目录）。 */
+  let injectedMain: string[] = []
 
   return {
     name: 'sapling2d:wechat',
     config(config) {
       root = resolve(config.root ?? process.cwd())
       outDir = resolve(root, options.outDir ?? 'dist-wechat')
+      assetsRoot = resolve(root, options.assetsDir ?? join('public', 'assets'))
       return {
         publicDir: false,
         define: { 'process.env.NODE_ENV': JSON.stringify(release ? 'production' : 'development') },
@@ -91,13 +110,20 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
      * 不依赖 sapling2d 自身的构建产物里 chunk 的顺序（外部的 pixi.js import 会被提升到补丁代码前面）。
      */
     resolveId(id) {
+      if (id === VIRTUAL_MANIFEST) return RESOLVED_VIRTUAL_MANIFEST
       // 库模式会把入口当作相对 root 的路径解析：按文件名匹配
       return id === VIRTUAL_ENTRY || id.endsWith('/' + VIRTUAL_ENTRY) ? RESOLVED_VIRTUAL_ENTRY : null
     },
 
     load(id) {
+      if (id === RESOLVED_VIRTUAL_MANIFEST) {
+        const plan = planAssets(assetsRoot, isMain)
+        injectedMain = plan.main
+        const manifest = { main: plan.main, subpackage: plan.sub.length ? { name: SUBPACKAGE_NAME, root: `${SUBPACKAGE_DIR}/` } : null }
+        return `GameGlobal.__saplingAssets = JSON.parse(${JSON.stringify(JSON.stringify(manifest))})\n`
+      }
       if (id !== RESOLVED_VIRTUAL_ENTRY) return null
-      return `import 'sapling2d/wechat-polyfills'\nimport ${JSON.stringify(resolve(root, options.entry))}\n`
+      return `import '${VIRTUAL_MANIFEST}'\nimport 'sapling2d/wechat-polyfills'\nimport ${JSON.stringify(resolve(root, options.entry))}\n`
     },
 
     /**
@@ -117,10 +143,15 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
       if (found.length) {
         throw new Error(`[sapling2d:wechat] game.js contains ${found.join(', ')}, which WeChat Mini Games do not allow.`)
       }
+      const plan = planAssets(assetsRoot, isMain)
+      if (plan.main.join('\n') !== injectedMain.join('\n')) {
+        this.warn('main-package assets changed since the build started (files added to or removed from boot/): restart the build so game.js gets the new list.')
+      }
       writeJson(join(outDir, 'game.json'), {
         deviceOrientation: options.orientation ?? 'portrait',
         showStatusBar: false,
         iOSHighPerformance: options.iOSHighPerformance ?? true,
+        ...(plan.sub.length ? { subpackages: [{ name: SUBPACKAGE_NAME, root: `${SUBPACKAGE_DIR}/` }] } : {}),
       })
       writeJson(join(outDir, 'project.config.json'), {
         appid: options.appid ?? process.env.WX_APPID ?? 'touristappid',
@@ -130,19 +161,68 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
         // urlCheck: false 才能在开发时访问局域网日志服务
         setting: { es6: true, enhance: true, minified: false, urlCheck: logUrl === null },
       })
-      const assets = resolve(root, options.assetsDir ?? join('public', 'assets'))
-      if (existsSync(assets)) {
-        cpSync(assets, join(outDir, 'assets'), { recursive: true })
-        // 小游戏的代码包只收一部分扩展名：Tiled 自己的扩展名可能在上传 / 预览时被丢掉，真机上读不到关卡
-        const tiled = (readdirSync(assets, { recursive: true }) as string[]).filter((f) => /\.(tmj|tsj|tmx|tsx)$/i.test(f))
-        if (tiled.length) {
-          this.warn(`assets ${tiled.slice(0, 5).join(', ')}${tiled.length > 5 ? ' …' : ''}: Tiled files with these extensions may be left out of the mini game package; save maps and tilesets as .json.`)
-        }
+      // 每次都重新拷贝：删掉的资源不能留在包里
+      rmSync(join(outDir, MAIN_ASSETS_DIR), { recursive: true, force: true })
+      rmSync(join(outDir, SUBPACKAGE_DIR), { recursive: true, force: true })
+      for (const f of plan.main) copyAsset(assetsRoot, f, join(outDir, MAIN_ASSETS_DIR))
+      for (const f of plan.sub) copyAsset(assetsRoot, f, join(outDir, SUBPACKAGE_DIR))
+      // 分包目录里必须有 game.js（入口），分包下载完时执行
+      if (plan.sub.length) writeFileSync(join(outDir, SUBPACKAGE_DIR, 'game.js'), '// sapling2d asset subpackage\n')
+      // 小游戏的代码包只收一部分扩展名：Tiled 自己的扩展名可能在上传 / 预览时被丢掉，真机上读不到关卡
+      const tiled = [...plan.main, ...plan.sub].filter((f) => /\.(tmj|tsj|tmx|tsx)$/i.test(f))
+      if (tiled.length) {
+        this.warn(`assets ${tiled.slice(0, 5).join(', ')}${tiled.length > 5 ? ' …' : ''}: Tiled files with these extensions may be left out of the mini game package; save maps and tilesets as .json.`)
       }
       const kb = (Buffer.byteLength(code) / 1024).toFixed(0)
       this.info?.(`game.js ${kb} KB${release ? '' : ' (dev build with inline sourcemap: simulator only)'}`)
     },
   }
+}
+
+/** 资源目录里的文件（`/` 分隔的相对路径）分到主包和分包。资源目录不存在时都为空。 */
+export function planAssets(assetsRoot: string, isMain: (path: string) => boolean): { main: string[]; sub: string[] } {
+  const main: string[] = []
+  const sub: string[] = []
+  if (!existsSync(assetsRoot)) return { main, sub }
+  const files = (readdirSync(assetsRoot, { recursive: true, withFileTypes: true }) as Dirent[])
+    .filter((d) => d.isFile() && d.name !== '.DS_Store')
+    .map((d) => relative(assetsRoot, join(d.parentPath, d.name)).split(sep).join('/'))
+    .sort()
+  for (const f of files) (isMain(f) ? main : sub).push(f)
+  return { main, sub }
+}
+
+/** `mainAssets` 选项 → 判断函数。glob 支持 `**`（任意层目录）、`*`（不含 /）、`?`。 */
+export function mainAssetsMatcher(option: string | string[] | ((path: string) => boolean)): (path: string) => boolean {
+  if (typeof option === 'function') return option
+  const res = (Array.isArray(option) ? option : [option]).map(globToRegExp)
+  return (path) => res.some((re) => re.test(path))
+}
+
+function globToRegExp(glob: string): RegExp {
+  let re = ''
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i]!
+    if (c === '*' && glob[i + 1] === '*') {
+      // `**/` 匹配零层或多层目录，末尾的 `**` 匹配剩下的一切
+      if (glob[i + 2] === '/') {
+        re += '(?:.*/)?'
+        i += 2
+      } else {
+        re += '.*'
+        i += 1
+      }
+    } else if (c === '*') re += '[^/]*'
+    else if (c === '?') re += '[^/]'
+    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  }
+  return new RegExp(`^${re}$`)
+}
+
+function copyAsset(assetsRoot: string, file: string, destDir: string): void {
+  const dest = join(destDir, file)
+  mkdirSync(dirname(dest), { recursive: true })
+  copyFileSync(join(assetsRoot, file), dest)
 }
 
 function writeJson(path: string, data: unknown): void {

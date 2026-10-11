@@ -6,6 +6,7 @@ import type { Scene } from '../../core/Scene'
 import { PixiRenderer } from '../../render/PixiRenderer'
 import { Game, type GameOptions } from '../../runtime/Game'
 import { WechatAdapter } from './adapter'
+import { _currentAssetPaths } from './assets'
 import { screenCanvas } from './polyfills'
 import { WechatPlatform } from './WechatPlatform'
 
@@ -13,6 +14,7 @@ export { WechatPlatform } from './WechatPlatform'
 
 /**
  * 加载包内的字体文件（ttf / otf），返回字体名；之后把 Label 的 `fontFamily` 设为它。失败时返回 null。
+ * 字体在资源分包里时，要在 startGame 完成之后调用（启动页里用的字体放进 `public/assets/boot/`）。
  * 只在微信小游戏里可用（`wx.loadFont`）；浏览器里请用 CSS @font-face。路径相对于资源目录。
  *
  * ```ts
@@ -21,7 +23,7 @@ export { WechatPlatform } from './WechatPlatform'
  * ```
  */
 export function loadFont(path: string): string | null {
-  return wx.loadFont(`assets/${path}`)
+  return wx.loadFont(_currentAssetPaths()?.resolveNow(path) ?? `assets/${path}`)
 }
 
 /**

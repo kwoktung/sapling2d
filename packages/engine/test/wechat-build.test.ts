@@ -4,7 +4,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build, createLogger } from 'vite'
 import { afterEach, describe, expect, it } from 'vitest'
-import { saplingWechat } from 'sapling2d/vite'
+import { saplingWechat, type SaplingWechatOptions } from 'sapling2d/vite'
+import { mainAssetsMatcher } from '../src/vite/wechat'
 import { _createClock } from '../src/platform/wechat/clock'
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src')
@@ -13,7 +14,7 @@ describe('saplingWechat', () => {
   let dir = ''
   afterEach(() => dir && rmSync(dir, { recursive: true, force: true }))
 
-  function fixture(main: string) {
+  function fixture(main: string, pluginOptions: Partial<SaplingWechatOptions> = {}) {
     dir = mkdtempSync(join(tmpdir(), 'sapling-wechat-'))
     mkdirSync(join(dir, 'src'))
     mkdirSync(join(dir, 'public', 'assets'), { recursive: true })
@@ -31,11 +32,13 @@ describe('saplingWechat', () => {
             { find: /^sapling2d\/wechat-polyfills$/, replacement: join(SRC, 'platform', 'wechat', 'polyfills.ts') },
           ],
         },
-        plugins: [saplingWechat({ entry: 'src/main.ts', appid: 'wx-test', orientation: 'landscape', release: opts.release ?? false, logUrl: opts.logUrl ?? null })],
+        plugins: [saplingWechat({ entry: 'src/main.ts', appid: 'wx-test', orientation: 'landscape', release: opts.release ?? false, logUrl: opts.logUrl ?? null, ...pluginOptions })],
       })
   }
 
   const read = (f: string) => readFileSync(join(dir, 'dist-wechat', f), 'utf8')
+  /** game.js 里的资源清单：`GameGlobal.__saplingAssets = JSON.parse("...")`。 */
+  const manifestOf = (js: string) => JSON.parse(JSON.parse(/__saplingAssets = JSON\.parse\(("(?:[^"\\]|\\.)*")\)/.exec(js)![1]!))
 
   it('产出单个 CommonJS 的 game.js、game.json、project.config.json，并拷贝资源', async () => {
     const run = fixture("import { v } from 'sapling2d'\nconsole.log(v(1, 2).toString())")
@@ -45,12 +48,47 @@ describe('saplingWechat', () => {
     expect(js).toContain('__saplingLog') // 启动代码在最前面
     expect(js.indexOf('__saplingLog')).toBeLessThan(js.indexOf('Vector2'))
     expect(js).toContain('sourceMappingURL=data:') // 开发构建：内联 sourcemap
-    expect(JSON.parse(read('game.json'))).toEqual({ deviceOrientation: 'landscape', showStatusBar: false, iOSHighPerformance: true })
+    expect(JSON.parse(read('game.json'))).toEqual({
+      deviceOrientation: 'landscape',
+      showStatusBar: false,
+      iOSHighPerformance: true,
+      subpackages: [{ name: 'assets', root: 'assets-sub/' }],
+    })
     const project = JSON.parse(read('project.config.json'))
     expect(project.appid).toBe('wx-test')
     expect(project.compileType).toBe('game')
     expect(project.setting.urlCheck).toBe(true)
+    // 不在 boot/ 里的资源进资源分包，分包目录里有入口 game.js
+    expect(existsSync(join(dir, 'dist-wechat', 'assets-sub', 'fruit.png'))).toBe(true)
+    expect(existsSync(join(dir, 'dist-wechat', 'assets-sub', 'game.js'))).toBe(true)
+    expect(existsSync(join(dir, 'dist-wechat', 'assets', 'fruit.png'))).toBe(false)
+  })
+
+  it('boot/ 里的资源留在主包；资源清单写进 game.js，在游戏代码之前执行', async () => {
+    const run = fixture("import { v } from 'sapling2d'\nconsole.log(v(1, 2).toString())")
+    mkdirSync(join(dir, 'public', 'assets', 'boot', 'ui'), { recursive: true })
+    writeFileSync(join(dir, 'public', 'assets', 'boot', 'ui', 'logo.png'), 'png')
+    await run()
+    expect(existsSync(join(dir, 'dist-wechat', 'assets', 'boot', 'ui', 'logo.png'))).toBe(true)
+    expect(existsSync(join(dir, 'dist-wechat', 'assets-sub', 'boot'))).toBe(false)
+    const js = read('game.js')
+    expect(manifestOf(js)).toEqual({ main: ['boot/ui/logo.png'], subpackage: { name: 'assets', root: 'assets-sub/' } })
+    expect(js.indexOf('__saplingAssets')).toBeLessThan(js.indexOf('Vector2'))
+  })
+
+  it('所有资源都在主包时不生成分包；重新构建时删掉的资源不会留在包里', async () => {
+    const run = fixture("import { v } from 'sapling2d'\nconsole.log(v(1, 2).toString())", { mainAssets: () => true })
+    await run()
     expect(existsSync(join(dir, 'dist-wechat', 'assets', 'fruit.png'))).toBe(true)
+    expect(existsSync(join(dir, 'dist-wechat', 'assets-sub'))).toBe(false)
+    expect(JSON.parse(read('game.json')).subpackages).toBeUndefined()
+    expect(manifestOf(read('game.js'))).toEqual({ main: ['fruit.png'], subpackage: null })
+
+    rmSync(join(dir, 'public', 'assets', 'fruit.png'))
+    writeFileSync(join(dir, 'public', 'assets', 'pear.png'), 'png')
+    await run()
+    expect(existsSync(join(dir, 'dist-wechat', 'assets', 'fruit.png'))).toBe(false)
+    expect(existsSync(join(dir, 'dist-wechat', 'assets', 'pear.png'))).toBe(true)
   })
 
   it('资源里有 Tiled 自己的扩展名（.tmj / .tsj）时警告：小游戏代码包可能不收', async () => {
@@ -120,5 +158,16 @@ describe('WeChat 时钟', () => {
     p += 16_000
     ms += 16
     expect(now() - corrected).toBeCloseTo(16)
+  })
+})
+
+describe('mainAssetsMatcher', () => {
+  it('glob：** 任意层目录，* 不跨目录，? 一个字符；多个 glob 任一匹配；也可以是函数', () => {
+    const boot = mainAssetsMatcher('boot/**')
+    expect(['boot/a.png', 'boot/x/y.png'].map(boot)).toEqual([true, true])
+    expect(['bootx/a.png', 'a/boot/b.png', 'a.png'].map(boot)).toEqual([false, false, false])
+    const multi = mainAssetsMatcher(['*.json', '**/logo?.png'])
+    expect(['ui.json', 'a/ui.json', 'logo1.png', 'x/y/logo2.png', 'x/logo10.png'].map(multi)).toEqual([true, false, true, true, false])
+    expect(mainAssetsMatcher((p) => p.endsWith('.ttf'))('fonts/a.ttf')).toBe(true)
   })
 })

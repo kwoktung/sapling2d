@@ -1,5 +1,6 @@
 /// <reference path="./wx.d.ts" />
 import type { AudioBackend, SoundHandle } from '../../audio/backend'
+import type { WechatAssetPaths } from './assets'
 
 /** wx 音频 / 文件 / 触摸 API 中引擎用到的部分（作为参数传入，方便测试）。 */
 export interface WxAudioApi {
@@ -25,8 +26,12 @@ export class WechatAudioBackend implements AudioBackend {
   /** 正在播放的音乐 */
   private readonly _music = new Set<WechatMiniGame.InnerAudioContext>()
 
-  constructor(api: WxAudioApi) {
+  /** 资源路径（主包或分包）。不传时都在 `assets/`。 */
+  private readonly _paths: Pick<WechatAssetPaths, 'resolve' | 'resolveNow'>
+
+  constructor(api: WxAudioApi, paths: Pick<WechatAssetPaths, 'resolve' | 'resolveNow'> = ROOT_PATHS) {
     this._wx = api
+    this._paths = paths
     this._ctx = api.createWebAudioContext()
     this._master = this._ctx.createGain()
     this._master.connect(this._ctx.destination)
@@ -44,9 +49,13 @@ export class WechatAudioBackend implements AudioBackend {
   }
 
   loadSound(path: string): Promise<unknown> {
+    return this._paths.resolve(path).then((file) => this._decode(path, file))
+  }
+
+  private _decode(path: string, file: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
       this._wx.getFileSystemManager().readFile({
-        filePath: `assets/${path}`,
+        filePath: file,
         success: (res) => {
           // resolve / reject 只会生效一次，回调和 Promise 两种写法都接上也没问题
           const ok = (buf: unknown) => resolve(buf)
@@ -55,7 +64,7 @@ export class WechatAudioBackend implements AudioBackend {
           const p = this._ctx.decodeAudioData(res.data as ArrayBuffer, ok, fail) as { then?: (a: unknown, b: unknown) => void } | undefined
           if (p && typeof p.then === 'function') p.then(ok, fail)
         },
-        fail: (err) => reject(new Error(`cannot read assets/${path}: ${err.errMsg}`)),
+        fail: (err) => reject(new Error(`cannot read ${file}: ${err.errMsg}`)),
       })
     })
   }
@@ -92,8 +101,9 @@ export class WechatAudioBackend implements AudioBackend {
   }
 
   playMusic(path: string, options: { volume: number; loop: boolean }): SoundHandle {
+    const src = this._paths.resolveNow(path)
     const audio = this._wx.createInnerAudioContext()
-    audio.src = `assets/${path}`
+    audio.src = src
     audio.loop = options.loop
     audio.volume = options.volume
     this._music.add(audio)
@@ -139,6 +149,8 @@ export class WechatAudioBackend implements AudioBackend {
     }
   }
 }
+
+const ROOT_PATHS = { resolve: (path: string) => Promise.resolve(`assets/${path}`), resolveNow: (path: string) => `assets/${path}` }
 
 function endedHandle(): SoundHandle {
   return { setVolume: () => {}, stop: () => {}, onEnded: (cb) => void Promise.resolve().then(cb) }

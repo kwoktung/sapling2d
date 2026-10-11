@@ -74,7 +74,19 @@ declare namespace WechatMiniGame {
     onError(cb: (err: { errMsg: string; errCode?: number }) => void): void
   }
 
+  /** `wx.loadSubpackage` 的进度事件。真机实测：`progress` 不可信（iOS 上是 0..1，最后一个事件的期望字节数是 2^32-1），按字节数算。 */
+  interface SubpackageProgress {
+    progress: number
+    totalBytesWritten: number
+    totalBytesExpectedToWrite: number
+  }
+
+  interface LoadSubpackageTask {
+    onProgressUpdate?(cb: (res: SubpackageProgress) => void): void
+  }
+
   interface Wx {
+    loadSubpackage(options: { name: string; success?: () => void; fail?: (err: { errMsg: string }) => void }): LoadSubpackageTask | undefined
     createWebAudioContext(): WebAudioContext
     createInnerAudioContext(options?: { useWebAudioImplement?: boolean }): InnerAudioContext
     getStorageSync(key: string): unknown
@@ -119,3 +131,4 @@ declare const wx: WechatMiniGame.Wx
 declare const GameGlobal: Record<string, unknown>
 declare function requestAnimationFrame(cb: (time: number) => void): number
 declare function cancelAnimationFrame(id: number): void
+declare function setTimeout(cb: () => void, ms?: number): number

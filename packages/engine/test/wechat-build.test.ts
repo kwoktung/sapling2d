@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { build, createLogger } from 'vite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { saplingWechat, type SaplingWechatOptions } from 'sapling2d/vite'
-import { mainAssetsMatcher } from '../src/vite/wechat'
+import { checkPackageSize, MAIN_PACKAGE_LIMIT, mainAssetsMatcher, TOTAL_PACKAGE_LIMIT } from '../src/vite/wechat'
 import { _createClock } from '../src/platform/wechat/clock'
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src')
@@ -74,6 +74,14 @@ describe('saplingWechat', () => {
     const js = read('game.js')
     expect(manifestOf(js)).toEqual({ main: ['boot/ui/logo.png'], subpackage: { name: 'assets', root: 'assets-sub/' } })
     expect(js.indexOf('__saplingAssets')).toBeLessThan(js.indexOf('Vector2'))
+  })
+
+  it('发布构建：主包超过 4 MB 时构建失败，指出最大的文件；开发构建只汇总', async () => {
+    const run = fixture("import { v } from 'sapling2d'\nconsole.log(v(1, 2).toString())")
+    mkdirSync(join(dir, 'public', 'assets', 'boot'))
+    writeFileSync(join(dir, 'public', 'assets', 'boot', 'huge.png'), Buffer.alloc(MAIN_PACKAGE_LIMIT))
+    await expect(run({ release: true })).rejects.toThrow(/main package is .* over the 4\.00 MB limit\. Largest: assets\/boot\/huge\.png 4\.00 MB/)
+    await run({ release: false }) // 开发构建不报错
   })
 
   it('所有资源都在主包时不生成分包；重新构建时删掉的资源不会留在包里', async () => {
@@ -171,3 +179,25 @@ describe('mainAssetsMatcher', () => {
     expect(mainAssetsMatcher((p) => p.endsWith('.ttf'))('fonts/a.ttf')).toBe(true)
   })
 })
+
+describe('checkPackageSize', () => {
+  const MB = 1024 * 1024
+  it('超过 80% 警告，超限报错（只在发布构建）', () => {
+    const ok = checkPackageSize({ gameJs: 1 * MB, main: [{ file: 'boot/logo.png', size: 0.1 * MB }], sub: 5 * MB, release: true })
+    expect(ok.summary).toContain('main 1.10 MB / 4.00 MB (game.js 1.00 MB)')
+    expect(ok.summary).toContain('asset subpackage 5.00 MB, total 6.10 MB / 30.00 MB')
+    expect([ok.warnings, ok.error]).toEqual([[], null])
+
+    const close = checkPackageSize({ gameJs: 1 * MB, main: [{ file: 'boot/bg.jpg', size: 2.3 * MB }], sub: 0, release: true })
+    expect(close.warnings).toEqual([expect.stringMatching(/main package is 3\.30 MB, close to the 4\.00 MB limit\. Largest: assets\/boot\/bg\.jpg 2\.30 MB, game\.js 1\.00 MB/)])
+    expect(close.error).toBeNull()
+
+    const over = checkPackageSize({ gameJs: 1 * MB, main: [], sub: TOTAL_PACKAGE_LIMIT, release: true })
+    expect(over.error).toMatch(/all packages together are 31\.00 MB, over the 30\.00 MB limit/)
+
+    const dev = checkPackageSize({ gameJs: 7 * MB, main: [], sub: 0, release: false })
+    expect([dev.warnings, dev.error]).toEqual([[], null])
+    expect(dev.summary).toContain('simulator only')
+  })
+})
+

@@ -1,4 +1,4 @@
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, type Dirent } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, type Dirent } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import type { Plugin } from 'vite'
@@ -79,6 +79,7 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
   const isMain = mainAssetsMatcher(options.mainAssets ?? 'boot/**')
   /** 写进 game.js 的主包资源清单（构建开始时的资源目录）。 */
   let injectedMain: string[] = []
+  let logger: { info(msg: string): void } | null = null
 
   return {
     name: 'sapling2d:wechat',
@@ -102,6 +103,10 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
           rolldownOptions: { output: { banner: bootBanner(logUrl), inlineDynamicImports: true } },
         },
       }
+    },
+
+    configResolved(config) {
+      logger = config.logger
     },
 
     /**
@@ -158,8 +163,9 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
         projectname: options.projectName ?? 'sapling2d-game',
         compileType: 'game',
         libVersion: '3.0.0',
-        // urlCheck: false 才能在开发时访问局域网日志服务
-        setting: { es6: true, enhance: true, minified: false, urlCheck: logUrl === null },
+        // urlCheck: false 才能在开发时访问局域网日志服务。
+        // 不让开发者工具再转译（es6 / enhance）：game.js 已经是 ES2017，转成 ES5 后上传体积会变成约 1.1–2.1 倍、无法预估（实测见 checkPackageSize）
+        setting: { es6: false, enhance: false, minified: false, urlCheck: logUrl === null },
       })
       // 每次都重新拷贝：删掉的资源不能留在包里
       rmSync(join(outDir, MAIN_ASSETS_DIR), { recursive: true, force: true })
@@ -173,10 +179,70 @@ export function saplingWechat(options: SaplingWechatOptions): Plugin {
       if (tiled.length) {
         this.warn(`assets ${tiled.slice(0, 5).join(', ')}${tiled.length > 5 ? ' …' : ''}: Tiled files with these extensions may be left out of the mini game package; save maps and tilesets as .json.`)
       }
-      const kb = (Buffer.byteLength(code) / 1024).toFixed(0)
-      this.info?.(`game.js ${kb} KB${release ? '' : ' (dev build with inline sourcemap: simulator only)'}`)
+      const report = checkPackageSize({
+        gameJs: Buffer.byteLength(code),
+        main: plan.main.map((f) => ({ file: f, size: statSync(join(assetsRoot, f)).size })),
+        sub: plan.sub.reduce((sum, f) => sum + statSync(join(assetsRoot, f)).size, 0),
+        release,
+      })
+      logger?.info(report.summary)
+      for (const w of report.warnings) this.warn(w)
+      if (report.error) this.error(report.error)
     },
   }
+}
+
+/** 主包上限（含 game.js）和所有包合计的上限（官方文档，见 spikes/wechat-subpackage/REPORT.md）。 */
+export const MAIN_PACKAGE_LIMIT = 4 * 1024 * 1024
+export const TOTAL_PACKAGE_LIMIT = 30 * 1024 * 1024
+/** 超过上限的这个比例时警告。 */
+const WARN_RATIO = 0.8
+
+export interface PackageSizeReport {
+  /** 一行汇总（构建时打印）。 */
+  summary: string
+  warnings: string[]
+  /** 发布构建超限时的错误信息。 */
+  error: string | null
+}
+
+/**
+ * 包体大小和上限比较。主包 = game.js + 主包资源；分包 = 分包资源。
+ * 生成的 project.config.json 关掉了开发者工具的转译，上传后的大小和文件大小一致（`cli preview --info-output` 实测）；
+ * 转译打开时（es6 / enhance）game.js 会变成约 1.1–2.1 倍。
+ * 发布构建超限时报错、接近时警告；开发构建（内联 sourcemap，只在模拟器里跑）只汇总。
+ */
+export function checkPackageSize(input: { gameJs: number; main: { file: string; size: number }[]; sub: number; release: boolean }): PackageSizeReport {
+  const js = input.gameJs
+  const main = js + input.main.reduce((sum, f) => sum + f.size, 0)
+  const total = main + input.sub
+  const summary =
+    `wechat package: main ${mb(main)} / ${mb(MAIN_PACKAGE_LIMIT)} (game.js ${mb(js)}), ` +
+    `asset subpackage ${mb(input.sub)}, total ${mb(total)} / ${mb(TOTAL_PACKAGE_LIMIT)}` +
+    (input.release ? '' : ' — dev build with inline sourcemap: simulator only')
+  const warnings: string[] = []
+  if (!input.release) return { summary, warnings, error: null }
+  const largest = [{ file: 'game.js', size: js }, ...input.main.map((f) => ({ file: `assets/${f.file}`, size: f.size }))]
+    .sort((a, b) => b.size - a.size)
+    .slice(0, 5)
+    .map((f) => `${f.file} ${mb(f.size)}`)
+    .join(', ')
+  const errors: string[] = []
+  if (main > MAIN_PACKAGE_LIMIT) {
+    errors.push(`main package is ${mb(main)}, over the ${mb(MAIN_PACKAGE_LIMIT)} limit. Largest: ${largest}. Move assets out of public/assets/boot/ (or narrow saplingWechat({ mainAssets })) so they go into the asset subpackage.`)
+  } else if (main > MAIN_PACKAGE_LIMIT * WARN_RATIO) {
+    warnings.push(`main package is ${mb(main)}, close to the ${mb(MAIN_PACKAGE_LIMIT)} limit. Largest: ${largest}.`)
+  }
+  if (total > TOTAL_PACKAGE_LIMIT) {
+    errors.push(`all packages together are ${mb(total)}, over the ${mb(TOTAL_PACKAGE_LIMIT)} limit: shrink assets or serve some of them from a CDN.`)
+  } else if (total > TOTAL_PACKAGE_LIMIT * WARN_RATIO) {
+    warnings.push(`all packages together are ${mb(total)}, close to the ${mb(TOTAL_PACKAGE_LIMIT)} limit.`)
+  }
+  return { summary, warnings, error: errors.length ? `[sapling2d:wechat] ${errors.join(' ')}` : null }
+}
+
+function mb(bytes: number): string {
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`
 }
 
 /** 资源目录里的文件（`/` 分隔的相对路径）分到主包和分包。资源目录不存在时都为空。 */

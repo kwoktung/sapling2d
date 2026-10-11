@@ -4,15 +4,24 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** done（2026-10-11）
 
-- [ ] 主包 = `game.js` + `game.json` + `project.config.json` 之外上传的文件 + 主包资源；分包 = 分包目录；按上传时的口径（以 01 的结论为准）
-- [ ] 上限写在插件里一处（主包 4 MB，分包 / 总包按 01）；发布构建超限时 `this.error`，信息里列出主包里最大的 5 个文件和它们的大小，提示挪出 `boot/`
-- [ ] 超过上限的 80% 时警告
-- [ ] 开发构建（内联 sourcemap）照旧只打印 `game.js` 大小和各包大小，不报错
-- [ ] 测试：用临时目录构造文件，验证统计、警告和报错的阈值
-- [ ] `pnpm check` 通过
+- [x] 主包 = `game.js` + `game.json` + `project.config.json` 之外上传的文件 + 主包资源；分包 = 分包目录；按上传时的口径（以 01 的结论为准）
+- [x] 上限写在插件里一处（主包 4 MB，分包 / 总包按 01）；发布构建超限时 `this.error`，信息里列出主包里最大的 5 个文件和它们的大小，提示挪出 `boot/`
+- [x] 超过上限的 80% 时警告
+- [x] 开发构建（内联 sourcemap）照旧只打印 `game.js` 大小和各包大小，不报错
+- [x] 测试：用临时目录构造文件，验证统计、警告和报错的阈值
+- [x] `pnpm check` 通过
 
 ## Comments
 
 **03 里发现（2026-10-11）：** `cli preview` 报的主包大小比我们的文件大：wechat-tree 发布构建 `game.js` 845 KB + logo 9 KB，CLI 报 main 1.7 MB。最可能是开发者工具按 `setting.es6: true` 把 ES6 转成 ES5，`game.js` 体积翻倍；上限按上传后的大小算，所以检查不能只看原始文件大小。先确认原因（试 `es6: false`，看真机能不能跑、CLI 报多大），再决定是改设置还是在检查里留余量。`cli preview --info-output <json>` 能拿到上传后的各包大小，可以拿来对照。
+
+**实现（2026-10-11）：**
+
+- 原因查清：不是 sourcemap，是开发者工具的转译（`es6` / `enhance`），放大倍数随代码变化（1.14–2.1 倍）。另外开发者工具按项目路径缓存设置，同一目录里改配置不一定生效——之前的 1.7 MB 就是这样来的。见 `spikes/wechat-subpackage/REPORT.md`。
+- 决定：生成的 `project.config.json` 写 `es6: false, enhance: false`（`game.js` 本来就是 Vite 输出的 ES2017）。这样上传大小 = 文件大小，检查可以精确。真机（iPhone 17）hero-guard 未转译构建 60 fps、没有报错。
+- `checkPackageSize()`（`src/vite/wechat.ts`）：主包 = `game.js` + 主包资源，分包 = 分包资源；上限 `MAIN_PACKAGE_LIMIT`（4 MB）、`TOTAL_PACKAGE_LIMIT`（30 MB）；发布构建超限 `this.error`（列出主包里最大的 5 个文件），超过 80% 警告；开发构建只打印汇总。汇总用 Vite 的 logger 打印（原来的 `this.info` 在 vite build 里不显示）。
+- 我们的统计和 CLI 对照：hero-guard 主包 0.90 MB 对 939,872 字节，一致。
+- 测试：`checkPackageSize` 的阈值；真实构建里 `boot/` 放 4 MB 文件时发布构建失败、开发构建不失败。
+- 没测：Android 上不转译的构建。

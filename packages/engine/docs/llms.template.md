@@ -14,7 +14,7 @@
 | `sapling2d/testing` | `createTestGame(options)`：无头运行，测试用 |
 | `sapling2d/vite` | `sapling()` 资源路径检查；`saplingWechat()` 构建小游戏；`startLogServer()` 接收真机日志 |
 
-启动参数（三个入口通用）：`main`（入口场景类）、`autoloads`、`actions`、`design`（默认 750×1334、`expand`）、`physics`、`seed`、`storagePrefix`、`pauseOnBackground`、`pixelArt`（见“贴图与文字”，无头模式下没有效果）；浏览器和小游戏另有 `background`。
+启动参数（三个入口通用）：`main`（入口场景类）、`loading`（启动页，见“启动页”）、`autoloads`、`actions`、`design`（默认 750×1334、`expand`）、`physics`、`seed`、`storagePrefix`、`pauseOnBackground`、`pixelArt`（见“贴图与文字”，无头模式下没有效果）；浏览器和小游戏另有 `background`。
 
 ## 核心概念
 
@@ -284,6 +284,17 @@ shake(camera: Camera2D, strength: number, duration: number) {
 
 <!-- example:scenes-storage#test -->
 
+### 启动页
+
+<!-- example:loading-screen -->
+
+- 启动流程：加载启动页自己的 `static assets` → 启动页进入树、开始帧循环 → 准备资源包（微信小游戏下载资源分包，占进度前 70%）→ 加载入口场景的资源 → 等 `loaded()`（如果有）→ 切到入口场景，启动页被销毁，它独有的资源被卸载。
+- 不传 `loading` 时用内置的 `DefaultLoadingScene`（屏幕中间一条进度条，不用资源，背景是 `background`）；`loading: null` 不显示启动页。
+- 启动页的资源要少：它们在任何画面出现之前加载。
+- `tree.loadProgress` 在每次 `changeScene` 期间也从 0 走到 1，可以自己做切场景的加载提示。
+
+<!-- example:loading-screen#test -->
+
 ### 音频
 
 <!-- example:audio -->
@@ -406,7 +417,7 @@ fx.createTween().to(fx, { alpha: 0 }, 0.3).call(() => fx.queueFree())
 ## 测试：`createTestGame`
 
 ```ts
-const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, autoloads?, actions?, design?, assetsDir? })  // assetsDir：文本资源（Tiled 关卡）从这里读真实文件，默认 public/assets
+const g = await createTestGame({ main: GameScene, seed: 1, screen?, storage?, autoloads?, actions?, design?, assetsDir?, loading? })  // loading 默认 null，传入时直接跳过（不经过帧、不等 loaded()）；assetsDir：文本资源（Tiled 关卡）从这里读真实文件，默认 public/assets
 ```
 
 | 成员 | 说明 |

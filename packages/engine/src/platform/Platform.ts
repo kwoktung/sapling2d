@@ -26,6 +26,11 @@ export interface Platform {
   cancelFrame(id: number): void
   /** 加载一张图片。`path` 相对于游戏的资源目录。 */
   loadImage(path: string): Promise<LoadedImage>
+  /**
+   * 可选：启动时、加载入口场景的资源之前准备资源包（微信小游戏下载资源分包）。`onProgress` 汇报 0..1。
+   * 启动页的资源在这之前加载，所以必须不依赖这一步（小游戏里放在主包）。
+   */
+  prepareAssets?(onProgress: (done: number) => void): Promise<void>
   /** 读取一个文本文件（关卡 JSON 等）。`path` 相对于游戏的资源目录。 */
   loadText(path: string): Promise<string>
   /** 当前屏幕信息（窗口逻辑像素）。 */

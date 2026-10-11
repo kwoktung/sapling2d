@@ -97,7 +97,8 @@ export class SceneTree {
   private _timeScale = 1
   /** 当前场景被替换后触发（参数是新场景）。 */
   readonly sceneChanged = new Signal<[scene: Scene]>()
-  private _loadAssets: (assets: AssetMap | undefined) => Promise<void> = async () => {}
+  private _loadAssets: (assets: AssetMap | undefined, onProgress: (done: number) => void) => Promise<void> = async () => {}
+  private _loadProgress = 1
   private _changeChain: Promise<unknown> = Promise.resolve()
   private _currentArgs: { cls: SceneConstructor; args: unknown[] } | null = null
   /** 游戏切到后台（false）或回到前台（true）时触发。默认情况下引擎会在后台挂起主循环。 */
@@ -239,7 +240,9 @@ export class SceneTree {
    */
   changeScene<C extends SceneConstructor>(cls: C, ...args: ConstructorParameters<C>): Promise<InstanceType<C>> {
     const run = async () => {
-      await this._loadAssets(cls.assets)
+      this._loadProgress = 0
+      await this._loadAssets(cls.assets, (done) => (this._loadProgress = done))
+      this._loadProgress = 1
       const scene = new cls(...args) as InstanceType<C>
       const oldAssets = this._currentArgs?.cls.assets
       this._currentArgs = { cls, args }
@@ -253,6 +256,20 @@ export class SceneTree {
     return result
   }
 
+  /**
+   * 资源加载进度，0..1：`changeScene` 期间从 0 增加到 1（按资源个数），平时是 1。
+   * 启动时（启动页显示期间）包括准备资源包（微信小游戏下载资源分包）和加载入口场景的资源。
+   * 启动页里用它画进度条：`this.bar.scale = v(this.tree.loadProgress, 1)`。
+   */
+  get loadProgress(): number {
+    return this._loadProgress
+  }
+
+  /** @internal 由 Game 在启动时设置（准备资源包、加载入口场景的资源）。 */
+  _setLoadProgress(value: number): void {
+    this._loadProgress = value
+  }
+
   /** 用上一次的参数重新创建当前场景（重开一局）。 */
   reloadCurrentScene(): Promise<Scene> {
     if (!this._currentArgs) throw new Error('reloadCurrentScene: no scene has been loaded with changeScene yet.')
@@ -261,7 +278,7 @@ export class SceneTree {
   }
 
   /** @internal 由 Game 注入：加载 / 卸载资源。 */
-  _setAssetLoader(load: (assets: AssetMap | undefined) => Promise<void>): void {
+  _setAssetLoader(load: (assets: AssetMap | undefined, onProgress: (done: number) => void) => Promise<void>): void {
     this._loadAssets = load
   }
 

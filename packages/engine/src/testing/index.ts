@@ -17,6 +17,11 @@ export interface TestGameOptions<S extends Scene> extends GameOptions<S> {
    * 图片和声音在无头模式下不读文件。
    */
   assetsDir?: string
+  /**
+   * 启动页，默认 `null`（不显示）。传入时它会进入树、再被入口场景替换，中间不经过任何帧，也不等它的 `loaded()`
+   * （`createTestGame` 返回之前没有人推进帧）。要测启动页本身，把它当作 `main` 传入。
+   */
+  loading?: GameOptions<S>['loading']
 }
 
 export interface TestGame<S extends Scene> {
@@ -81,7 +86,7 @@ export async function createTestGame<S extends Scene>(options: TestGameOptions<S
   const platform = new HeadlessPlatform(options.screen ?? { width: design.width, height: design.height, pixelRatio: 1 }, (path) => readNodeFile(`${assetsDir}/${path}`))
   const prefix = options.storagePrefix ?? 'sapling2d:'
   for (const [k, value] of Object.entries(options.storage ?? {})) platform.storage.setItem(prefix + k, JSON.stringify(value))
-  const game = await Game.create({ ...options, seed: options.seed ?? 1, platform })
+  const game = await Game.create({ ...options, loading: options.loading ?? null, seed: options.seed ?? 1, platform })
   const tree = game.tree
 
   const frameMs = 1000 / SceneTree.PHYSICS_TICKS_PER_SECOND

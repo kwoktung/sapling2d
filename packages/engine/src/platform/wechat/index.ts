@@ -66,7 +66,6 @@ export async function startGame<S extends Scene>(options: WechatGameOptions<S>):
     ...(options.background !== undefined ? { background: options.background } : {}),
     ...(options.pixelArt ? { pixelArt: true } : {}),
   })
-  const game = await Game.create({ ...options, platform, renderer })
-  game.start()
-  return game
+  // 启动页进入树后就开始帧循环，加载期间有画面
+  return Game.create({ ...options, platform, renderer, start: true })
 }

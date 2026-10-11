@@ -6,6 +6,7 @@ import type { InputBinding } from '../core/Input'
 import { Viewport, type DesignResolution } from '../core/Viewport'
 import type { PhysicsSettings } from '../physics/PhysicsWorld'
 import type { Platform } from '../platform/Platform'
+import { DefaultLoadingScene } from './DefaultLoadingScene'
 
 /** 渲染器接口：每帧把场景树同步到画面。无头模式没有渲染器。 */
 export interface Renderer {
@@ -64,9 +65,28 @@ class FrameStatsAccumulator implements FrameStats {
   }
 }
 
+/** 启动页场景可以实现的接口。 */
+export interface LoadingScreen {
+  /**
+   * 资源都加载完、切到入口场景之前调用；返回 Promise 时等它完成再切换。
+   * 用来保证最短显示时间或“点击继续”：`async loaded() { await this.tree.createTimer(1).timeout }`。
+   */
+  loaded?(): void | Promise<void>
+}
+
+/** 启动时准备资源包（`Platform.prepareAssets`）占加载进度的比例，其余是加载入口场景的资源。 */
+const PREPARE_SHARE = 0.7
+
 export interface GameOptions<S extends Scene> {
   /** 入口场景。 */
   main: SceneClass<S>
+  /**
+   * 启动页：先显示它，再加载入口场景的资源，加载完切到入口场景（启动页被销毁）。
+   * 它的 `static assets` 先于其他资源加载，应尽量少；微信小游戏里必须放在主包（`public/assets/boot/`）。
+   * 进度读 `this.tree.loadProgress`；实现 `loaded()` 可以推迟切换（见 LoadingScreen）。
+   * 不传时用内置的进度条；传 `null` 时不显示启动页。
+   */
+  loading?: SceneClass<Scene & LoadingScreen> | null
   /** 全局单例节点，按顺序在入口场景之前创建，切换场景时保留。 */
   autoloads?: NodeClass[]
   /** 随机数种子。不传时用当前时间；测试里应固定。 */
@@ -125,8 +145,11 @@ export class Game<S extends Scene = Scene> {
     })
   }
 
-  /** 创建游戏：注册 Autoload，加载入口场景的资源，然后让场景进入树。 */
-  static async create<S extends Scene>(options: GameOptions<S> & { platform: Platform; renderer?: Renderer | null }): Promise<Game<S>> {
+  /**
+   * 创建游戏：注册 Autoload，显示启动页，准备资源包，加载入口场景的资源，然后让入口场景进入树。
+   * `start: true` 时启动页进入树后就开始帧循环（各平台的 startGame）；否则由调用方驱动帧（无头测试），这时不等启动页的 `loaded()`。
+   */
+  static async create<S extends Scene>(options: GameOptions<S> & { platform: Platform; renderer?: Renderer | null; start?: boolean }): Promise<Game<S>> {
     const viewport = new Viewport(options.design ?? { width: 750, height: 1334 }, options.platform.getScreenInfo())
     const tree = new SceneTree({
       viewport,
@@ -140,8 +163,24 @@ export class Game<S extends Scene = Scene> {
       if (bindings) tree.input.addAction(name as ActionName, bindings)
     }
     for (const cls of options.autoloads ?? []) tree._addAutoload(cls)
-    tree._setAssetLoader((assets) => loadAssets(assets, options.platform, tree.audio))
-    const game = new Game<S>(options.platform, options.renderer ?? null, tree, options.pauseOnBackground ?? true)
+    const platform = options.platform
+    tree._setAssetLoader((assets, onProgress) => loadAssets(assets, platform, tree.audio, onProgress))
+    const game = new Game<S>(platform, options.renderer ?? null, tree, options.pauseOnBackground ?? true)
+    const loading = options.loading === undefined ? DefaultLoadingScene : options.loading
+    const screen: (Scene & LoadingScreen) | null = loading ? await tree.changeScene(loading) : null
+    if (options.start) game.start()
+    let from = 0
+    if (platform.prepareAssets) {
+      tree._setLoadProgress(0)
+      await platform.prepareAssets((done) => tree._setLoadProgress(done * PREPARE_SHARE))
+      from = PREPARE_SHARE
+    }
+    // 先把入口场景的资源加载完（进度走到 1），启动页同意后再切换；changeScene 里不会再加载
+    tree._setLoadProgress(from)
+    await loadAssets(options.main.assets, platform, tree.audio, (done) => tree._setLoadProgress(from + done * (1 - from)))
+    tree._setLoadProgress(1)
+    // 没有帧循环（无头测试）时启动页不会推进：不等它，否则等计时器的 loaded() 永远完成不了
+    if (options.start) await screen?.loaded?.()
     await tree.changeScene(options.main)
     return game
   }

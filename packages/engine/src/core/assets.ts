@@ -388,19 +388,30 @@ export function loadTexture(asset: Texture, platform: Platform): Promise<void> {
   return p
 }
 
-/** 加载一组资源；已加载的跳过，同一资源并发请求只加载一次。音乐是流式的，不预加载。 */
-export async function loadAssets(assets: AssetMap | undefined, platform: Platform, audio: AudioServer): Promise<void> {
+/**
+ * 加载一组资源；已加载的跳过，同一资源并发请求只加载一次。音乐是流式的，不预加载。
+ * `onProgress(done)`：每完成一个资源回调一次，`done` 是已完成的比例（0..1，按资源个数）。
+ */
+export async function loadAssets(assets: AssetMap | undefined, platform: Platform, audio: AudioServer, onProgress?: (done: number) => void): Promise<void> {
   if (!assets) return
+  const roots = [...new Set(Object.values(assets).map(assetRoot))]
+  let finished = 0
+  const report = () => onProgress?.(++finished / roots.length)
   await Promise.all(
-    [...new Set(Object.values(assets).map(assetRoot))].map((asset) => {
-      if (asset.isLoaded) return undefined
-      if (asset instanceof AudioStream) {
-        return audio._load(asset).catch((err: unknown) => {
-          throw new Error(`Failed to load sound "${asset.path}": ${err instanceof Error ? err.message : String(err)}`)
-        })
-      }
-      if (asset.kind === 'tiledmap') return asset._load(platform)
-      return loadTexture(asset, platform)
+    roots.map((asset) => {
+      const p = loadOne(asset, platform, audio)
+      return p ? p.then(report) : report()
     }),
   )
+}
+
+function loadOne(asset: Texture | AudioStream | TiledMap, platform: Platform, audio: AudioServer): Promise<void> | undefined {
+  if (asset.isLoaded) return undefined
+  if (asset instanceof AudioStream) {
+    return audio._load(asset).catch((err: unknown) => {
+      throw new Error(`Failed to load sound "${asset.path}": ${err instanceof Error ? err.message : String(err)}`)
+    })
+  }
+  if (asset.kind === 'tiledmap') return asset._load(platform)
+  return loadTexture(asset, platform)
 }

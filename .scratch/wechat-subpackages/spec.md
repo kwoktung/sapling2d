@@ -1,6 +1,6 @@
 # Spec: 微信小游戏资源分包 + 启动页
 
-Status: ready-for-agent
+Status: done（2026-10-11）
 Date: 2026-10-11
 
 小游戏主包上限 4 MB。现在 `saplingWechat` 把 `public/assets` 整个拷进主包（`writeBundle`），hero-guard 资源 2.2 MB + 发布版 JS 约 0.9 MB，只能靠压图才放得下，美术再加一点就超。
@@ -43,7 +43,7 @@ Date: 2026-10-11
 | 02 | 启动页 + `tree.loadProgress` + 内置默认启动页 | 已完成 |
 | 03 | 小游戏资源分包：构建、主包清单、`WechatPlatform` 读资源 | 已完成 |
 | 04 | 发布构建检查包体大小 | 已完成 |
-| 05 | hero-guard 上真机验证 | 03、04 |
+| 05 | hero-guard 上真机验证 | 已完成 |
 
 ## 未定（Fog）
 

@@ -24,4 +24,4 @@
 
 - `cli preview --info-output` 报的大小：关掉开发者工具的转译（`setting.es6: false, enhance: false`）时和文件大小一致（hero-guard 主包 939,872 对 `game.js` 939,138 字节）。打开任一项时 `game.js` 被转成 ES5，上传后变大且无法预估：wechat-tree 1.14 倍，hero-guard 2.1 倍。`minified`、`uploadWithSourceMap` 不影响。
 - **开发者工具按项目路径缓存设置**：在已经打开过的目录里改 `project.config.json`、甚至 `cli close` 之后，CLI 报的大小有时还是旧的。要量准，就把产物拷到一个新目录再 `cli preview`。
-- 不转译的 ES2017 构建在 iPhone 17 上正常：hero-guard 第 1–2 波 60 fps，逻辑 0.6–0.8 ms、渲染约 3 ms，没有报错。Android 没测。
+- 不转译的 ES2017 构建在 iPhone 17 和 Android 上都正常：hero-guard 第 1–2 波 iOS 60 fps（逻辑 0.6–0.8 ms、渲染约 3 ms），Android 58–60 fps（逻辑约 0.6 ms、渲染约 1.6 ms；开局有一次 270 ms 的卡顿，之后没有），资源分包、画面、声音、触摸都正常，没有报错。

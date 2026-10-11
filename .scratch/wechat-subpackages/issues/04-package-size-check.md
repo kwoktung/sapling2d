@@ -24,4 +24,4 @@
 - `checkPackageSize()`（`src/vite/wechat.ts`）：主包 = `game.js` + 主包资源，分包 = 分包资源；上限 `MAIN_PACKAGE_LIMIT`（4 MB）、`TOTAL_PACKAGE_LIMIT`（30 MB）；发布构建超限 `this.error`（列出主包里最大的 5 个文件），超过 80% 警告；开发构建只打印汇总。汇总用 Vite 的 logger 打印（原来的 `this.info` 在 vite build 里不显示）。
 - 我们的统计和 CLI 对照：hero-guard 主包 0.90 MB 对 939,872 字节，一致。
 - 测试：`checkPackageSize` 的阈值；真实构建里 `boot/` 放 4 MB 文件时发布构建失败、开发构建不失败。
-- 没测：Android 上不转译的构建。
+- Android 真机（2026-10-11）：hero-guard 未转译构建 58–60 fps，画面、声音、触摸、资源分包都正常。

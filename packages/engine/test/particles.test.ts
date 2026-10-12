@@ -26,6 +26,22 @@ describe('Particles2D', () => {
     expect(() => (p.amount = 1.5)).toThrow(/amount/)
   })
 
+  it('随机数用 tree.fxRng：同一个 seed 可复现，发射粒子不会改变 tree.rng 的序列', async () => {
+    const plain = await setup(7)
+    const expected = [plain.g.tree.rng.randf(), plain.g.tree.rng.randf()]
+    const { g, scene } = await setup(7)
+    const p = scene.add(burst({ speedMin: 50, speedMax: 300 }))
+    p.emit()
+    g.step()
+    expect([g.tree.rng.randf(), g.tree.rng.randf()]).toEqual(expected)
+    const again = await setup(7)
+    const q = again.scene.add(burst({ speedMin: 50, speedMax: 300 }))
+    q.emit()
+    again.g.step()
+    expect(positions(q)).toEqual(positions(p))
+    expect(g.tree.fxRng.seed).not.toBe(g.tree.rng.seed)
+  })
+
   it('emit()：在节点的全局位置发射；方向和速度；不超过上限', async () => {
     const { g, scene } = await setup()
     const parent = scene.add(new Node2D({ position: v(100, 200) }))

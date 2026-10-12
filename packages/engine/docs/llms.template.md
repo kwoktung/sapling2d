@@ -21,7 +21,7 @@
 - **节点树**：游戏对象都继承节点类（`Node`、`Node2D`、`Sprite2D`、`RigidBody2D`……），用 `this.add(child)` 组成树；`add` 返回带类型的子节点。节点之间用类型化字段、Groups 和 Autoload 互相引用，**不支持按路径查找**。
 - **生命周期**：`enterTree()`（父先于子）→ `ready()`（子先于父，一生一次）→ 每帧 `process(dt)` / 固定 60Hz 的 `physicsProcess(dt)` → `exitTree()`（子先于父）。覆写时不需要调用 `super`。
 - **场景**：`Scene` 是树的根，同一时间一个。`static assets` 声明的资源在 `ready()` 之前加载完成；场景参数通过构造函数声明，用 `this.tree.changeScene(Cls, params)` 切换。
-- **场景树**：`this.tree` 提供 `input`、`audio`、`storage`、`physics`、`viewport`、`rng`、`paused`、`timeScale`、`createTween()`、`createTimer()`、`getNodesInGroup()`、`autoload()`、`changeScene()`、`dump()`；时间：`time`（游戏时间，秒，按物理步累计；暂停时和 `timeScale` 为 0 时都不走，适合做冷却和时间点）、`physicsFrames`（物理步数，暂停时也计数）、`processFrames`。节点不在树里时访问 `this.tree` 会抛错（构造函数里不要用）。
+- **场景树**：`this.tree` 提供 `input`、`audio`、`storage`、`physics`、`viewport`、`rng`、`fxRng`（视觉效果专用的随机数流，见下）、`paused`、`timeScale`、`createTween()`、`createTimer()`、`getNodesInGroup()`、`autoload()`、`changeScene()`、`dump()`；时间：`time`（游戏时间，秒，按物理步累计；暂停时和 `timeScale` 为 0 时都不走，适合做冷却和时间点）、`physicsFrames`（物理步数，暂停时也计数）、`processFrames`。节点不在树里时访问 `this.tree` 会抛错（构造函数里不要用）。
 - **构造参数**：每个节点的构造函数接受一个选项对象，键就是它可写的属性：通用的 `name`、`groups`、`processMode`；`Node2D` 的 `position`、`rotation`、`scale`、`visible`、`zIndex`、`alpha`、`modulate`、`selfModulate`、`blendMode`、`inputPickable`、`hitArea`；再加各节点自己的属性（如 `Label` 的 `text`（默认 `''`）、`fontSize`，`RigidBody2D` 的 `mass`、`bounce`）。
 - **单位与坐标**：像素、y 轴向下、弧度（另有 `rotationDegrees`）、重力 px/s²。游戏坐标是设计分辨率（默认 750×1334）；`expand` 模式下屏幕多出来的部分向两侧对称扩展，贴边的 UI 用 `this.tree.viewport.visibleRect` / `safeRect`。
 - **每帧顺序**：处理输入队列（指针信号在这里触发）→ 若干次物理步（每步：所有节点的 `physicsProcess`，再推进物理世界、写回刚体位置、派发接触信号）→ `process` → Tween / Timer → `callDeferred` → `queueFree`。每帧最多补 2 个物理步。
@@ -236,7 +236,7 @@ aseprite -b hero.aseprite --sheet public/assets/hero.png --data src/hero.json --
 #shake: Tween | null = null
 shake(camera: Camera2D, strength: number, duration: number) {
   this.#shake?.kill()
-  const rng = this.tree.rng
+  const rng = this.tree.fxRng // 震动只影响画面：不占游戏逻辑的随机数
   const t = camera.createTween()
   for (let i = 0; i < 4; i++) {
     const s = strength * (1 - i / 4) // 越抖越小
@@ -327,7 +327,7 @@ shake(camera: Camera2D, strength: number, duration: number) {
 - 发射：`emitting`（默认 true，持续发射，每秒 `rate` 个，默认 `amount / lifetime`）；`emit(n)` 马上爆发 n 个（默认 `amount`）；`oneShot: true` 时 `emitting` 一变成 true 就爆发 `amount` 个，然后自动关掉。全部消失、且不再发射时发出 `finished`（用来 `queueFree`）。
 - 运动：`direction`（弧度，跟着节点的全局旋转）± `spread`（默认 π：所有方向）、`speedMin` / `speedMax`、`gravity`、`damping`（每秒损失速度的比例）；`lifetime` 和 `lifetimeRandomness`；`scaleStart → scaleEnd`、`alphaStart → alphaEnd` 随寿命线性变化。粒子不旋转。
 - 坐标：默认粒子发射后留在原地，不随节点移动（火花、拖尾）；`localCoords: true` 时跟着节点走。颜色用 `selfModulate`（只染粒子）或 `modulate`。
-- 随机数用 `tree.rng`（测试可复现）；时间受 `timeScale` 和暂停影响。`aliveCount` 是存活的粒子数，`dump` 里显示为 `particles=`。
+- 随机数用 `tree.fxRng`（测试可复现，但和游戏逻辑的 `tree.rng` 分开：加减粒子特效不会改变同一个 seed 的对局）；时间受 `timeScale` 和暂停影响。`aliveCount` 是存活的粒子数，`dump` 里显示为 `particles=`。
 
 ## 补间的控制
 
@@ -501,7 +501,7 @@ for (let i = 0; i < bullets.length; i++) {
 - **`await signal` 会错过同步紧接着的 emit**：先注册再触发时用 `signal.wait()`。
 - **带类型的 AnimatedSprite2D**：`AnimatedSprite2D<'fly' | 'hurt'>` 不能赋给 `AnimatedSprite2D`（即 `<string>`）类型的变量或数组；字段按具体类型声明，或在用到的地方写 `AnimatedSprite2D<any>`。
 - **每帧都要跑的类不要用 `#private`**：小游戏构建目标是 ES2017，`#x` 会被编译成 WeakMap 查找，iOS 上慢 2–3 倍（ADR 0006）。用 TS 的 `private _x`。
-- **随机数**：用 `this.tree.rng`（带 seed，测试可复现），不要用 `Math.random`。
+- **随机数**：用 `this.tree.rng`（带 seed，测试可复现），不要用 `Math.random`。只影响画面、不影响玩法的随机（粒子——`Particles2D` 自动用——、屏幕震动、装饰性的抖动）用 `this.tree.fxRng`：同样可复现，但加减这些效果不会让同一个 seed 的对局走向变掉。
 - **声明合并**：给组名、动作名、存档 key 加类型：`declare module 'sapling2d' { interface GroupRegistry { … } interface ActionRegistry { … } interface StorageRegistry { … } }`。
 - **Tween 在类方法里**：`this.createTween().to(this, {...})` 按 `Node2D` 的属性做类型检查；补间子类特有的属性写 `to(this as MyNode, …)`。
 - **音量是 0–1**（不是 dB）；`tree.paused` 不暂停声音。

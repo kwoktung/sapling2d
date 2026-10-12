@@ -74,6 +74,11 @@ export class SceneTree {
   readonly maxPhysicsStepsPerFrame: number
   /** 游戏应使用这个随机数生成器，而不是 Math.random，以保证可复现。 */
   readonly rng: RandomNumberGenerator
+  /**
+   * 纯视觉效果用的另一条随机数流（`Particles2D` 用它）：同样由 seed 决定、可复现，但和 `rng` 分开——
+   * 加一个粒子特效、改粒子数量不会改变游戏逻辑拿到的随机数（同一个 seed 的对局结果不变）。屏幕震动这类不影响玩法的随机也该用它。
+   */
+  readonly fxRng: RandomNumberGenerator
   /** 视口：设计分辨率、可见区域、安全区和坐标换算。 */
   readonly viewport: Viewport
   /** 输入：动作、键盘、指针状态。 */
@@ -119,6 +124,7 @@ export class SceneTree {
 
   constructor(options: SceneTreeOptions = {}) {
     this.rng = new RandomNumberGenerator(options.seed)
+    this.fxRng = new RandomNumberGenerator(this.rng.seed ^ 0x9e3779b9)
     this.maxPhysicsStepsPerFrame = options.maxPhysicsStepsPerFrame ?? 2
     this.viewport = options.viewport ?? new Viewport({ width: 750, height: 1334 }, { width: 750, height: 1334, pixelRatio: 1 })
     this.input = new Input(this.viewport, () => this._root.children)

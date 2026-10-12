@@ -54,7 +54,7 @@ export interface Particles2DOptions extends Node2DOptions {
  * sparks.finished.connect(() => sparks.queueFree())
  * ```
  *
- * - 随机数用 `tree.rng`（测试可复现）；时间受 `tree.timeScale` 和暂停影响（和 process 一样）。
+ * - 随机数用 `tree.fxRng`（视觉效果专用的随机数流：测试可复现，又不打乱游戏逻辑用的 `tree.rng`）；时间受 `tree.timeScale` 和暂停影响（和 process 一样）。
  * - 每帧不分配内存：粒子数据在设置 `amount` 时一次分配好。
  * - 粒子没有旋转；颜色用节点的 `modulate`（含子节点）或 `selfModulate`（只有粒子）。
  */
@@ -227,7 +227,7 @@ export class Particles2D extends Node2D {
 
   /** 在发射点生成一个粒子（全局坐标时先调用过 `_computeGlobal()`）。 */
   private _spawn(): void {
-    const rng = this.tree.rng
+    const rng = this.tree.fxRng
     const i = this._count++
     let angle = this.direction + (rng.randf() * 2 - 1) * this.spread
     if (this.localCoords) {
